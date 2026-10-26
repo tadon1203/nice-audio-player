@@ -31,11 +31,11 @@ pub(super) struct Position {
     pub duration_ms: Option<u64>,
     pub frame: u64,
     /// The frame listeners were last told about.
-    pub published_frame: u64,
+    pub sent_frame: u64,
     /// The frame the current pipeline started from; a seek starts a new one mid-track.
     pub base_frame: u64,
     pub remaining_frames: Option<u64>,
-    pub last_publish: Instant,
+    pub last_send: Instant,
 }
 
 impl Position {
@@ -44,10 +44,10 @@ impl Position {
             sample_rate,
             duration_ms,
             frame: 0,
-            published_frame: 0,
+            sent_frame: 0,
             base_frame: 0,
             remaining_frames: duration_ms.map(|duration| millis_to_frame(duration, sample_rate)),
-            last_publish: Instant::now(),
+            last_send: Instant::now(),
         }
     }
 

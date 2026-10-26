@@ -17,7 +17,7 @@ use super::{
 };
 use crate::errors::CommandError;
 use crate::ids::DirectoryId;
-use crate::state_store::StateStore;
+use crate::messages::{self, BackendMessage};
 use crate::threads::{Cancellation, request, run_in_background};
 use log::{debug, error, info, warn};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -97,15 +97,16 @@ pub(crate) struct LibrarySync {
 impl LibrarySync {
     pub(crate) fn start(
         database: Database,
-        state_store: Arc<StateStore>,
+        host: Sender<BackendMessage>,
         version: Arc<LibraryVersion>,
     ) -> Self {
         let (messages, receiver) = mpsc::channel();
         let worker = LibraryWorker {
             database,
-            state_store,
+            host,
             version,
             state: LibraryState::empty(LibraryStatus::Ready),
+            published: None,
             messages: messages.clone(),
             dirty: HashMap::new(),
             deadline: None,
@@ -179,11 +180,13 @@ impl Drop for LibrarySync {
 /// The write side's state. Only the worker thread touches it.
 struct LibraryWorker {
     database: Database,
-    state_store: Arc<StateStore>,
+    host: Sender<BackendMessage>,
     /// The Library version, which the worker advances after each committed directory change.
     version: Arc<LibraryVersion>,
-    /// The Library state as last published. The worker is its only writer.
+    /// The Library state. The worker is its only writer.
     state: LibraryState,
+    /// The Library state as last sent to the Host.
+    published: Option<LibraryState>,
     /// For the inputs the watchers and the scan thread send back.
     messages: Sender<SyncInput>,
     /// What is waiting to be scanned: a directory's changed paths, or `None` for all of it.
@@ -356,7 +359,11 @@ impl LibraryWorker {
     /// through here.
     fn publish(&mut self) {
         self.state.version = self.version.get();
-        self.state_store.set_library(self.state.clone());
+        if self.published.as_ref() == Some(&self.state) {
+            return;
+        }
+        self.published = Some(self.state.clone());
+        messages::send(&self.host, BackendMessage::Library(self.state.clone()));
     }
 
     /// Watches a directory and marks all of it for a scan after `delay`. A watcher that cannot attach
@@ -615,17 +622,17 @@ impl Drop for ScanEnding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests};
+    use crate::test_support::{MessageLog, TestDirectory};
 
     #[test]
     fn a_scan_that_ends_without_publishing_its_state_is_published_as_failed() {
         let directory = TestDirectory::new();
         let database = Database::initialize(&directory.file("data")).expect("database");
-        let state_store = state_store_for_tests(null_notifier());
+        let (host, sender) = MessageLog::shared();
         let (messages, _received) = mpsc::channel();
         let mut worker = LibraryWorker {
             database,
-            state_store: Arc::clone(&state_store),
+            host: sender,
             version: Arc::new(LibraryVersion::default()),
             state: LibraryState {
                 scan: ScanState {
@@ -634,6 +641,7 @@ mod tests {
                 },
                 ..LibraryState::empty(LibraryStatus::Ready)
             },
+            published: None,
             messages,
             dirty: HashMap::new(),
             deadline: None,
@@ -644,7 +652,7 @@ mod tests {
 
         worker.scan_ended(ScanOutcome::Failed);
 
-        let scan = state_store.library().value.scan;
+        let scan = host.library().expect("the scan's end is sent").scan;
         assert_eq!(scan.status, ScanStatus::Failed);
         assert_eq!(scan.failure, Some(ScanFailure::Panicked));
     }

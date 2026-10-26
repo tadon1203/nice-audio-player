@@ -21,13 +21,6 @@ function libraryState(version: number, status: "idle" | "running" = "idle"): Lib
   };
 }
 
-/** Each accepted state gets the next topic version, so the replica keeps every one of them. */
-let topicVersion = 0;
-const pushed = (value: LibraryState): { version: number; value: LibraryState } => ({
-  version: ++topicVersion,
-  value,
-});
-
 function setup(): { replica: LibraryStateReplica; onVersionChange: ReturnType<typeof vi.fn> } {
   const onVersionChange = vi.fn();
   return { replica: new LibraryStateReplica(onVersionChange), onVersionChange };
@@ -37,7 +30,7 @@ describe("LibraryStateReplica", () => {
   it("holds the pushed state without a change of the Library version", () => {
     const { replica, onVersionChange } = setup();
 
-    replica.accept(pushed(libraryState(0, "running")));
+    replica.accept(libraryState(0, "running"));
 
     expect(replica.snapshot?.scan.status).toBe("running");
     expect(onVersionChange).not.toHaveBeenCalled();
@@ -46,9 +39,9 @@ describe("LibraryStateReplica", () => {
   it("runs the change once when the Library version moves", () => {
     const { replica, onVersionChange } = setup();
 
-    replica.accept(pushed(libraryState(0, "running")));
-    replica.accept(pushed(libraryState(1)));
-    replica.accept(pushed(libraryState(1)));
+    replica.accept(libraryState(0, "running"));
+    replica.accept(libraryState(1));
+    replica.accept(libraryState(1));
 
     expect(onVersionChange).toHaveBeenCalledTimes(1);
   });
@@ -56,21 +49,19 @@ describe("LibraryStateReplica", () => {
   it("never misses a change, even when the states between two versions are dropped", () => {
     const { replica, onVersionChange } = setup();
 
-    replica.accept(pushed(libraryState(1)));
-    replica.accept(pushed(libraryState(2)));
-    replica.accept(pushed(libraryState(3)));
+    replica.accept(libraryState(1));
+    replica.accept(libraryState(2));
+    replica.accept(libraryState(3));
 
     expect(onVersionChange).toHaveBeenCalledTimes(3);
   });
 
-  it("ignores a state whose topic version is not newer than the one it holds", () => {
-    const { replica, onVersionChange } = setup();
-    const newer = pushed(libraryState(1));
-    replica.accept(newer);
+  it("holds each pushed state, so the newest push is the one it shows", () => {
+    const { replica } = setup();
 
-    replica.accept({ version: newer.version, value: libraryState(2) });
+    replica.accept(libraryState(2));
+    replica.accept(libraryState(1));
 
     expect(replica.snapshot?.version).toBe(1);
-    expect(onVersionChange).toHaveBeenCalledTimes(1);
   });
 });

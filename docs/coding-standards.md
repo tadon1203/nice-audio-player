@@ -13,6 +13,8 @@ These are the rules for code and documentation that lint cannot check. Do not wr
 
 ## Principles
 
+- A Command changes state and answers only whether it was accepted. A Query reads data and changes nothing. Neither answers with Backend state, which the Backend pushes.
+- Each Backend state has one owner thread. It holds the state, sends the whole value when the value changes, and no other thread reads the state back.
 - Remove a forwarding layer: a function, class, or module that only passes its arguments on.
 - Do not add a trait or interface with one real implementation. A seam is real only when something varies across it.
 - Do not add a seam that only tests use.

@@ -5,16 +5,17 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use parking_lot::Mutex;
 
 use crate::ids::TrackId;
 use crate::library::media::ValidatedAudioFile;
-use crate::library::models::{NowPlayingTrack, TrackCore};
+use crate::library::models::{LibraryState, NowPlayingTrack, TrackCore};
 use crate::library::tracks::PlayableTrack;
-use crate::messages::{Notification, Notifier, StateTopic};
+use crate::messages::BackendMessage;
+use crate::player::{PlayerState, QueueState};
 
 /// A track that is only an id, the file's name as its title, and the file.
 pub(crate) fn bare_track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
@@ -39,8 +40,6 @@ pub(crate) fn bare_track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack
         content_hash: None,
     }
 }
-use crate::settings::SettingsFile;
-use crate::state_store::StateStore;
 
 static NEXT_TEST_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -130,47 +129,69 @@ pub(crate) fn wait_until(mut condition: impl FnMut() -> bool, timeout: Duration)
     condition()
 }
 
-/// Remembers every notification, in the order it was sent.
-pub(crate) struct NotificationLog {
-    receiver: Mutex<Receiver<Notification>>,
-    received: Mutex<Vec<Notification>>,
+/// Remembers every message the Backend sends, in the order it was sent.
+pub(crate) struct MessageLog {
+    receiver: Mutex<Receiver<BackendMessage>>,
+    received: Mutex<Vec<BackendMessage>>,
 }
 
-impl NotificationLog {
-    pub(crate) fn shared() -> (Arc<Self>, Notifier) {
-        let (notifier, receiver) = Notifier::channel();
+impl MessageLog {
+    /// A log, and the sender the Backend's services send to.
+    pub(crate) fn shared() -> (Arc<Self>, Sender<BackendMessage>) {
+        let (sender, receiver) = mpsc::channel();
         let log = Arc::new(Self {
             receiver: Mutex::new(receiver),
             received: Mutex::new(Vec::new()),
         });
-        (log, notifier)
+        (log, sender)
     }
 
-    pub(crate) fn sent(&self) -> Vec<Notification> {
+    /// Every message sent so far, in order.
+    pub(crate) fn sent(&self) -> Vec<BackendMessage> {
         let mut received = self.received.lock();
         received.extend(self.receiver.lock().try_iter());
         received.clone()
     }
 
-    /// The topics that changed, in the order they changed.
-    pub(crate) fn state_topics(&self) -> Vec<StateTopic> {
-        self.sent()
-            .into_iter()
-            .filter_map(|notification| match notification {
-                Notification::StateChanged(topic) => Some(topic),
-                _ => None,
-            })
-            .collect()
+    /// The newest Player state sent so far.
+    pub(crate) fn player(&self) -> Option<PlayerState> {
+        self.latest(|message| match message {
+            BackendMessage::Player(state) => Some((**state).clone()),
+            _ => None,
+        })
+    }
+
+    /// The newest Queue state sent so far.
+    pub(crate) fn queue(&self) -> Option<QueueState> {
+        self.latest(|message| match message {
+            BackendMessage::Queue(state) => Some(state.clone()),
+            _ => None,
+        })
+    }
+
+    /// The newest Library state sent so far.
+    pub(crate) fn library(&self) -> Option<LibraryState> {
+        self.latest(|message| match message {
+            BackendMessage::Library(state) => Some(state.clone()),
+            _ => None,
+        })
+    }
+
+    /// The newest message that `pick` takes a value from.
+    pub(crate) fn latest<T>(&self, pick: impl Fn(&BackendMessage) -> Option<T>) -> Option<T> {
+        self.sent().iter().rev().find_map(pick)
+    }
+
+    /// Waits until a message satisfies `done`. Returns whether one did.
+    pub(crate) fn wait_for(&self, done: impl Fn(&BackendMessage) -> bool) -> bool {
+        wait_until(|| self.sent().iter().any(&done), WAIT)
     }
 }
 
-/// A notifier that nobody receives from.
-pub(crate) fn null_notifier() -> Notifier {
-    Notifier::channel().0
-}
+/// How long a test waits for a message before it fails.
+const WAIT: Duration = Duration::from_secs(30);
 
-/// A state store over the default settings, notifying through `notifier`, for tests that build a
-/// player directly.
-pub(crate) fn state_store_for_tests(notifier: Notifier) -> Arc<StateStore> {
-    Arc::new(StateStore::new(&SettingsFile::default(), notifier))
+/// A sender whose receiver is gone: messages sent to it are dropped.
+pub(crate) fn null_messages() -> Sender<BackendMessage> {
+    mpsc::channel().0
 }

@@ -1,7 +1,6 @@
 //! What the worker publishes: the transport state, the queue state, and the rows that show a
 //! queue entry.
 
-use super::PlayerPreferences;
 use super::queue::{Queue, QueueEntry, RepeatMode};
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
@@ -9,7 +8,6 @@ use crate::library::models::NowPlayingTrack;
 use crate::player::output::AudioOutputSelection;
 use crate::player::processing::{ChannelConversion, OutputProcessingPlan};
 use crate::player::volume::VolumeState;
-use std::sync::Arc;
 
 /// Fields every transport state carries.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
@@ -92,16 +90,6 @@ pub struct PlaybackPosition {
     pub seek_count: u64,
 }
 
-impl CurrentPlayback {
-    pub fn position(&self) -> PlaybackPosition {
-        PlaybackPosition {
-            playback_id: self.playback_id,
-            position_ms: self.position_ms,
-            seek_count: self.seek_count,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(
     tag = "status",
@@ -113,6 +101,12 @@ pub enum PlayerState {
     Stopped {
         base: PlayerControls,
         item: Option<QueueItem>,
+    },
+    /// A start is reading its file or decoding its first samples. `item` is the track it starts,
+    /// and there is no position yet.
+    Loading {
+        base: PlayerControls,
+        item: QueueItem,
     },
     Playing {
         base: PlayerControls,
@@ -133,20 +127,10 @@ pub enum PlayerState {
 }
 
 impl PlayerState {
-    /// Nothing has played yet, with the volume and output the listener saved.
-    pub(crate) fn stopped(preferences: &PlayerPreferences) -> Self {
-        Self::Stopped {
-            base: PlayerControls::new(
-                VolumeState::restored(preferences.volume, preferences.muted),
-                preferences.output_selection.clone(),
-            ),
-            item: None,
-        }
-    }
-
     pub fn base(&self) -> &PlayerControls {
         match self {
             Self::Stopped { base, .. }
+            | Self::Loading { base, .. }
             | Self::Playing { base, .. }
             | Self::Paused { base, .. }
             | Self::Failed { base, .. } => base,
@@ -157,7 +141,7 @@ impl PlayerState {
     pub fn session(&self) -> Option<&CurrentPlayback> {
         match self {
             Self::Playing { session, .. } | Self::Paused { session, .. } => Some(session),
-            Self::Stopped { .. } | Self::Failed { .. } => None,
+            Self::Stopped { .. } | Self::Loading { .. } | Self::Failed { .. } => None,
         }
     }
 }
@@ -248,10 +232,11 @@ fn rows(entries: &[QueueEntry], library: Option<&Library>) -> Vec<Option<QueueIt
 /// The queue as the renderer mirrors it: the current item, the last few played, the first
 /// upcoming ones, and how many there are in all. The upcoming entries stay on the backend and
 /// are read a window at a time, so a library-sized queue never crosses the IPC boundary in one
-/// piece.
+/// piece. `version` counts the queue's changes; a window carries the version it was cut from.
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueState {
+    pub version: u64,
     pub current: Option<QueueItem>,
     /// The most recently played items, oldest first.
     pub history: Vec<QueueItem>,
@@ -259,9 +244,6 @@ pub struct QueueState {
     pub upcoming_count: u32,
     pub repeat_mode: RepeatMode,
     pub shuffle_enabled: bool,
-    #[serde(skip)]
-    #[specta(skip)]
-    pub(crate) upcoming_entries: Arc<[QueueEntry]>,
 }
 
 /// A slice of the upcoming list, tagged with the queue version it was cut from.
@@ -274,20 +256,21 @@ pub struct QueueWindow {
 }
 
 impl QueueState {
-    /// Nothing queued.
+    /// Nothing queued. The version is the one the worker publishes with.
     pub fn empty(repeat_mode: RepeatMode, shuffle_enabled: bool) -> Self {
         Self {
+            version: 0,
             current: None,
             history: Vec::new(),
             upcoming: Vec::new(),
             upcoming_count: 0,
             repeat_mode,
             shuffle_enabled,
-            upcoming_entries: Arc::from(Vec::new()),
         }
     }
 
-    /// Reads the rows of the current item, the last few played and the first upcoming ones.
+    /// Reads the rows of the current item, the last few played and the first upcoming ones. The
+    /// version is left at 0 for the worker to set.
     pub(super) fn of(queue: &Queue, library: Option<&Library>) -> Self {
         let history = queue.history();
         let shown_history = &history[history.len().saturating_sub(HISTORY_IN_STATE)..];
@@ -300,32 +283,34 @@ impl QueueState {
         let (history_rows, rest) = shown_rows.split_at(shown_history.len());
         let (current_row, upcoming_rows) = rest.split_at(usize::from(queue.current().is_some()));
         Self {
+            version: 0,
             current: current_row.first().cloned().flatten(),
             history: history_rows.iter().flatten().cloned().collect(),
             upcoming: upcoming_rows.iter().flatten().cloned().collect(),
             upcoming_count: u32::try_from(upcoming.len()).unwrap_or(u32::MAX),
             repeat_mode: queue.repeat(),
             shuffle_enabled: queue.shuffle(),
-            upcoming_entries: Arc::from(upcoming),
         }
     }
+}
 
-    /// Upcoming rows from `offset`, at most `limit` (and never more than `UPCOMING_WINDOW`),
-    /// read from the library now. Tracks the library no longer has are left out. `version` is
-    /// the queue version this state was published with.
-    pub(super) fn window(
-        &self,
+impl QueueWindow {
+    /// Upcoming rows from `offset`, at most `limit` (and never more than `UPCOMING_WINDOW`), read
+    /// from the library now. Tracks the library no longer has are left out. `version` is the queue
+    /// version the queue is at.
+    pub(super) fn of(
+        queue: &Queue,
         version: u64,
         offset: usize,
         limit: usize,
         library: Option<&Library>,
-    ) -> QueueWindow {
-        let upcoming = &self.upcoming_entries;
+    ) -> Self {
+        let upcoming = queue.upcoming();
         let start = offset.min(upcoming.len());
         let end = start
             .saturating_add(limit.min(UPCOMING_WINDOW as usize))
             .min(upcoming.len());
-        QueueWindow {
+        Self {
             version,
             offset: u32::try_from(start).unwrap_or(u32::MAX),
             items: rows(&upcoming[start..end], library)

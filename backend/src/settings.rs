@@ -6,17 +6,14 @@
 //! and the next change overwrites it.
 //!
 //! The file holds the appearance the renderer edits and the player preferences the player
-//! worker records. The appearance is published through the state store; nothing else sees the
+//! worker records. The appearance is sent to the Host when it changes; nothing else sees the
 //! file's shape.
 
 use parking_lot::Mutex;
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        mpsc::{self, RecvTimeoutError, Sender},
-    },
+    sync::mpsc::{self, RecvTimeoutError, Sender},
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -24,9 +21,8 @@ use std::{
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
 
-use crate::messages::Versioned;
+use crate::messages::{self, BackendMessage};
 use crate::player::PlayerPreferences;
-use crate::state_store::StateStore;
 
 const FILE_NAME: &str = "settings.json";
 const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
@@ -90,7 +86,7 @@ pub(crate) fn read(path: &Path) -> SettingsFile {
 
 pub(crate) struct SettingsStore {
     state: Mutex<State>,
-    state_store: Arc<StateStore>,
+    messages: Sender<BackendMessage>,
 }
 
 struct State {
@@ -106,26 +102,33 @@ struct Writer {
 }
 
 impl SettingsStore {
-    /// Starts the writer for the settings file at `path`. `file` is what `read` found there, and
-    /// the appearance in `state_store` must already be that appearance.
-    pub(crate) fn open(path: PathBuf, file: SettingsFile, state_store: Arc<StateStore>) -> Self {
+    /// Starts the writer for the settings file at `path`. `file` is what `read` found there. Its
+    /// appearance is sent first.
+    pub(crate) fn open(
+        path: PathBuf,
+        file: SettingsFile,
+        messages: Sender<BackendMessage>,
+    ) -> Self {
         let (sender, receiver) = mpsc::channel();
         let thread = thread::Builder::new()
             .name("settings-writer".into())
             .spawn(move || write_loop(&receiver, &path))
             .expect("the settings writer thread must start");
+        messages::send(
+            &messages,
+            BackendMessage::Appearance(file.appearance.clone()),
+        );
         Self {
             state: Mutex::new(State {
                 file,
                 writer: Some(Writer { sender, thread }),
             }),
-            state_store,
+            messages,
         }
     }
 
-    /// Applies a renderer update, publishes the appearance when something changed, and returns
-    /// the appearance as it is afterwards, with its version.
-    pub(crate) fn update_appearance(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
+    /// Applies a renderer update. The appearance is sent when something changed.
+    pub(crate) fn update_appearance(&self, patch: &AppearancePatch) {
         self.modify(|file| {
             if let Some(value) = patch.artwork_backdrop {
                 file.appearance.artwork_backdrop = value;
@@ -133,7 +136,7 @@ impl SettingsStore {
             if let Some(value) = patch.calm_motion {
                 file.appearance.calm_motion = value;
             }
-        })
+        });
     }
 
     /// The player preferences the next start of the player worker begins with.
@@ -147,25 +150,24 @@ impl SettingsStore {
         self.modify(|file| file.player = preferences);
     }
 
-    /// Applies `change` under the lock and publishes the appearance. A change is queued for the
-    /// writer while the lock is still held, so the writer sees the changes in the order they were
-    /// made.
-    fn modify(&self, change: impl FnOnce(&mut SettingsFile)) -> Versioned<Appearance> {
+    /// Applies `change` under the lock, sends the appearance when it changed, and queues the file
+    /// for the writer. Both happen while the lock is still held, so the Host and the writer see the
+    /// changes in the order they were made.
+    fn modify(&self, change: impl FnOnce(&mut SettingsFile)) {
         let mut state = self.state.lock();
         let before = state.file.clone();
         change(&mut state.file);
-        let version = self
-            .state_store
-            .set_appearance(state.file.appearance.clone());
+        if state.file.appearance != before.appearance {
+            messages::send(
+                &self.messages,
+                BackendMessage::Appearance(state.file.appearance.clone()),
+            );
+        }
         if state.file != before
             && let Some(writer) = &state.writer
             && let Err(cause) = writer.sender.send(state.file.clone())
         {
             log::debug!("settings.writer_send_failed cause={cause}");
-        }
-        Versioned {
-            version,
-            value: state.file.appearance.clone(),
         }
     }
 
@@ -229,34 +231,43 @@ fn flush(path: &Path, pending: &mut Option<SettingsFile>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::{Notification, Notifier, StateTopic};
     use crate::player::RepeatMode;
     use crate::player::output::AudioOutputSelection;
-    use crate::test_support::{NotificationLog, TestDirectory, null_notifier};
+    use crate::test_support::{MessageLog, TestDirectory, null_messages};
+    use std::sync::mpsc::Sender;
 
-    /// A store over the settings saved in `directory`, notifying through `notifier`.
-    fn open(directory: &Path, notifier: Notifier) -> SettingsStore {
+    /// A store over the settings saved in `directory`, sending through `messages`.
+    fn open(directory: &Path, messages: Sender<BackendMessage>) -> SettingsStore {
         let path = file_path(directory);
         let file = read(&path);
-        let state_store = Arc::new(StateStore::new(&file, notifier));
-        SettingsStore::open(path, file, state_store)
+        SettingsStore::open(path, file, messages)
     }
 
     fn saved(store: &SettingsStore) -> SettingsFile {
         store.state.lock().file.clone()
     }
 
+    fn sent_appearances(host: &MessageLog) -> Vec<Appearance> {
+        host.sent()
+            .into_iter()
+            .filter_map(|message| match message {
+                BackendMessage::Appearance(appearance) => Some(appearance),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn starts_from_defaults_without_a_file() {
         let directory = TestDirectory::new();
-        let store = open(directory.path(), null_notifier());
+        let store = open(directory.path(), null_messages());
         assert_eq!(saved(&store), SettingsFile::default());
     }
 
     #[test]
     fn saved_changes_are_restored_on_the_next_start() {
         let directory = TestDirectory::new();
-        let store = open(directory.path(), null_notifier());
+        let store = open(directory.path(), null_messages());
         store.update_appearance(&AppearancePatch {
             artwork_backdrop: Some(false),
             calm_motion: Some(true),
@@ -272,7 +283,7 @@ mod tests {
         });
         store.shutdown();
 
-        let restored = saved(&open(directory.path(), null_notifier()));
+        let restored = saved(&open(directory.path(), null_messages()));
         assert!(!restored.appearance.artwork_backdrop);
         assert!(restored.appearance.calm_motion);
         assert_eq!(restored.player.volume, 0.4);
@@ -295,7 +306,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            saved(&open(directory.path(), null_notifier())),
+            saved(&open(directory.path(), null_messages())),
             SettingsFile::default()
         );
     }
@@ -309,7 +320,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            saved(&open(directory.path(), null_notifier())),
+            saved(&open(directory.path(), null_messages())),
             SettingsFile::default()
         );
     }
@@ -320,7 +331,7 @@ mod tests {
         let path = file_path(directory.path());
         std::fs::write(&path, "not json").unwrap();
 
-        let store = open(directory.path(), null_notifier());
+        let store = open(directory.path(), null_messages());
         assert_eq!(saved(&store), SettingsFile::default());
         assert!(!directory.file("settings.json.bad").exists());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "not json");
@@ -338,16 +349,21 @@ mod tests {
     }
 
     #[test]
-    fn only_renderer_visible_changes_are_announced() {
+    fn only_appearance_changes_are_sent() {
         let directory = TestDirectory::new();
-        let (recorder, sink) = NotificationLog::shared();
+        let (host, sink) = MessageLog::shared();
         let store = open(directory.path(), sink);
+        assert_eq!(
+            sent_appearances(&host).len(),
+            1,
+            "the appearance is sent when the store opens"
+        );
 
         store.record_player(PlayerPreferences {
             volume: 0.5,
             ..PlayerPreferences::default()
         });
-        assert_eq!(recorder.sent().len(), 0);
+        assert_eq!(sent_appearances(&host).len(), 1);
 
         let change = AppearancePatch {
             artwork_backdrop: Some(false),
@@ -356,37 +372,23 @@ mod tests {
         store.update_appearance(&change);
         store.update_appearance(&change);
         assert_eq!(
-            recorder.sent(),
-            vec![Notification::StateChanged(StateTopic::Appearance)]
+            sent_appearances(&host).len(),
+            2,
+            "a change that leaves the appearance as it was is not sent"
         );
     }
 
     #[test]
-    fn the_appearance_version_counts_appearance_changes_only() {
+    fn the_sent_appearance_is_the_appearance_after_the_change() {
         let directory = TestDirectory::new();
-        let store = open(directory.path(), null_notifier());
-        assert_eq!(
-            store.update_appearance(&AppearancePatch::default()).version,
-            0
-        );
+        let (host, sink) = MessageLog::shared();
+        let store = open(directory.path(), sink);
 
-        store.record_player(PlayerPreferences {
-            volume: 0.5,
-            ..PlayerPreferences::default()
-        });
-        assert_eq!(
-            store.update_appearance(&AppearancePatch::default()).version,
-            0
-        );
-
-        let change = AppearancePatch {
+        store.update_appearance(&AppearancePatch {
             artwork_backdrop: Some(false),
             calm_motion: None,
-        };
-        store.update_appearance(&change);
-        let again = store.update_appearance(&change);
-        assert_eq!(again.version, 1);
-        assert!(!again.value.artwork_backdrop);
-        assert_eq!(store.update_appearance(&AppearancePatch::default()), again);
+        });
+        let sent = sent_appearances(&host);
+        assert!(!sent.last().expect("a change is sent").artwork_backdrop);
     }
 }

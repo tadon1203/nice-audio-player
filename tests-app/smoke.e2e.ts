@@ -51,7 +51,6 @@ const e2eCounts = async (): Promise<{ connects: number; stateMessages: number }>
 describe("the real app", () => {
   it("starts and shows the library", async () => {
     await expect($("main")).toBeDisplayed();
-    expect(await invoke<{ status: string }>("library_status")).toEqual({ status: "ready" });
   });
 
   it("serves artwork from the throwaway profile, a thumbnail falling back to the original", async () => {
@@ -74,8 +73,9 @@ describe("the real app", () => {
       );
 
     expect(await loadedWidth(`${hash}.png`)).toBe(1);
-    // No thumbnail was stored for it: the original is served in its place.
-    expect(await loadedWidth(`${hash}.thumb.jpg`)).toBe(1);
+    // No thumbnail was stored for it: the scheme serves nothing there. The original stands in for
+    // it in the artwork reference (`ArtworkRef::thumb_path`), not in the scheme.
+    expect(await loadedWidth(`${hash}.thumb.jpg`)).toBe(0);
   });
 
   it("scans a directory and lists its tracks", async () => {

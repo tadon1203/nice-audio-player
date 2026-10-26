@@ -6,6 +6,7 @@ use super::*;
 fn a_device_change_on_the_system_default_keeps_playing() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.output.fail_stream(StreamFailureKind::DeviceChanged);
     fixture.settle();
@@ -23,6 +24,7 @@ fn a_device_change_on_a_chosen_device_keeps_playing() {
         })
         .unwrap();
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.output.fail_stream(StreamFailureKind::DeviceChanged);
     fixture.settle();
@@ -33,25 +35,18 @@ fn a_device_change_on_a_chosen_device_keeps_playing() {
 #[test]
 fn a_device_switch_keeps_the_playback_id() {
     let fixture = Fixture::with(&clips(&["a"]));
-    let playing = fixture
-        .player
-        .play_queue(fixture.ids(&["a"]), 0)
-        .unwrap()
-        .value;
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+    let playback_id = session(&fixture.state()).playback_id;
 
-    let switched = fixture
+    fixture
         .player
         .set_output_selection(AudioOutputSelection::Device {
             device_id: "fake-other".into(),
         })
-        .unwrap()
-        .value;
+        .unwrap();
 
-    assert_eq!(
-        session(&switched).playback_id,
-        session(&playing).playback_id
-    );
-    assert!(is_playing(&switched, "a"));
+    fixture.wait_for(|state| is_playing(state, "a") && session(state).playback_id == playback_id);
     assert_eq!(
         fixture.output.opened_selections().last(),
         Some(&AudioOutputSelection::Device {
@@ -68,6 +63,7 @@ fn a_failed_device_switch_keeps_the_saved_selection_and_the_queue() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     let result = fixture
         .player
@@ -90,12 +86,12 @@ fn the_output_can_be_chosen_while_stopped() {
         device_id: "fake-other".into(),
     };
 
-    let chosen = fixture
+    fixture
         .player
         .set_output_selection(selection.clone())
         .unwrap();
 
-    assert_eq!(chosen.value.base().output_selection, selection);
+    assert_eq!(fixture.state().base().output_selection, selection);
 }
 
 #[test]

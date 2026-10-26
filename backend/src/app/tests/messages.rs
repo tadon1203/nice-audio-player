@@ -1,23 +1,6 @@
 use super::fixture;
-use crate::app::BackendApp;
-use crate::messages::Notification;
-use crate::messages::{BackendMessage, StateTopic};
+use crate::messages::BackendMessage;
 use crate::settings::AppearancePatch;
-
-const TOPICS: [StateTopic; 5] = [
-    StateTopic::Playback,
-    StateTopic::Queue,
-    StateTopic::Library,
-    StateTopic::Waveform,
-    StateTopic::Appearance,
-];
-
-fn version_of(backend: &BackendApp, topic: StateTopic) -> u64 {
-    match backend.message(topic) {
-        BackendMessage::State(message) => message.version,
-        other => panic!("{topic:?} is not a state message: {other:?}"),
-    }
-}
 
 fn artwork_backdrop(enabled: bool) -> AppearancePatch {
     AppearancePatch {
@@ -26,48 +9,36 @@ fn artwork_backdrop(enabled: bool) -> AppearancePatch {
     }
 }
 
-#[test]
-fn messages_has_every_topic_at_its_starting_version() {
-    let fixture = fixture();
-
-    let messages = fixture.backend.messages();
-
-    assert_eq!(messages.len(), TOPICS.len());
-    for topic in TOPICS {
-        assert_eq!(version_of(&fixture.backend, topic), 0, "{topic:?}");
-    }
+fn appearances_sent(recorded: &crate::test_support::MessageLog) -> usize {
+    recorded
+        .sent()
+        .iter()
+        .filter(|message| matches!(message, BackendMessage::Appearance(_)))
+        .count()
 }
 
 #[test]
-fn each_topic_counts_only_its_own_changes() {
+fn the_first_message_of_each_state_kind_arrives_after_start() {
     let fixture = fixture();
-    let backend = &fixture.backend;
+    let recorded = &fixture.recorded;
 
-    let changed = backend.appearance_update(&artwork_backdrop(false));
-    assert_eq!(changed.version, 1);
-    assert_eq!(version_of(backend, StateTopic::Appearance), 1);
-    assert_eq!(version_of(backend, StateTopic::Playback), 0);
-
-    let first_volume = backend.set_volume(0.5).expect("volume");
-    let second_volume = backend.set_volume(0.25).expect("volume");
-    assert!(first_volume.version < second_volume.version);
-    assert_eq!(
-        version_of(backend, StateTopic::Playback),
-        second_volume.version
-    );
-    assert_eq!(version_of(backend, StateTopic::Appearance), 1);
+    assert!(recorded.wait_for(|message| matches!(message, BackendMessage::Player(_))));
+    assert!(recorded.wait_for(|message| matches!(message, BackendMessage::Queue(_))));
+    assert!(recorded.wait_for(|message| matches!(message, BackendMessage::Library(_))));
+    assert!(recorded.wait_for(|message| matches!(message, BackendMessage::Waveform(_))));
+    assert!(recorded.wait_for(|message| matches!(message, BackendMessage::Appearance(_))));
 }
 
 #[test]
-fn an_appearance_change_that_changes_nothing_keeps_its_version() {
+fn an_appearance_change_that_changes_nothing_is_not_sent() {
     let fixture = fixture();
     let backend = &fixture.backend;
 
     backend.appearance_update(&artwork_backdrop(false));
-    let again = backend.appearance_update(&artwork_backdrop(false));
+    let after_change = appearances_sent(&fixture.recorded);
+    backend.appearance_update(&artwork_backdrop(false));
 
-    assert_eq!(again.version, 1);
-    assert_eq!(version_of(backend, StateTopic::Appearance), 1);
+    assert_eq!(appearances_sent(&fixture.recorded), after_change);
 }
 
 #[test]
@@ -77,22 +48,15 @@ fn changes_reach_the_listener_in_the_order_they_are_made() {
     fixture.backend.appearance_update(&artwork_backdrop(false));
     fixture.backend.set_volume(0.5).expect("volume");
 
-    let topics: Vec<Notification> = fixture
-        .recorded
-        .sent()
-        .into_iter()
-        .filter(|sent| {
-            matches!(
-                sent,
-                Notification::StateChanged(StateTopic::Appearance | StateTopic::Playback)
-            )
-        })
-        .collect();
-    assert_eq!(
-        topics,
-        [
-            Notification::StateChanged(StateTopic::Appearance),
-            Notification::StateChanged(StateTopic::Playback),
-        ]
+    let sent = fixture.recorded.sent();
+    let last_appearance = sent
+        .iter()
+        .rposition(|message| matches!(message, BackendMessage::Appearance(_)));
+    let last_player = sent
+        .iter()
+        .rposition(|message| matches!(message, BackendMessage::Player(_)));
+    assert!(
+        last_appearance < last_player,
+        "the appearance change is sent before the volume change"
     );
 }

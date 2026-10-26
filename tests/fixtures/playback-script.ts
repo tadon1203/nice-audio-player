@@ -1,29 +1,29 @@
 import {
   type AudioOutputSelection,
+  type PlayerState,
   type TrackRow,
   type QueueState,
-  type PlayerState,
+  type QueueWindow,
   type StartedBy,
-  type Versioned,
   UPCOMING_WINDOW,
 } from "#lib/native/bindings";
 import type { Native } from "./native-api";
 import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./data";
 
 /**
- * The answers a test expects from the backend while it plays `sequence`: each transport command
- * moves along that fixed list and answers with the snapshot a player in that spot would send. The
- * test names the sequence (what the context it starts should resolve to); nothing here decides
- * what a context contains, how a queue is edited, or what a search finds. Queue edits are
- * answered by the tests themselves with `queue({ ... })`.
+ * The backend while it plays `sequence`: each transport command moves along that fixed list, answers
+ * whether it was accepted, and pushes the state the backend would send for it. The test names the
+ * sequence (what the context it starts should resolve to); nothing here decides what a context
+ * contains, how a queue is edited, or what a search finds. Queue edits are pushed by the tests
+ * themselves with `queue({ ... })`.
  */
 export function scriptPlayback(
   native: Native,
   initialSequence: TrackRow[],
 ): {
   setSequence: (next: TrackRow[]) => void;
-  queue: (patch?: { upcoming?: TrackRow[] }) => Promise<Versioned<QueueState>>;
-  finishTrack: () => Promise<Versioned<PlayerState>>;
+  queue: (patch?: { upcoming?: TrackRow[] }) => Promise<void>;
+  finishTrack: () => Promise<void>;
   reportPosition: (to: number) => Promise<void>;
   startTicks: () => void;
   stopTicks: () => void;
@@ -40,6 +40,7 @@ export function scriptPlayback(
   let repeatMode: QueueState["repeatMode"] = "off";
   let shuffleEnabled = false;
   let upcoming: TrackRow[] = [];
+  let queueVersion = 1;
   let startedBy: StartedBy = "jump";
   let ticker: ReturnType<typeof setInterval> | null = null;
 
@@ -49,6 +50,7 @@ export function scriptPlayback(
     if (patch.upcoming !== undefined) upcoming = patch.upcoming;
     const played = sequence.slice(0, Math.max(index, 0));
     return {
+      version: queueVersion,
       current: index < 0 ? null : queueItemFor(current()),
       history: played.slice(-50).map(queueItemFor),
       upcoming: upcoming.slice(0, UPCOMING_WINDOW).map(queueItemFor),
@@ -72,29 +74,25 @@ export function scriptPlayback(
       canGoNext: index < sequence.length - 1,
     });
 
-  /** A playback change, published as a new version the way the backend does; the answer carries it. */
-  const commit = async (): Promise<Versioned<PlayerState>> => {
-    const value = snapshot();
-    const version = await native.publish("playback", value);
-    return { version, value };
-  };
-  const commitQueue = async (patch?: { upcoming?: TrackRow[] }): Promise<Versioned<QueueState>> => {
-    const value = queue(patch);
-    const version = await native.publish("queue", value);
-    return { version, value };
+  /** A playback change: the backend pushes the whole transport state. */
+  const commit = (): Promise<void> => native.publish("player", snapshot());
+  /** A queue change: the backend pushes the whole queue, under its next version. */
+  const commitQueue = (patch?: { upcoming?: TrackRow[] }): Promise<void> => {
+    queueVersion += 1;
+    return native.publish("queue", queue(patch));
   };
   /** A new session at `target`, started the way the backend would say it started. */
-  const moveTo = async (target: number, by: StartedBy): Promise<Versioned<PlayerState>> => {
+  const moveTo = async (target: number, by: StartedBy): Promise<void> => {
     index = target;
     startedBy = by;
     positionMs = 12_000;
     upcoming = sequence.slice(index + 1);
     await commitQueue();
-    return commit();
+    await commit();
   };
 
-  native.respond("playerQueueWindow", ({ offset, limit }) => ({
-    version: native.versionOf("queue"),
+  native.respond("playerQueueWindow", ({ offset, limit }): QueueWindow => ({
+    version: queueVersion,
     offset,
     items: upcoming.slice(offset, offset + Math.min(limit, 200)).map(queueItemFor),
   }));
@@ -165,16 +163,17 @@ export function scriptPlayback(
     /** The queue as it stands, with `upcoming` replaced when a test expects an edit. */
     queue: commitQueue,
     /** The loaded track ended and the backend moved on by itself (an automatic advance). */
-    finishTrack: (): Promise<Versioned<PlayerState>> =>
-      moveTo(Math.min(sequence.length - 1, index + 1), "auto"),
+    finishTrack: (): Promise<void> => moveTo(Math.min(sequence.length - 1, index + 1), "auto"),
     /** Reports the loaded track's position (and nothing else), as the backend's ticks do. */
     reportPosition: (to: number): Promise<void> => {
       positionMs = to;
       return native.send({
         kind: "position",
-        playbackId: playbackIdOf(playbackItemFor(current())),
-        positionMs,
-        seekCount,
+        value: {
+          playbackId: playbackIdOf(playbackItemFor(current())),
+          positionMs,
+          seekCount,
+        },
       });
     },
     /** Reports a position every 10 ms, 250 ms further each time, until stopped. */

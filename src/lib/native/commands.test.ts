@@ -7,9 +7,8 @@ vi.mock("./bindings", () => ({ commands: { playerPause: mocks.playerPause } }));
 
 describe("area objects", () => {
   it("runs the generated command behind a method and returns its result", async () => {
-    const reply = { version: 2, value: { status: "paused" } };
-    mocks.playerPause.mockResolvedValue(reply);
-    await expect(player.pause()).resolves.toBe(reply);
+    mocks.playerPause.mockResolvedValue(null);
+    await expect(player.pause()).resolves.toBeNull();
     expect(mocks.playerPause).toHaveBeenCalledOnce();
   });
 });

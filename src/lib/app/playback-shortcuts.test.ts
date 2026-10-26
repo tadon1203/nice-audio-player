@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { player } from "#lib/native/commands";
-import { type PlayerState, type Versioned } from "#lib/native/bindings";
+import { type PlayerState } from "#lib/native/bindings";
 import { PlaybackClock } from "#lib/player/playback-clock.svelte";
 import { Player } from "#lib/player/player.svelte";
 import { NoticeCenter } from "./notice-center.svelte";
@@ -10,12 +10,7 @@ import { UserActionRunner } from "./user-action-runner.svelte";
 const mocks = vi.hoisted(() => ({ seek: vi.fn() }));
 vi.mock("#lib/native/commands", () => ({ player: { seek: mocks.seek } }));
 
-const playing = (positionMs: number): Versioned<PlayerState> => ({
-  version: 1,
-  value: playingValue(positionMs),
-});
-
-const playingValue = (positionMs: number): PlayerState => ({
+const playing = (positionMs: number): PlayerState => ({
   status: "playing",
   base: {
     volume: 0.5,
@@ -61,7 +56,7 @@ describe("global seek shortcut", () => {
       requestFrame: (): number => 0,
       cancelFrame: (): undefined => undefined,
     });
-    mocks.seek.mockImplementation(async (positionMs: number) => playing(positionMs));
+    mocks.seek.mockResolvedValue(null);
     const playback = new Player(player, clock);
     playback.acceptPlayback(playing(10_000));
     now = 1_000 + 250.37;

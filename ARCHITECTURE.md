@@ -50,52 +50,53 @@ Three layers, one direction of control. The terms are defined in [CONTEXT.md](./
 - **Host** (`src-tauri`): Tauri 2. It runs the Windows WebView and connects the Backend to the window and the operating system. It holds no domain rules.
 - **Backend** (`backend`): a Rust crate. It owns the domain and the persistent state: the Library, Playback, and settings. It knows nothing about Tauri.
 
-Communication: one path for requests, four for pushes.
+Communication: requests get an answer, and the Backend pushes its state.
 
-- **Renderer → Backend (1 path):** a command. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`), and the Host calls the Backend. The answer is the command's return value. State answers are `Versioned`.
-- **Backend → Renderer (4 paths):**
-  1. **State:** a topic's whole value with its version, on the `app_connect` channel. The Backend keeps every topic's value in its state store. The Library topic carries the Library state: its availability, its version, its directories, and its scan. The Library worker publishes it; `BackendApp` publishes the Unavailable state when the Library did not open, since there is no worker then.
-  2. **Backend event:** a fact that happened once, such as a skipped track, on the `app_connect` channel.
-  3. **Position:** the playing position, on the `app_connect` channel.
+- **Renderer → Backend:** a command or a query. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`), and the Host calls the Backend. A command answers only whether the Backend accepted it. A query answers data, such as a window of the queue.
+- **Backend → Renderer:** one channel, `BackendMessage` on the `app_connect` channel. It carries:
+  1. **State:** each state's whole value: the transport (`player`), the queue (`queue`, with its version), the Library (its availability, its version, its directories, and its scan), the waveform, and the appearance. The state's owner sends it when it changes. `BackendApp` sends the Unavailable Library state when the Library did not open, since there is no worker then.
+  2. **Position:** the playing position, once a second while a track plays and after a seek or a start.
+  3. **Backend event:** a fact that happened once, such as a skipped track.
   4. **Measurement:** meter frames, as JSON, on the channel that `meter_start` takes. The Meter measures only while the Player runs.
 
-The Renderer updates its caches and views from these.
+On connect the Backend first sends the latest value of each state, so the Renderer has the current state before any change. The Renderer updates its caches and views from these.
 
 ## Code map
 
-| Directory                | What it holds                                                                                                                                                |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/routes`             | SvelteKit routes and the app frame.                                                                                                                          |
-| `src/lib/native`         | The only adapter to Tauri, with the generated bindings.                                                                                                      |
-| `src/lib/player`         | Renderer side of Playback and the Queue.                                                                                                                     |
-| `src/lib/library`        | Renderer side of the Library.                                                                                                                                |
-| `src/lib/lyrics`         | Renderer side of lyrics.                                                                                                                                     |
-| `src/lib/meter`          | Renderer side of the Spectrum and the Level meter.                                                                                                           |
-| `src/lib/appearance`     | Renderer side of the appearance settings.                                                                                                                    |
-| `src/lib/app`            | The Renderer App: app state that spans Renderer domains.                                                                                                     |
-| `src/lib/components`     | Product-specific compositions of Renderer domains, such as the Dock and Now Playing.                                                                         |
-| `src/lib/ui`             | Shared controls, with the shadcn-svelte primitives.                                                                                                          |
-| `src/lib/utils`          | Small helpers with no domain knowledge.                                                                                                                      |
-| `backend/src/app`        | The composition root. It joins the services and holds the cross-domain use cases.                                                                            |
-| `backend/src/player`     | Playback: the Player, its queue and worker, the Output stream, the Waveform, and the decode and processing stages.                                           |
-| `backend/src/library`    | The Library: its database, the sync worker, the Scan, the albums, the media files it reads, and artwork.                                                     |
-| `backend/src/lyrics`     | Lyrics parsing and service.                                                                                                                                  |
-| `backend/src`            | Also holds the small modules that serve many domains (settings, messages, state store, errors, threads, ids), and the Level and Spectrum meter (`meter.rs`). |
-| `src-tauri/src/commands` | Host commands, grouped by domain.                                                                                                                            |
-| `src-tauri/src`          | Also holds command registration, message delivery, and the artwork protocol.                                                                                 |
-| `tests`                  | Renderer E2E tests (Playwright, with a scripted native API).                                                                                                 |
-| `tests-app`              | App E2E tests (WebdriverIO, on the real app).                                                                                                                |
+| Directory                | What it holds                                                                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routes`             | SvelteKit routes and the app frame.                                                                                                             |
+| `src/lib/native`         | The only adapter to Tauri, with the generated bindings.                                                                                         |
+| `src/lib/player`         | Renderer side of Playback and the Queue.                                                                                                        |
+| `src/lib/library`        | Renderer side of the Library.                                                                                                                   |
+| `src/lib/lyrics`         | Renderer side of lyrics.                                                                                                                        |
+| `src/lib/meter`          | Renderer side of the Spectrum and the Level meter.                                                                                              |
+| `src/lib/appearance`     | Renderer side of the appearance settings.                                                                                                       |
+| `src/lib/app`            | The Renderer App: app state that spans Renderer domains.                                                                                        |
+| `src/lib/components`     | Product-specific compositions of Renderer domains, such as the Dock and Now Playing.                                                            |
+| `src/lib/ui`             | Shared controls, with the shadcn-svelte primitives.                                                                                             |
+| `src/lib/utils`          | Small helpers with no domain knowledge.                                                                                                         |
+| `backend/src/app`        | The composition root. It joins the services and holds the cross-domain use cases.                                                               |
+| `backend/src/player`     | Playback: the Player, its queue and worker, the Output stream, the Waveform, and the decode and processing stages.                              |
+| `backend/src/library`    | The Library: its database, the sync worker, the Scan, the albums, the media files it reads, and artwork.                                        |
+| `backend/src/lyrics`     | Lyrics parsing and service.                                                                                                                     |
+| `backend/src`            | Also holds the small modules that serve many domains (settings, messages, errors, threads, ids), and the Level and Spectrum meter (`meter.rs`). |
+| `src-tauri/src/commands` | Host commands, grouped by domain.                                                                                                               |
+| `src-tauri/src`          | Also holds command registration, message delivery, and the artwork protocol.                                                                    |
+| `tests`                  | Renderer E2E tests (Playwright, with a scripted native API).                                                                                    |
+| `tests-app`              | App E2E tests (WebdriverIO, on the real app).                                                                                                   |
 
 ## Invariants
 
 - The IPC contract is defined once, in the Backend. The Renderer's bindings are generated from it. Nobody edits them by hand.
 - A Host command that blocks does not run on the main thread.
-- Backend services know nothing about the Host or each other. They set state in the state store, and report a position or a backend event through the notifier.
+- Backend services know nothing about the Host or each other. Each state value has one owner thread, which holds it and sends it whole when it changes; a position or a backend event is sent the same way, on the same channel.
+- A command never answers with Backend state. The state a command causes arrives as a push.
 - The Host reaches the Backend only through `BackendApp` and its public modules.
 - Settings are read and written through the IPC of the area that owns them. Appearance is read from `app_connect` and written with `appearanceUpdate`; player preferences are read and written through the player commands.
-- A state is its whole value with a version. The Renderer keeps a value only if its version is newer than the one it holds, whether it came on the channel or as a command answer.
+- A state is pushed whole, and each push replaces the value the Renderer holds.
 - A backend event is a fact. It builds no state in the Renderer.
-- The Renderer subscribes, then fetches: `app_connect` registers the channel and returns the current values.
+- `app_connect` registers the channel, and the latest value of each state arrives on it before any change.
 - Every state that the Library stores is a closed set of values. The code and the database enforce the same set.
 - One place decides how the Library files a track (its Album Artist and album). Reads use the stored result.
 - An Album is identified by its `AlbumId`; no query, command, or route identifies one by its title, Album Artist, or directory. A URL carries IDs, never a name or a directory.

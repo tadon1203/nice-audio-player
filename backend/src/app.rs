@@ -15,7 +15,6 @@ pub use crate::library::models::{
     TrackProperties, TrackRow, TrackSortKey,
 };
 pub use crate::lyrics::Lyrics;
-pub use crate::messages::Versioned;
 pub use crate::meter::{Meter, MeterFrame};
 pub use crate::player::output::{AudioOutputDevice, AudioOutputSelection};
 pub use crate::player::output::{CpalOutput, OutputStreamFactory};
@@ -32,13 +31,12 @@ use crate::library::{
     artwork::{self},
 };
 use crate::lyrics;
-use crate::messages::{BackendMessage, Notifier, StateTopic};
+use crate::messages::{self, BackendMessage};
 use crate::player::{Player, waveform::Waveforms};
 use crate::settings::{self, SettingsStore};
-use crate::state_store::StateStore;
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, mpsc::Sender},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -53,42 +51,42 @@ pub struct BackendApp {
     /// The Library, or why it is unavailable.
     library: Result<Library, LibraryUnavailableReason>,
     settings: Arc<SettingsStore>,
-    /// Every published state value. The services publish into it, and the Host reads it.
-    state_store: Arc<StateStore>,
     data_dir: PathBuf,
 }
 
 impl BackendApp {
     /// Starts every service on `output`: `CpalOutput` in the Host, a fake device in tests.
-    /// `messages` is how they tell the host that something changed.
+    /// `messages` is the channel the services send their state and events on, to the Host.
     pub fn initialize(
         data_dir: PathBuf,
-        messages: Notifier,
+        messages: Sender<BackendMessage>,
         output: Box<dyn OutputStreamFactory>,
     ) -> Result<Self, BackendError> {
         let saved = settings::read(&settings::file_path(&data_dir));
-        let state_store = Arc::new(StateStore::new(&saved, messages));
         let settings = Arc::new(SettingsStore::open(
             settings::file_path(&data_dir),
             saved,
-            Arc::clone(&state_store),
+            messages.clone(),
         ));
         let waveforms = Arc::new(Waveforms::start(
             data_dir.join("waveforms"),
-            Arc::clone(&state_store),
+            messages.clone(),
         ));
-        let library = Library::open(&data_dir, Arc::clone(&state_store));
-        // A Library that did not open has no worker to publish its state, so the state is published here.
+        let library = Library::open(&data_dir, messages.clone());
+        // A Library that did not open has no worker to send its state, so the state is sent here.
         if let Err(reason) = &library {
-            state_store.set_library(LibraryState::empty(LibraryStatus::Unavailable {
-                reason: reason.clone(),
-            }));
+            messages::send(
+                &messages,
+                BackendMessage::Library(LibraryState::empty(LibraryStatus::Unavailable {
+                    reason: reason.clone(),
+                })),
+            );
         }
         let remember = Arc::clone(&settings);
         let meter = Meter::new();
         let player = Player::start(
             library.clone().ok().map(Arc::new),
-            Arc::clone(&state_store),
+            messages,
             meter.clone(),
             Arc::clone(&waveforms),
             settings.player_preferences(),
@@ -102,7 +100,6 @@ impl BackendApp {
             meter,
             library,
             settings,
-            state_store,
             data_dir,
         })
     }
@@ -116,21 +113,6 @@ impl BackendApp {
     }
 
     // ---- communication ----
-
-    /// Every state topic as a message, each with its version. The connect command returns them.
-    pub fn messages(&self) -> Vec<BackendMessage> {
-        self.state_store.messages()
-    }
-
-    /// The message that carries the current value of `topic`.
-    pub fn message(&self, topic: StateTopic) -> BackendMessage {
-        self.state_store.message(topic)
-    }
-
-    /// The message that carries the newest playing position, when a track is loaded.
-    pub fn position_message(&self) -> Option<BackendMessage> {
-        self.player.position().map(BackendMessage::Position)
-    }
 
     /// The Meter that measures the output, for the Renderer's meter subscription.
     pub fn meter(&self) -> Meter {
@@ -278,21 +260,20 @@ impl BackendApp {
 
     // ---- appearance ----
 
-    /// Applies a renderer update and returns the appearance as it is afterwards.
-    pub fn appearance_update(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
-        self.settings.update_appearance(patch)
+    /// Applies a renderer update. The Appearance is sent when it changed.
+    pub fn appearance_update(&self, patch: &AppearancePatch) {
+        self.settings.update_appearance(patch);
     }
 
     // ---- playback ----
 
     /// Replaces the queue with `context` and plays from `start_track_id` (its first track when
-    /// `None`). Blocking: the playback worker answers only once the source is loaded and the
-    /// stream is running.
+    /// `None`). Returns once the track's start has begun; the load and the stream follow.
     pub fn play(
         &self,
         context: &PlaybackContext,
         start_track_id: Option<TrackId>,
-    ) -> Result<Versioned<PlayerState>, CommandError> {
+    ) -> Result<(), CommandError> {
         let library = self.playback_library()?;
         let selection = match context {
             PlaybackContext::Album { album_id } => {
@@ -313,38 +294,38 @@ impl BackendApp {
             .play_queue(selection.track_ids, selection.start_index)
     }
 
-    pub fn pause(&self) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn pause(&self) -> Result<(), CommandError> {
         self.player.pause()
     }
 
-    pub fn resume(&self) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn resume(&self) -> Result<(), CommandError> {
         self.player.resume()
     }
 
-    pub fn previous(&self) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn previous(&self) -> Result<(), CommandError> {
         self.player.previous()
     }
 
-    pub fn next(&self) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn next(&self) -> Result<(), CommandError> {
         self.player.next()
     }
 
-    pub fn seek(&self, position_ms: u64) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn seek(&self, position_ms: u64) -> Result<(), CommandError> {
         self.player.seek(position_ms)
     }
 
-    pub fn set_volume(&self, volume: f32) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn set_volume(&self, volume: f32) -> Result<(), CommandError> {
         self.player.set_volume(volume)
     }
 
-    pub fn set_muted(&self, muted: bool) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn set_muted(&self, muted: bool) -> Result<(), CommandError> {
         self.player.set_muted(muted)
     }
 
     pub fn set_output_selection(
         &self,
         selection: AudioOutputSelection,
-    ) -> Result<Versioned<PlayerState>, CommandError> {
+    ) -> Result<(), CommandError> {
         self.player.set_output_selection(selection)
     }
 
@@ -353,58 +334,47 @@ impl BackendApp {
         crate::player::output::list_output_devices()
     }
 
-    pub fn set_repeat_mode(&self, mode: RepeatMode) -> Result<Versioned<QueueState>, CommandError> {
+    pub fn set_repeat_mode(&self, mode: RepeatMode) -> Result<(), CommandError> {
         self.player.set_repeat_mode(mode)
     }
 
-    pub fn set_shuffle(&self, enabled: bool) -> Result<Versioned<QueueState>, CommandError> {
+    pub fn set_shuffle(&self, enabled: bool) -> Result<(), CommandError> {
         self.player.set_shuffle(enabled)
     }
 
-    pub fn remove_queue_item(
-        &self,
-        id: QueueItemId,
-    ) -> Result<Versioned<QueueState>, CommandError> {
+    pub fn remove_queue_item(&self, id: QueueItemId) -> Result<(), CommandError> {
         self.player.remove_queue_item(id)
     }
 
-    pub fn move_queue_item(
-        &self,
-        id: QueueItemId,
-        to: usize,
-    ) -> Result<Versioned<QueueState>, CommandError> {
+    pub fn move_queue_item(&self, id: QueueItemId, to: usize) -> Result<(), CommandError> {
         self.player.move_queue_item(id, to)
     }
 
     /// Makes an upcoming queue item current and plays it.
-    pub fn play_queue_item(&self, id: QueueItemId) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn play_queue_item(&self, id: QueueItemId) -> Result<(), CommandError> {
         self.player.play_queue_item(id)
     }
 
     /// Adds a library track to the queue: right after the current one (`next`) or at the end.
     /// Blocking, like `play`.
-    pub fn enqueue_track(
-        &self,
-        track_id: TrackId,
-        next: bool,
-    ) -> Result<Versioned<QueueState>, CommandError> {
+    pub fn enqueue_track(&self, track_id: TrackId, next: bool) -> Result<(), CommandError> {
         let library = self.playback_library()?;
         let track = library.playback_for_track(track_id)?;
         self.player.enqueue(track.id(), next)
     }
 
-    pub fn clear_queue(&self) -> Result<Versioned<QueueState>, CommandError> {
+    pub fn clear_queue(&self) -> Result<(), CommandError> {
         self.player.clear_queue()
     }
 
     /// Puts back the queue the last replacement or Clear upcoming took away.
-    pub fn restore_previous_queue(&self) -> Result<Versioned<PlayerState>, CommandError> {
+    pub fn restore_previous_queue(&self) -> Result<(), CommandError> {
         self.player.restore_previous_queue()
     }
 
     /// Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
-    /// snapshot does not carry.
-    pub fn queue_window(&self, offset: u32, limit: u32) -> QueueWindow {
+    /// state does not carry.
+    pub fn queue_window(&self, offset: u32, limit: u32) -> Result<QueueWindow, CommandError> {
         self.player.queue_window(offset, limit)
     }
 

@@ -94,7 +94,7 @@
     size="largeIcon"
     variant="quiet"
     aria-label={playback.muted ? "Unmute" : "Mute"}
-    disabled={playback.mutePending || !ready}
+    disabled={!ready}
     onclick={() => actions.run(() => playback.toggleMute())}
   >
     {#if playback.muted}

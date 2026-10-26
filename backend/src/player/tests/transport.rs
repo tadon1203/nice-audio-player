@@ -6,14 +6,13 @@ use super::*;
 fn a_start_plays_the_track_at_the_start_index() {
     let fixture = Fixture::with(&clips(&["a", "b"]));
 
-    let started = fixture
+    fixture
         .player
         .play_queue(fixture.ids(&["a", "b"]), 1)
-        .unwrap()
-        .value;
+        .unwrap();
 
-    assert!(is_playing(&started, "b"));
-    assert_eq!(session(&started).started_by, StartedBy::Jump);
+    fixture.wait_for(|state| is_playing(state, "b"));
+    assert_eq!(session(&fixture.state()).started_by, StartedBy::Jump);
     assert!(fixture.output.is_running());
 }
 
@@ -24,29 +23,30 @@ fn navigating_while_paused_starts_the_next_track_paused() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.player.pause().unwrap();
 
-    let next = fixture.player.next().unwrap().value;
+    fixture.player.next().unwrap();
 
-    assert!(is_paused(&next, "b"));
-    assert_eq!(session(&next).started_by, StartedBy::Next);
+    fixture.wait_for(|state| is_paused(state, "b"));
+    assert_eq!(session(&fixture.state()).started_by, StartedBy::Next);
 }
 
 #[test]
 fn pause_keeps_the_position_and_resume_continues_from_it() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.output.set_played_frames(u64::from(SAMPLE_RATE) / 2);
     fixture.wait_for_position(500);
 
-    let paused = fixture.player.pause().unwrap().value;
-    assert!(is_paused(&paused, "a"));
-    let position = fixture.player.position().expect("a position").position_ms;
-    assert!(position >= 500);
+    fixture.player.pause().unwrap();
+    assert!(is_paused(&fixture.state(), "a"));
+    assert!(session(&fixture.state()).position_ms >= 500);
 
-    let resumed = fixture.player.resume().unwrap().value;
+    fixture.player.resume().unwrap();
 
-    assert!(is_playing(&resumed, "a"));
+    fixture.wait_for(|state| is_playing(state, "a"));
     assert!(fixture.output.is_running());
 }
 
@@ -68,15 +68,13 @@ fn pause_and_resume_need_a_loaded_track() {
 fn a_tick_publishes_the_position_the_speakers_reached() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.output.set_played_frames(u64::from(SAMPLE_RATE));
 
     fixture.wait_for_position(1_000);
     assert_eq!(
-        fixture
-            .player
-            .position()
-            .map(|position| position.playback_id),
+        fixture.position().map(|position| position.playback_id),
         Some(session(&fixture.state()).playback_id)
     );
 }
@@ -88,6 +86,7 @@ fn a_finished_track_moves_on_to_the_next_one() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.finish();
 
@@ -103,6 +102,7 @@ fn a_finished_track_moves_on_to_the_next_one() {
 fn the_last_track_finishing_stops_and_clears_the_queue() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.finish();
 
@@ -121,6 +121,7 @@ fn a_paused_track_does_not_finish_naturally() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.player.pause().unwrap();
 
     fixture.finish();
@@ -136,19 +137,19 @@ fn previous_restarts_a_track_that_has_played_for_a_while() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.player.next().unwrap();
+    fixture.wait_for(|state| is_playing(state, "b"));
     fixture.output.set_played_frames(u64::from(SAMPLE_RATE) * 3);
     fixture.wait_for_position(3_000);
 
-    let restarted = fixture.player.previous().unwrap().value;
+    fixture.player.previous().unwrap();
 
-    assert!(
-        is_playing(&restarted, "b"),
-        "b restarts instead of going back to a"
-    );
+    fixture.wait_for(|state| is_playing(state, "b") && session(state).seek_count == 1);
     assert_eq!(
         fixture.queue().current.map(|item| item.track.core.title),
-        Some("b".into())
+        Some("b".into()),
+        "b restarts instead of going back to a"
     );
 }
 
@@ -159,44 +160,48 @@ fn previous_goes_back_to_the_last_track_when_it_has_just_started() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.player.next().unwrap();
+    fixture.wait_for(|state| is_playing(state, "b"));
 
-    let back = fixture.player.previous().unwrap().value;
+    fixture.player.previous().unwrap();
 
-    assert!(is_playing(&back, "a"));
-    assert_eq!(session(&back).started_by, StartedBy::Previous);
+    fixture.wait_for(|state| is_playing(state, "a"));
+    assert_eq!(session(&fixture.state()).started_by, StartedBy::Previous);
 }
 
 #[test]
 fn each_load_is_a_new_playback() {
     let fixture = Fixture::with(&clips(&["a", "b"]));
-    let first = fixture
+    fixture
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
-        .unwrap()
-        .value;
-    let next = fixture.player.next().unwrap().value;
-    let back = fixture.player.previous().unwrap().value;
+        .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+    let first = session(&fixture.state()).playback_id;
+    fixture.player.next().unwrap();
+    fixture.wait_for(|state| is_playing(state, "b"));
+    let next = session(&fixture.state()).playback_id;
+    fixture.player.previous().unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+    let back = session(&fixture.state()).playback_id;
 
-    assert!(is_playing(&back, "a"));
-    assert_ne!(session(&first).playback_id, session(&next).playback_id);
-    assert_ne!(session(&first).playback_id, session(&back).playback_id);
+    assert_ne!(first, next);
+    assert_ne!(first, back);
 }
 
 #[test]
 fn a_seek_moves_the_position_and_keeps_the_session() {
     let fixture = Fixture::with(&clips(&["a"]));
-    let playing = fixture
-        .player
-        .play_queue(fixture.ids(&["a"]), 0)
-        .unwrap()
-        .value;
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+    let playback_id = session(&fixture.state()).playback_id;
 
-    let sought = fixture.player.seek(1_000).unwrap().value;
+    fixture.player.seek(1_000).unwrap();
 
-    assert!(is_playing(&sought, "a"));
-    assert_eq!(session(&sought).playback_id, session(&playing).playback_id);
-    assert_eq!(session(&sought).seek_count, 1);
+    fixture.wait_for(|state| is_playing(state, "a") && session(state).seek_count == 1);
+    let sought = fixture.state();
+    assert_eq!(session(&sought).playback_id, playback_id);
     assert_eq!(session(&sought).position_ms, 1_000);
 }
 
@@ -204,12 +209,25 @@ fn a_seek_moves_the_position_and_keeps_the_session() {
 fn a_seek_while_paused_stays_paused() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.player.pause().unwrap();
 
-    let sought = fixture.player.seek(500).unwrap().value;
+    fixture.player.seek(500).unwrap();
 
-    assert!(is_paused(&sought, "a"));
+    fixture.wait_for(|state| is_paused(state, "a") && session(state).seek_count == 1);
     assert!(!fixture.output.is_running());
+}
+
+#[test]
+fn a_seek_replaces_a_seek_that_is_still_reading() {
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+
+    fixture.player.seek(500).unwrap();
+    fixture.player.seek(1_000).unwrap();
+
+    fixture.wait_for(|state| is_playing(state, "a") && session(state).position_ms == 1_000);
 }
 
 #[test]
@@ -219,6 +237,7 @@ fn seeking_past_the_end_plays_the_next_track_like_a_natural_finish() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     // The position is clamped to the duration, which is where the track ends.
     fixture.player.seek(u64::MAX).unwrap();
@@ -230,6 +249,7 @@ fn seeking_past_the_end_plays_the_next_track_like_a_natural_finish() {
 fn seeking_to_the_end_of_the_last_track_stops() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.player.seek(u64::MAX).unwrap();
 
@@ -240,9 +260,12 @@ fn seeking_to_the_end_of_the_last_track_stops() {
 fn seeks_reuse_the_one_output_stream_of_the_session() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.player.seek(500).unwrap();
+    fixture.wait_for(|state| session(state).seek_count == 1);
     fixture.player.seek(1_000).unwrap();
+    fixture.wait_for(|state| session(state).seek_count == 2);
 
     assert_eq!(fixture.output.streams_opened(), 1);
 }

@@ -7,7 +7,7 @@ use crate::library::database::Database;
 use crate::library::models::*;
 use crate::library::text::{SortTags, TrackKeys, album_edition_of};
 use crate::library::{Library, albums};
-use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests};
+use crate::test_support::{TestDirectory, null_messages};
 use rusqlite::params;
 use std::path::PathBuf;
 
@@ -59,11 +59,7 @@ fn fixture() -> Fixture {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
-    let library = Library::open(
-        &directory.file("data"),
-        state_store_for_tests(null_notifier()),
-    )
-    .expect("library");
+    let library = Library::open(&directory.file("data"), null_messages()).expect("library");
     let database = library.database.clone();
     // Disabled: the sync worker would otherwise scan the seeded files that the tests write by hand.
     database
@@ -402,11 +398,7 @@ fn the_version_changes_when_a_directory_is_added() {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
-    let library = Library::open(
-        &directory.file("data"),
-        state_store_for_tests(null_notifier()),
-    )
-    .expect("library");
+    let library = Library::open(&directory.file("data"), null_messages()).expect("library");
     let before = library.version();
 
     library.add_directory(music).expect("add");

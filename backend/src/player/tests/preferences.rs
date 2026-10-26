@@ -3,24 +3,24 @@
 use super::*;
 
 #[test]
-fn volume_and_mute_are_reported_in_the_snapshot() {
+fn volume_and_mute_are_reported_in_the_transport() {
     let fixture = Fixture::with(&[]);
 
-    let quiet = fixture.player.set_volume(0.25).unwrap().value;
-    assert_eq!(quiet.base().volume, 0.25);
+    fixture.player.set_volume(0.25).unwrap();
+    assert_eq!(fixture.state().base().volume, 0.25);
 
-    let muted = fixture.player.set_muted(true).unwrap().value;
-    assert!(muted.base().muted);
-    assert_eq!(muted.base().volume, 0.25);
+    fixture.player.set_muted(true).unwrap();
+    assert!(fixture.state().base().muted);
+    assert_eq!(fixture.state().base().volume, 0.25);
 
-    let unmuted = fixture.player.set_muted(false).unwrap().value;
-    assert!(!unmuted.base().muted);
+    fixture.player.set_muted(false).unwrap();
+    assert!(!fixture.state().base().muted);
 }
 
 #[test]
 fn a_volume_outside_the_range_is_refused_not_clamped() {
     let fixture = Fixture::with(&[]);
-    let before = fixture.state_store.playback().version;
+    let sent_before = fixture.transport_messages();
 
     assert_eq!(
         fixture.player.set_volume(1.5).err(),
@@ -30,7 +30,7 @@ fn a_volume_outside_the_range_is_refused_not_clamped() {
         fixture.player.set_volume(f32::NAN).err(),
         Some(CommandError::InvalidVolume)
     );
-    assert_eq!(fixture.state_store.playback().version, before);
+    assert_eq!(fixture.transport_messages(), sent_before);
 }
 
 #[test]

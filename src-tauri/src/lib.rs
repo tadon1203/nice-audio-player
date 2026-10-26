@@ -1,25 +1,24 @@
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 
 use backend::app::{BackendApp, CpalOutput};
-use backend::messages::Notifier;
-use session::Subscriber;
+use delivery::Delivery;
 use tauri::Manager;
 
 mod artwork;
 mod bindings;
 mod commands;
+mod delivery;
 // `tauri_plugin_wdio` installs its own logger in the E2E build.
 #[cfg(not(feature = "wdio"))]
 mod logging;
 mod os;
-mod session;
 
 pub use bindings::render_typescript as render_typescript_bindings;
 
 #[derive(Clone)]
 pub struct AppState {
     pub backend: Arc<BackendApp>,
-    pub subscriber: Arc<Subscriber>,
+    pub delivery: Arc<Delivery>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -74,17 +73,17 @@ pub fn run() {
                 None => app.path().app_data_dir()?,
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
-            let (notifier, notifications) = Notifier::channel();
-            let backend = BackendApp::initialize(data_dir, notifier, Box::new(CpalOutput))
+            let (sender, messages) = mpsc::channel();
+            let backend = BackendApp::initialize(data_dir, sender, Box::new(CpalOutput))
                 .inspect_err(|cause| log::warn!("host.backend.startup_failed cause={cause}"))
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;
             let backend = Arc::new(backend);
-            let subscriber = Arc::new(Subscriber::default());
+            let delivery = Arc::new(Delivery::default());
             app.manage(AppState {
                 backend: Arc::clone(&backend),
-                subscriber: Arc::clone(&subscriber),
+                delivery: Arc::clone(&delivery),
             });
-            session::start_dispatcher(backend, subscriber, notifications);
+            delivery::start_dispatcher(delivery, messages);
             Ok(())
         })
         .invoke_handler(bindings::builder().invoke_handler())

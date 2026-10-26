@@ -6,10 +6,7 @@ use crate::errors::CommandError;
 use crate::library::Library;
 use crate::library::database::Database;
 use crate::library::models::{ListRequest, ScanStatus, SortDirection, TrackSortKey};
-use crate::state_store::StateStore;
-use crate::test_support::{
-    TestDirectory, null_notifier, state_store_for_tests, wait_until, write_pcm_i16_wav,
-};
+use crate::test_support::{MessageLog, TestDirectory, wait_until, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,16 +17,16 @@ struct Harness {
     directory: TestDirectory,
     music: PathBuf,
     library: Library,
-    state_store: Arc<StateStore>,
+    /// What the Library sends the Host.
+    host: Arc<MessageLog>,
 }
 
 fn harness() -> Harness {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
-    let state_store = state_store_for_tests(null_notifier());
-    let library =
-        Library::open(&directory.file("data"), Arc::clone(&state_store)).expect("open library");
+    let (host, sender) = MessageLog::shared();
+    let library = Library::open(&directory.file("data"), sender).expect("open library");
     library
         .add_directory(music.clone())
         .expect("register directory");
@@ -37,7 +34,7 @@ fn harness() -> Harness {
         directory,
         music,
         library,
-        state_store,
+        host,
     }
 }
 
@@ -72,7 +69,11 @@ impl Harness {
     }
 
     fn scan_state(&self) -> ScanStatus {
-        self.state_store.library().value.scan.status
+        self.host
+            .library()
+            .expect("the Library sends its state")
+            .scan
+            .status
     }
 
     /// Waits until a scan of the directory has completed. A file written just after registration
@@ -244,7 +245,7 @@ fn a_finished_scan_publishes_the_directory_counts_it_found() {
     assert!(
         wait_until(
             || {
-                let state = harness.state_store.library().value;
+                let state = harness.host.library().expect("the Library sends its state");
                 state.scan.status == ScanStatus::Completed
                     && state
                         .directories
@@ -260,7 +261,7 @@ fn a_finished_scan_publishes_the_directory_counts_it_found() {
 #[test]
 fn each_directory_change_publishes_the_library_state_with_a_higher_version() {
     let harness = harness();
-    let added = harness.state_store.library().value;
+    let added = harness.host.library().expect("the Library sends its state");
     assert_eq!(
         added.directories.len(),
         1,
@@ -276,7 +277,7 @@ fn each_directory_change_publishes_the_library_state_with_a_higher_version() {
         ),
         "a directory can be disabled once no scan is running"
     );
-    let disabled = harness.state_store.library().value;
+    let disabled = harness.host.library().expect("the Library sends its state");
     assert!(!disabled.directories[0].enabled);
     assert!(disabled.version > added.version);
 
@@ -284,7 +285,7 @@ fn each_directory_change_publishes_the_library_state_with_a_higher_version() {
         wait_until(|| harness.library.remove_directory(id).is_ok(), SETTLE),
         "a directory can be removed once no scan is running"
     );
-    let removed = harness.state_store.library().value;
+    let removed = harness.host.library().expect("the Library sends its state");
     assert_eq!(removed.directories, []);
     assert!(removed.version > disabled.version);
 }

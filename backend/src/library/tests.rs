@@ -9,14 +9,14 @@ use crate::errors::CommandError;
 use crate::library::database::{self, Database};
 use crate::library::directories;
 use crate::library::{Library, LibraryUnavailableReason, TrackLocation, Unavailable};
-use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests};
+use crate::test_support::{TestDirectory, null_messages};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
 const DATABASE_FILE: &str = "library.sqlite3";
 
 fn open(directory: &Path) -> Result<Library, LibraryUnavailableReason> {
-    Library::open(directory, state_store_for_tests(null_notifier()))
+    Library::open(directory, null_messages())
 }
 
 fn user_version(path: &Path) -> i32 {

@@ -100,8 +100,8 @@ export const appearance = {
 
 /** The app-wide commands: the one channel to the Renderer, and the log directory. */
 export const app = {
-  /** Registers `onMessage`, then resolves to the current value of every topic, as messages. */
-  connect: (onMessage: (message: BackendMessage) => void): Promise<BackendMessage[]> =>
+  /** Registers `onMessage`; the latest value of every state arrives on it first. */
+  connect: (onMessage: (message: BackendMessage) => void): Promise<void> =>
     command("app", () => commands.appConnect(new Channel<BackendMessage>(onMessage))),
   openLogDirectory: areaCommand("app", commands.appOpenLogDirectory),
 };

@@ -38,6 +38,12 @@ describe("TrackRowStates.of", () => {
     expect(intent({ ...row, state: "unsupported" }, null, "stopped")).toBeNull();
   });
 
+  it("offer no click while the active track is loading, and no playback state yet", () => {
+    expect(TrackRowStates.of(row, 1, "loading").clickIntent).toBeNull();
+    expect(TrackRowStates.of(row, 1, "loading").playbackState).toBeUndefined();
+    expect(TrackRowStates.of(row, 2, "loading").clickIntent).toBe("play");
+  });
+
   it("report the playback state only for the active track", () => {
     expect(TrackRowStates.of(row, 1, "playing").playbackState).toBe("playing");
     expect(TrackRowStates.of(row, 1, "paused").playbackState).toBe("paused");

@@ -2,7 +2,7 @@ import { type TrackId } from "#lib/native/bindings";
 import { Tracks } from "#lib/library/tracks";
 import type { TrackTableRow } from "./track-columns";
 
-export type TrackPlaybackStatus = "stopped" | "playing" | "paused" | "failed";
+export type TrackPlaybackStatus = "stopped" | "loading" | "playing" | "paused" | "failed";
 
 export interface TrackRowAction {
   label: string;
@@ -40,8 +40,10 @@ export class TrackRowStates {
         : playbackState === "paused"
           ? { label: `Resume ${row.title}`, kind: "resume", persistent: true }
           : { label: `Play ${row.title}`, kind: "play", persistent: false };
+    // A track that is loading is the active one, but a click on its row has nothing to resume yet.
+    const loadingActive = row.id === activeTrackId && status === "loading";
     const clickIntent =
-      !Tracks.isPlayable(row) || playbackState === "playing"
+      !Tracks.isPlayable(row) || playbackState === "playing" || loadingActive
         ? null
         : playbackState === "paused"
           ? "resume"

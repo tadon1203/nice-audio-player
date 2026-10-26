@@ -177,7 +177,7 @@ test("clearing the upcoming tracks can be undone", async ({ page, native, player
       canGoPrevious: false,
       canGoNext: true,
     });
-    return { version: await native.publish("playback", value), value };
+    await native.publish("player", value);
   });
   const dock = await playFirstTrack(page);
   await dock.getByRole("button", { name: "Queue", exact: true }).click();

@@ -6,9 +6,9 @@ use crate::player::fake_output::FakeOutput;
 
 use crate::library::LibraryStatus;
 use crate::library::models::{LibraryState, ListRequest, SortDirection, TrackSortKey};
-use crate::messages::{BackendMessage, StateTopic, StateValue};
+use crate::messages::BackendMessage;
 
-use crate::test_support::{NotificationLog, TestDirectory};
+use crate::test_support::{MessageLog, TestDirectory};
 
 /// A backend whose library database cannot be opened, so the Library is absent. A file where the
 /// data directory should be stops the database from being created; a damaged database alone is
@@ -18,7 +18,7 @@ fn fixture_without_library() -> Fixture {
     let data_dir = directory.file("data");
     std::fs::write(&data_dir, "a file, so the data directory cannot be created")
         .expect("a blocker");
-    let (recorded, sink) = NotificationLog::shared();
+    let (recorded, sink) = MessageLog::shared();
     let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()))
         .expect("the test backend starts");
     Fixture {
@@ -83,7 +83,7 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
     let fixture = fixture_without_library();
     let backend = &fixture.backend;
 
-    let state = library_state(backend);
+    let state = library_state(&fixture.recorded);
     assert!(matches!(state.status, LibraryStatus::Unavailable { .. }));
     assert_eq!(state.directories, []);
     assert!(matches!(
@@ -121,22 +121,19 @@ fn without_a_library_playing_from_it_says_it_is_unavailable() {
 #[test]
 fn with_a_library_the_library_commands_answer() {
     let fixture = fixture();
-    let backend = &fixture.backend;
 
-    let state = library_state(backend);
+    let state = library_state(&fixture.recorded);
     assert!(matches!(state.status, LibraryStatus::Ready));
     assert_eq!(state.directories, []);
 }
 
-/// The Library state the Backend pushes on the Library topic.
-fn library_state(backend: &BackendApp) -> LibraryState {
-    match backend.message(StateTopic::Library) {
-        BackendMessage::State(message) => match message.state {
-            StateValue::Library(state) => state,
-            other => panic!("the Library topic carries {other:?}"),
-        },
-        other => panic!("the Library topic is not a state message: {other:?}"),
-    }
+/// The newest Library state the Backend has sent.
+fn library_state(recorded: &MessageLog) -> LibraryState {
+    assert!(
+        recorded.wait_for(|message| matches!(message, BackendMessage::Library(_))),
+        "the Library sends its state"
+    );
+    recorded.library().expect("the Library sends its state")
 }
 
 #[test]

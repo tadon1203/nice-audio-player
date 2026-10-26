@@ -27,6 +27,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - Encoder delay and padding are trimmed where the file carries them (MP3 with a LAME header). FLAC and WAV are exact. M4A is not trimmed, so it keeps the few milliseconds of silence that its encoder added.
 - Output device selection
 - Volume, mute, output device, repeat, and shuffle are remembered across restarts
+- While a track loads, the Player bar shows that track at once, without a position.
 - Playback state (position, source and output sample rate, resampling) reflects the real audio state
 - Decode and output failures are reported clearly:
   - A file that cannot be read or decoded is skipped, with a transient notice. Consecutive skips share one notice. The queue survives.

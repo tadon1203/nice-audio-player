@@ -5,11 +5,12 @@ use super::*;
 #[test]
 fn a_track_of_the_same_format_follows_on_the_same_stream() {
     let fixture = Fixture::with(&clips(&["a", "b"]));
-    let first = fixture
+    fixture
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
-        .unwrap()
-        .value;
+        .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+    let first = session(&fixture.state()).playback_id;
     wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
 
     fixture.finish();
@@ -18,7 +19,7 @@ fn a_track_of_the_same_format_follows_on_the_same_stream() {
     let snapshot = fixture.state();
     assert_ne!(
         session(&snapshot).playback_id,
-        session(&first).playback_id,
+        first,
         "each track is its own playback"
     );
     assert_eq!(session(&snapshot).position_ms, 0);
@@ -34,6 +35,7 @@ fn a_long_track_is_not_prefetched_until_its_last_ten_seconds() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.output.set_played_frames(u64::from(SAMPLE_RATE) * 4);
     fixture.wait_for_position(4_000);
 
@@ -56,25 +58,24 @@ fn skipping_during_the_handover_window_plays_the_next_track() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
 
-    let next = fixture.player.next().unwrap().value;
+    fixture.player.next().unwrap();
 
-    assert!(is_playing(&next, "b"));
-    assert_eq!(session(&next).started_by, StartedBy::Next);
+    fixture.wait_for(|state| is_playing(state, "b"));
+    assert_eq!(session(&fixture.state()).started_by, StartedBy::Next);
 }
 
 #[test]
 fn the_session_carries_the_source_format_of_the_loaded_track() {
     let fixture = Fixture::with(&clips(&["a"]));
 
-    let started = fixture
-        .player
-        .play_queue(fixture.ids(&["a"]), 0)
-        .unwrap()
-        .value;
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
-    let current = session(&started);
+    let state = fixture.state();
+    let current = session(&state);
     assert_eq!(current.source_sample_rate, SAMPLE_RATE);
     assert_eq!(current.output_sample_rate, SAMPLE_RATE);
     assert!(!current.resampling_active);
@@ -89,6 +90,7 @@ fn a_track_of_another_format_reopens_the_stream() {
             .player
             .play_queue(fixture.ids(&["a", "b"]), 0)
             .unwrap();
+        fixture.wait_for(|state| is_playing(state, "a"));
         wait_until(|| fixture.output.chained_pipeline().is_none(), WAIT);
 
         fixture.finish();
@@ -102,20 +104,18 @@ fn a_track_of_another_format_reopens_the_stream() {
 #[test]
 fn the_gapless_switch_is_a_new_playback_on_the_same_stream() {
     let fixture = Fixture::with(&clips(&["a", "b"]));
-    let first = fixture
+    fixture
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
-        .unwrap()
-        .value;
+        .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+    let first = session(&fixture.state()).playback_id;
     wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
 
     fixture.finish();
     fixture.wait_for(|state| is_playing(state, "b"));
 
-    assert_ne!(
-        session(&fixture.state()).playback_id,
-        session(&first).playback_id
-    );
+    assert_ne!(session(&fixture.state()).playback_id, first);
     assert_eq!(fixture.output.streams_opened(), 1);
     assert_eq!(fixture.output.adoptions(), 1);
 }
@@ -125,6 +125,7 @@ fn putting_a_track_next_discards_the_prefetch_and_plays_it_next() {
     let fixture = Fixture::with(&clips(&["a", "b", "c"]));
     let ids = fixture.ids(&["a", "b", "c"]);
     fixture.player.play_queue(vec![ids[0], ids[1]], 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
 
     fixture.player.enqueue(ids[2], true).unwrap();
@@ -138,6 +139,7 @@ fn putting_a_track_next_discards_the_prefetch_and_plays_it_next() {
 fn the_last_track_of_the_queue_has_nothing_to_prefetch() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.settle();
 

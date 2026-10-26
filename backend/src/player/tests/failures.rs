@@ -1,4 +1,5 @@
-//! Failures through `Player`: the output and the stream fail, and the queue stays intact.
+//! Failures through `Player`: the output and the stream fail, and the queue stays intact. A failure
+//! after the start is answered is the transport's: it arrives as a Failed state.
 
 use super::*;
 
@@ -9,14 +10,20 @@ fn an_output_that_cannot_be_prepared_fails_the_start_with_its_code() {
         .output
         .fail_next_open(OutputError::StreamBuildFailed);
 
-    let result = fixture.player.play_queue(fixture.ids(&["a", "b"]), 0);
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .expect("the start is answered");
 
-    assert_eq!(
-        result.err(),
-        Some(CommandError::Output {
-            failure: PlaybackFailureCode::OutputStreamBuildFailed,
-        })
-    );
+    fixture.wait_for(|state| {
+        matches!(
+            state,
+            PlayerState::Failed {
+                error: PlaybackFailureCode::OutputStreamBuildFailed,
+                ..
+            }
+        )
+    });
     assert_eq!(fixture.titles(), ["a", "b"], "the queue is kept");
 }
 
@@ -27,12 +34,20 @@ fn a_stream_that_will_not_start_fails_the_start() {
         .output
         .fail_next_start(OutputError::StreamStartFailed);
 
-    assert_eq!(
-        fixture.player.play_queue(fixture.ids(&["a"]), 0).err(),
-        Some(CommandError::Output {
-            failure: PlaybackFailureCode::OutputStreamStartFailed,
-        })
-    );
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a"]), 0)
+        .expect("the start is answered");
+
+    fixture.wait_for(|state| {
+        matches!(
+            state,
+            PlayerState::Failed {
+                error: PlaybackFailureCode::OutputStreamStartFailed,
+                ..
+            }
+        )
+    });
 }
 
 #[test]
@@ -42,6 +57,7 @@ fn a_stream_failure_stops_with_the_queue_intact() {
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.output.fail_stream(StreamFailureKind::RuntimeFailed);
 
@@ -61,6 +77,7 @@ fn a_stream_failure_stops_with_the_queue_intact() {
 fn a_failed_pause_fails_the_call_with_its_code() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture
         .output
         .fail_next_pause(OutputError::StreamPauseFailed);

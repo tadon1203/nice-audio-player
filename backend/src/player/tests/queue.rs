@@ -2,29 +2,37 @@
 
 use super::*;
 
+/// How many queue states have been sent.
+fn queue_messages(fixture: &Fixture) -> usize {
+    fixture
+        .messages
+        .sent()
+        .iter()
+        .filter(|message| matches!(message, BackendMessage::Queue(_)))
+        .count()
+}
+
 #[test]
-fn queue_versions_grow_on_each_queue_change() {
+fn the_queue_version_moves_on_each_queue_change() {
     let fixture = Fixture::with(&[]);
     let player = &fixture.player;
+    let start = fixture.queue().version;
 
-    let repeat = player.set_repeat_mode(RepeatMode::All).unwrap();
-    let shuffled = player.set_shuffle(true).unwrap();
-    let shuffled_again = player.set_shuffle(true).unwrap();
-
-    assert_eq!(repeat.version, 1);
-    assert_eq!(shuffled.version, 2);
-    assert_eq!(shuffled_again.version, 2);
+    player.set_repeat_mode(RepeatMode::All).unwrap();
+    assert_eq!(fixture.queue().version, start + 1);
     assert_eq!(fixture.queue().repeat_mode, RepeatMode::All);
-    fixture.settle();
-    // Each queue change is announced once, and the repeated shuffle changes nothing. The library's
-    // scan announces its own topics, so only the queue's are counted.
-    let queue_changes = fixture
-        .notifications
-        .state_topics()
-        .into_iter()
-        .filter(|topic| *topic == StateTopic::Queue)
-        .count();
-    assert_eq!(queue_changes, 2);
+
+    player.set_shuffle(true).unwrap();
+    assert_eq!(fixture.queue().version, start + 2);
+
+    let sent = queue_messages(&fixture);
+    player.set_shuffle(true).unwrap();
+    assert_eq!(
+        fixture.queue().version,
+        start + 2,
+        "a change that changes nothing keeps the version"
+    );
+    assert_eq!(queue_messages(&fixture), sent, "and is not sent again");
 }
 
 #[test]
@@ -33,12 +41,9 @@ fn enqueueing_on_an_empty_queue_starts_playback() {
 
     fixture.player.enqueue(fixture.id("a"), false).unwrap();
     fixture.wait_for(|state| is_playing(state, "a"));
-    let queue = fixture
-        .player
-        .enqueue(fixture.id("b"), false)
-        .unwrap()
-        .value;
+    fixture.player.enqueue(fixture.id("b"), false).unwrap();
 
+    let queue = fixture.queue();
     assert_eq!(
         queue.current.map(|item| item.track.core.title),
         Some("a".into())
@@ -51,6 +56,7 @@ fn enqueue_next_puts_the_track_after_the_current_one() {
     let fixture = Fixture::with(&clips(&["a", "b", "c"]));
     let ids = fixture.ids(&["a", "b", "c"]);
     fixture.player.play_queue(ids[..2].to_vec(), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
 
     fixture.player.enqueue(ids[2], true).unwrap();
 
@@ -62,16 +68,17 @@ fn replacing_the_queue_can_be_undone_in_one_step() {
     let fixture = Fixture::with(&clips(&["a", "b", "c"]));
     let ids = fixture.ids(&["a", "b", "c"]);
     fixture.player.play_queue(ids[..2].to_vec(), 0).unwrap();
-
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.player.play_queue(vec![ids[2]], 0).unwrap();
 
-    let restored = fixture.player.restore_previous_queue().unwrap().value;
+    fixture.player.restore_previous_queue().unwrap();
 
-    assert!(
-        is_playing(&restored, "a"),
+    fixture.wait_for(|state| is_playing(state, "a"));
+    assert_eq!(
+        fixture.titles(),
+        ["a", "b"],
         "the item that was current plays again"
     );
-    assert_eq!(fixture.titles(), ["a", "b"]);
     // One step back, no further.
     assert_eq!(
         fixture.player.restore_previous_queue().err(),
@@ -93,20 +100,21 @@ fn there_is_nothing_to_undo_after_starting_from_an_empty_queue() {
 #[test]
 fn clearing_upcoming_can_be_undone_without_restarting_the_track() {
     let fixture = Fixture::with(&clips(&["a", "b", "c"]));
-    let playing = fixture
+    fixture
         .player
         .play_queue(fixture.ids(&["a", "b", "c"]), 0)
-        .unwrap()
-        .value;
+        .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+    let playback_id = session(&fixture.state()).playback_id;
     fixture.player.clear_queue().unwrap();
     assert_eq!(fixture.titles(), ["a"]);
 
-    let restored = fixture.player.restore_previous_queue().unwrap().value;
+    fixture.player.restore_previous_queue().unwrap();
 
     assert_eq!(fixture.titles(), ["a", "b", "c"]);
     assert_eq!(
-        session(&restored).playback_id,
-        session(&playing).playback_id,
+        session(&fixture.state()).playback_id,
+        playback_id,
         "the track that kept playing is not restarted"
     );
 }
@@ -116,7 +124,9 @@ fn an_undone_queue_follows_the_shuffle_chosen_since() {
     let fixture = Fixture::with(&clips(&["a", "b", "c"]));
     let ids = fixture.ids(&["a", "b", "c"]);
     fixture.player.play_queue(ids[..2].to_vec(), 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     fixture.player.play_queue(vec![ids[2]], 0).unwrap();
+    fixture.wait_for(|state| is_playing(state, "c"));
     fixture.player.set_shuffle(true).unwrap();
 
     fixture.player.restore_previous_queue().unwrap();
@@ -137,6 +147,7 @@ fn queue_items_can_be_removed_moved_and_played_by_id() {
         .player
         .play_queue(fixture.ids(&["a", "b", "c", "d"]), 0)
         .unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
     let upcoming = fixture.queue().upcoming;
     let (b, c, d) = (
         upcoming[0].queue_item_id,
@@ -150,20 +161,20 @@ fn queue_items_can_be_removed_moved_and_played_by_id() {
     fixture.player.move_queue_item(d, 0).unwrap();
     assert_eq!(fixture.titles(), ["a", "d", "c"]);
 
-    let played = fixture.player.play_queue_item(c).unwrap().value;
-    assert!(is_playing(&played, "c"));
-    assert_eq!(session(&played).started_by, StartedBy::Jump);
+    fixture.player.play_queue_item(c).unwrap();
+    fixture.wait_for(|state| is_playing(state, "c"));
+    assert_eq!(session(&fixture.state()).started_by, StartedBy::Jump);
 }
 
 #[test]
-fn the_queue_window_serves_the_upcoming_rows_from_an_offset() {
+fn the_queue_window_serves_the_upcoming_rows_from_an_offset_with_the_queue_version() {
     let fixture = Fixture::with(&clips(&["a", "b", "c", "d", "e"]));
     fixture
         .player
         .play_queue(fixture.ids(&["a", "b", "c", "d", "e"]), 0)
         .unwrap();
 
-    let window = fixture.player.queue_window(1, 2);
+    let window = fixture.player.queue_window(1, 2).expect("the window");
 
     let titles: Vec<_> = window
         .items
@@ -172,16 +183,7 @@ fn the_queue_window_serves_the_upcoming_rows_from_an_offset() {
         .collect();
     assert_eq!(titles, ["c", "d"]);
     assert_eq!(window.offset, 1);
-}
-
-#[test]
-fn a_queue_change_that_changes_nothing_answers_the_same_queue_state() {
-    let fixture = Fixture::with(&[]);
-
-    let first = fixture.player.set_shuffle(true).unwrap().value;
-    let again = fixture.player.set_shuffle(true).unwrap().value;
-
-    assert_eq!(again, first);
+    assert_eq!(window.version, fixture.queue().version);
 }
 
 #[test]

@@ -24,7 +24,7 @@ pub(crate) mod version;
 
 use crate::errors::CommandError;
 use crate::ids::DirectoryId;
-use crate::state_store::StateStore;
+use crate::messages::BackendMessage;
 use database::{Database, DatabaseError, ReadConnection};
 use log::error;
 #[cfg(test)]
@@ -32,7 +32,7 @@ use models::LibraryDirectory;
 use serde::Serialize;
 use std::{
     path::{Component, Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, mpsc::Sender},
     time::{SystemTime, UNIX_EPOCH},
 };
 use sync::LibrarySync;
@@ -274,14 +274,14 @@ impl Library {
     /// starts watching and scanning the registered directories.
     pub(crate) fn open(
         directory: &Path,
-        state_store: Arc<StateStore>,
+        host: Sender<BackendMessage>,
     ) -> Result<Self, LibraryUnavailableReason> {
         let database = Database::initialize(directory).map_err(|error| {
             error!("library.database.unavailable cause={error}");
             LibraryUnavailableReason::DatabaseOpenFailed
         })?;
         let version = Arc::new(LibraryVersion::default());
-        let sync = LibrarySync::start(database.clone(), state_store, Arc::clone(&version));
+        let sync = LibrarySync::start(database.clone(), host, Arc::clone(&version));
         Ok(Self {
             database,
             sync: Arc::new(sync),

@@ -1,11 +1,11 @@
 //! Playback through `Player`: the queue, transport, seek, gapless handover, failures, output
 //! devices and preferences. A real Library in a temp directory holds real WAV files, and
-//! `FakeOutput` plays the part of the device. Tests wait for the published state with `wait_until`
-//! or for an event; none of them sleeps for a fixed time.
+//! `FakeOutput` plays the part of the device. Tests wait for the message they expect with
+//! `wait_for` or `wait_until`; none of them sleeps for a fixed time.
 //!
-//! The worker handles one input at a time in the order they arrive, so a command sent after an
-//! event from the device is answered after that event. `settle` uses this to know that an event
-//! has been handled when a test expects something to *not* happen.
+//! A command is answered once the worker has applied it, so the state it causes is in the message
+//! log by then. A start is answered before its track loads: a test that needs the track to play
+//! waits for it.
 
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -16,7 +16,7 @@ use crate::errors::CommandError;
 use crate::ids::TrackId;
 use crate::library::Library;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
-use crate::messages::StateTopic;
+use crate::messages::BackendMessage;
 use crate::meter::Meter;
 use crate::player::Player;
 use crate::player::PlayerPreferences;
@@ -24,14 +24,11 @@ use crate::player::RepeatMode;
 use crate::player::fake_output::FakeOutput;
 use crate::player::output::{AudioOutputSelection, OutputError, StreamFailureKind};
 use crate::player::state::{
-    CurrentPlayback, PlaybackChannelConversion, PlaybackFailureCode, PlayerState, QueueState,
-    StartedBy,
+    CurrentPlayback, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition, PlayerState,
+    QueueState, StartedBy,
 };
 use crate::player::waveform::Waveforms;
-use crate::state_store::StateStore;
-use crate::test_support::{
-    NotificationLog, TestDirectory, state_store_for_tests, wait_until, write_pcm_i16_wav,
-};
+use crate::test_support::{MessageLog, TestDirectory, wait_until, write_pcm_i16_wav};
 
 const SAMPLE_RATE: u32 = 44_100;
 const WAIT: Duration = Duration::from_secs(30);
@@ -69,8 +66,8 @@ struct Fixture {
     player: Player,
     library: Library,
     output: FakeOutput,
-    state_store: Arc<StateStore>,
-    notifications: Arc<NotificationLog>,
+    /// What the Backend sent, in order.
+    messages: Arc<MessageLog>,
     preferences: Arc<Mutex<Vec<PlayerPreferences>>>,
     /// The track of each clip, by name.
     ids: HashMap<&'static str, TrackId>,
@@ -92,11 +89,10 @@ impl Fixture {
                 &vec![0; clip.rate as usize * usize::from(clip.channels) * clip.seconds],
             );
         }
-        let (notifications, notifier) = NotificationLog::shared();
-        let state_store = state_store_for_tests(notifier.clone());
+        let (messages, sender) = MessageLog::shared();
         let data = files.file("data");
         std::fs::create_dir_all(&data).expect("data directory");
-        let library = Library::open(&data, Arc::clone(&state_store)).expect("library");
+        let library = Library::open(&data, sender.clone()).expect("library");
         library
             .add_directory(music.clone())
             .expect("the music directory is added");
@@ -110,13 +106,10 @@ impl Fixture {
         let output = FakeOutput::new();
         let preferences = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&preferences);
-        let waveforms = Arc::new(Waveforms::start(
-            files.file("waveforms"),
-            Arc::clone(&state_store),
-        ));
+        let waveforms = Arc::new(Waveforms::start(files.file("waveforms"), sender.clone()));
         let player = Player::start(
             Some(Arc::new(library.clone())),
-            Arc::clone(&state_store),
+            sender,
             Meter::new(),
             waveforms,
             PlayerPreferences::default(),
@@ -125,12 +118,17 @@ impl Fixture {
         )
         .expect("the player starts");
 
+        let started = wait_until(
+            || messages.player().is_some() && messages.queue().is_some(),
+            WAIT,
+        );
+        assert!(started, "the worker sends its first transport and queue");
+
         Self {
             player,
             library,
             output,
-            state_store,
-            notifications,
+            messages,
             preferences,
             ids,
             _files: files,
@@ -149,12 +147,31 @@ impl Fixture {
             .unwrap_or_else(|| panic!("no clip named {name}"))
     }
 
+    /// The newest transport state sent.
     fn state(&self) -> PlayerState {
-        self.state_store.playback().value
+        self.messages.player().expect("the transport is sent")
     }
 
+    /// The newest queue state sent.
     fn queue(&self) -> QueueState {
-        self.player.queue_state().value
+        self.messages.queue().expect("the queue is sent")
+    }
+
+    /// The newest playing position sent.
+    fn position(&self) -> Option<PlaybackPosition> {
+        self.messages.latest(|message| match message {
+            BackendMessage::Position(position) => Some(position.clone()),
+            _ => None,
+        })
+    }
+
+    /// How many transport states have been sent.
+    fn transport_messages(&self) -> usize {
+        self.messages
+            .sent()
+            .iter()
+            .filter(|message| matches!(message, BackendMessage::Player(_)))
+            .count()
     }
 
     /// The titles of the current item and then the upcoming ones.
@@ -182,8 +199,7 @@ impl Fixture {
     fn wait_for_position(&self, position_ms: u64) {
         let reached = wait_until(
             || {
-                self.player
-                    .position()
+                self.position()
                     .is_some_and(|position| position.position_ms >= position_ms)
             },
             WAIT,

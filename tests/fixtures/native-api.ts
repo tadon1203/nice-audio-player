@@ -1,24 +1,23 @@
 import type { Page } from "@playwright/test";
 import type { BackendMessage, CommandError, commands } from "#lib/native/bindings";
-import {
-  idleResponses,
-  idleTopicState,
-  libraryResponses,
-  type LibraryData,
-  type TopicState,
-} from "./data";
+import { idleMessages, idleResponses, libraryResponses, type LibraryData } from "./data";
 
 type Commands = typeof commands;
 export type CommandName = keyof Commands;
-type Result<Name extends CommandName> = Awaited<ReturnType<Commands[Name]>>;
 /** The named arguments the renderer sent to the command, as the backend would receive them. */
 // oxlint-disable-next-line typescript/no-explicit-any
 export type CommandArgs = Record<string, any>;
 type Response<Name extends CommandName> =
-  | Result<Name>
-  | ((args: CommandArgs) => Result<Name> | Promise<Result<Name>>);
+  | Awaited<ReturnType<Commands[Name]>>
+  | ((args: CommandArgs) => unknown);
 
 type Reply = { value: unknown } | { error: unknown };
+
+/** The messages that carry a state: the Backend pushes each one whole when it changes. */
+type StateMessage = Extract<
+  BackendMessage,
+  { kind: "player" | "queue" | "library" | "waveform" | "appearance" }
+>;
 
 declare global {
   interface Window {
@@ -102,17 +101,19 @@ type Responder = (args: CommandArgs) => unknown;
 /**
  * What a test holds of the fake backend: it says what each command answers, sends the Backend's
  * messages on the channel `connect` registered, and reads which commands the renderer sent with
- * which arguments.
+ * which arguments. A command answers only whether it was accepted; the state it causes is sent as
+ * a message, with `publish`.
  */
 export class Native {
   readonly #page: Page;
   readonly #responders = new Map<string, Responder>();
   readonly #calls: { command: string; args: CommandArgs }[] = [];
-  /** The current value of every state topic, as the Backend holds it; `connect` answers with it. */
-  #state: TopicState = idleTopicState();
+  /** The newest message of each state kind, as the Backend holds it; `connect` sends them first. */
+  readonly #latest = new Map<BackendMessage["kind"], BackendMessage>();
 
   public constructor(page: Page) {
     this.#page = page;
+    for (const message of idleMessages()) this.#latest.set(message.kind, message);
   }
 
   /** Binds the Node side of the bridge and installs the page side before the app loads. */
@@ -131,21 +132,9 @@ export class Native {
       },
     );
     await this.#page.addInitScript(installIpcBridge);
-    // A reloaded page connects again and gets the current state, as the Backend answers it.
-    this.respond("appConnect", () => this.#connectMessages());
-  }
-
-  /** Every topic as a state message, which is what `connect` answers with. */
-  #connectMessages(): BackendMessage[] {
-    return (Object.keys(this.#state) as (keyof TopicState)[]).map(
-      (topic) =>
-        ({
-          kind: "state",
-          version: this.#state[topic].version,
-          topic,
-          value: this.#state[topic].value,
-        }) as BackendMessage,
-    );
+    // A reloaded page connects again and gets the current state, as the Backend sends it: the latest
+    // message of each state kind, on the channel the connect call passed.
+    this.respond("appConnect", () => this.#deliver(...this.#latest.values()));
   }
 
   /** Sets what a command answers: a value, or a function of the arguments it was sent. */
@@ -170,49 +159,47 @@ export class Native {
 
   /**
    * Sends a message on the channel `connect` registered, as the Backend does. A state message also
-   * becomes the topic's value, so a later `connect` answers with it. Before the page connects there
-   * is no channel, so the message only updates that value.
+   * becomes the newest of its kind, so a later `connect` sends it. Before the page connects there is
+   * no channel, so the message only updates that value.
    */
   public async send(message: BackendMessage): Promise<void> {
-    if (message.kind === "state") {
-      this.#state = {
-        ...this.#state,
-        [message.topic]: { version: message.version, value: message.value },
-      };
+    if (message.kind !== "position" && message.kind !== "trackSkipped") {
+      this.#latest.set(message.kind, message);
     }
-    const channelId = this.#channelId("appConnect", "channel");
-    if (channelId === undefined) return;
-    await this.#page.evaluate(([id, value]) => window.__emitChannelValue?.(id, value), [
-      channelId,
-      message,
-    ] as const);
+    await this.#deliver(message);
   }
 
   /** Sends a track the Backend skipped because it could not play it, by its title. */
   public async skipTrack(title: string | null): Promise<void> {
-    await this.send({ kind: "trackSkipped", title });
+    await this.send({ kind: "trackSkipped", value: { title } });
   }
 
   /**
-   * Publishes a new value of a state topic: the next version of it, sent as a state message.
-   * Returns that version, so a command that answers with the same value can carry it.
+   * Pushes a new value of a state, as the Backend does when the state changes: the whole value, sent
+   * as a message of its kind.
    */
-  public async publish<Topic extends keyof TopicState>(
-    topic: Topic,
-    value: TopicState[Topic]["value"],
-  ): Promise<number> {
-    const version = this.versionOf(topic);
-    const next = version + 1;
-    await this.send({ kind: "state", version: next, topic, value } as BackendMessage);
-    return next;
+  public async publish<Kind extends StateMessage["kind"]>(
+    kind: Kind,
+    value: Extract<StateMessage, { kind: Kind }>["value"],
+  ): Promise<void> {
+    await this.send({ kind, value } as StateMessage);
   }
 
-  /** The version of a state topic as the Backend last published it. */
-  public versionOf(topic: keyof TopicState): number {
-    return this.#state[topic].version;
+  /**
+   * Delivers `messages`, in order, as the next messages of the channel the latest `connect` passed.
+   * They go in one page call, as the Backend's connect answer used to arrive in one reply.
+   */
+  async #deliver(...messages: BackendMessage[]): Promise<void> {
+    const channelId = this.#channelId("appConnect", "channel");
+    if (channelId === undefined || messages.length === 0) return;
+    await this.#page.evaluate(
+      ([id, batch]) => {
+        for (const message of batch) window.__emitChannelValue?.(id, message);
+      },
+      [channelId, messages] as const,
+    );
   }
 
-  /** Sends one binary message down the channel the renderer passed to its latest call of `name`. */
   /** Delivers `message` as the next message of the channel that `argument` of `name` passed. */
   public async emitChannelValue(
     name: CommandName,

@@ -24,13 +24,13 @@ const stopped: PlayerState = { status: "stopped", base, item: null };
 
 const library = { status: { status: "ready" }, version: 0 } as LibraryState;
 
+/** The latest value of each state kind, as the Backend sends them on connect. */
 const initial: BackendMessage[] = [
-  { kind: "state", version: 1, topic: "playback", value: stopped },
+  { kind: "player", value: stopped },
   {
-    kind: "state",
-    version: 1,
-    topic: "queue",
+    kind: "queue",
     value: {
+      version: 1,
       current: null,
       history: [],
       upcoming: [],
@@ -39,19 +39,16 @@ const initial: BackendMessage[] = [
       shuffleEnabled: false,
     },
   },
-  { kind: "state", version: 1, topic: "library", value: library },
-  { kind: "state", version: 1, topic: "waveform", value: null },
-  {
-    kind: "state",
-    version: 1,
-    topic: "appearance",
-    value: { artworkBackdrop: true, calmMotion: false },
-  },
+  { kind: "library", value: library },
+  { kind: "waveform", value: null },
+  { kind: "appearance", value: { artworkBackdrop: true, calmMotion: false } },
 ];
 
 beforeEach(() => {
   mocks.connect.mockReset();
-  mocks.connect.mockResolvedValue(initial);
+  mocks.connect.mockImplementation(async (onMessage: (message: BackendMessage) => void) => {
+    for (const message of initial) onMessage(message);
+  });
 });
 
 describe("AppServices", () => {

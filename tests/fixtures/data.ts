@@ -1,8 +1,8 @@
 import {
   type Appearance,
   type AudioOutputSelection,
+  type BackendMessage,
   type StartedBy,
-  type StateValue,
   type ArtistRow,
   type AlbumDetails,
   type AlbumRow,
@@ -280,6 +280,7 @@ export const stoppedPlayback: PlayerState = {
 };
 
 export const emptyQueue: QueueState = {
+  version: 1,
   current: null,
   history: [],
   upcoming: [],
@@ -303,23 +304,15 @@ export function meterFrame({
   return { bands: Array.from({ length: 30 }, () => band), peak, rms, clip };
 }
 
-/** The value and version of every state topic, as the Backend holds them. */
-export type TopicState = {
-  [Topic in StateValue["topic"]]: {
-    version: number;
-    value: Extract<StateValue, { topic: Topic }>["value"];
-  };
-};
-
-/** The state an app holds before anything plays: what `connect` answers first. */
-export function idleTopicState(): TopicState {
-  return {
-    playback: { version: 1, value: stoppedPlayback },
-    queue: { version: 1, value: emptyQueue },
-    library: { version: 0, value: libraryState(idleScan) },
-    waveform: { version: 0, value: null },
-    appearance: { version: 0, value: defaultSettings },
-  };
+/** The latest value of each state the Backend holds before anything plays: what `connect` sends first. */
+export function idleMessages(): BackendMessage[] {
+  return [
+    { kind: "player", value: stoppedPlayback },
+    { kind: "queue", value: emptyQueue },
+    { kind: "library", value: libraryState(idleScan) },
+    { kind: "waveform", value: null },
+    { kind: "appearance", value: defaultSettings },
+  ];
 }
 
 /** What an app answers before anything plays. */
