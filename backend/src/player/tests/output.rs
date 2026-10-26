@@ -1,6 +1,7 @@
 //! Output devices through `Player`: choosing, switching and rejecting a device.
 
 use super::*;
+use crate::test_support::CommandCode;
 
 #[test]
 fn a_device_change_on_the_system_default_keeps_playing() {
@@ -71,7 +72,14 @@ fn a_failed_device_switch_keeps_the_saved_selection_and_the_queue() {
             device_id: "fake-missing".into(),
         });
 
-    assert!(result.is_err());
+    assert_eq!(result.code_of(), None);
+    assert!(matches!(
+        fixture.state(),
+        PlayerState::Failed {
+            error: PlaybackFailureCode::OutputDeviceUnavailable,
+            ..
+        }
+    ));
     assert_eq!(
         fixture.state().base().output_selection,
         AudioOutputSelection::SystemDefault
@@ -95,7 +103,7 @@ fn the_output_can_be_chosen_while_stopped() {
 }
 
 #[test]
-fn an_unusable_output_is_rejected_as_a_failed_task() {
+fn an_unusable_output_fails_playback_with_the_device_reason() {
     let fixture = Fixture::with(&[]);
 
     assert_eq!(
@@ -104,7 +112,14 @@ fn an_unusable_output_is_rejected_as_a_failed_task() {
             .set_output_selection(AudioOutputSelection::Device {
                 device_id: String::new(),
             })
-            .err(),
-        Some(CommandError::TaskFailed)
+            .code_of(),
+        None
     );
+    assert!(matches!(
+        fixture.state(),
+        PlayerState::Failed {
+            error: PlaybackFailureCode::OutputDeviceUnavailable,
+            ..
+        }
+    ));
 }

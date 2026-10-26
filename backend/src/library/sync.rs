@@ -8,14 +8,15 @@
 //! logged and not retried.
 
 use super::{
-    LibraryStatus, StoreError, artwork,
+    LibraryStatus, artwork,
     database::Database,
     directories,
     models::{LibraryDirectory, LibraryState, ScanFailure, ScanState, ScanStatus},
     scan,
     version::LibraryVersion,
 };
-use crate::errors::CommandError;
+use crate::Result;
+use crate::errors::Error;
 use crate::ids::DirectoryId;
 use crate::messages::{self, BackendMessage};
 use crate::threads::{Cancellation, Reply, WorkerThread, answer, request, run_in_background};
@@ -70,13 +71,6 @@ pub(crate) enum SyncInput {
     ScanEnded(ScanOutcome),
 }
 
-/// Sends an input to the worker. The worker may already be gone, which is logged.
-fn send(messages: &Sender<SyncInput>, input: SyncInput) {
-    if let Err(cause) = messages.send(input) {
-        debug!("library.sync.input_send_failed cause={cause}");
-    }
-}
-
 /// The handle `Library` holds. Dropping the last one stops the worker.
 pub(crate) struct LibrarySync {
     messages: Sender<SyncInput>,
@@ -107,43 +101,40 @@ impl LibrarySync {
         Self { messages, thread }
     }
 
-    /// Sends a command and waits for its answer. A worker that has stopped is `TaskFailed`.
-    fn call<T>(&self, command: impl FnOnce(Reply<T>) -> SyncCommand) -> Result<T, CommandError> {
+    /// Sends a command and waits for its answer. A worker that has stopped is `WorkerStopped`.
+    fn call(&self, command: impl FnOnce(Reply<()>) -> SyncCommand) -> Result<()> {
         request(&self.messages, |reply| SyncInput::Command(command(reply)))
     }
 
-    pub(crate) fn add_directory(&self, path: String) -> Result<(), CommandError> {
+    pub(crate) fn add_directory(&self, path: String) -> Result<()> {
         self.call(|reply| SyncCommand::AddDirectory(path, reply))
     }
 
-    pub(crate) fn set_directory_enabled(
-        &self,
-        id: DirectoryId,
-        enabled: bool,
-    ) -> Result<(), CommandError> {
+    pub(crate) fn set_directory_enabled(&self, id: DirectoryId, enabled: bool) -> Result<()> {
         self.call(|reply| SyncCommand::SetDirectoryEnabled(id, enabled, reply))
     }
 
-    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), CommandError> {
+    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<()> {
         self.call(|reply| SyncCommand::RemoveDirectory(id, reply))
     }
 
-    pub(crate) fn delete_missing_tracks(&self) -> Result<(), CommandError> {
+    pub(crate) fn delete_missing_tracks(&self) -> Result<()> {
         self.call(SyncCommand::DeleteMissingTracks)
     }
 
-    pub(crate) fn start_scan(&self) -> Result<(), CommandError> {
+    pub(crate) fn start_scan(&self) -> Result<()> {
         self.call(SyncCommand::StartScan)
     }
 
-    pub(crate) fn cancel_scan(&self) -> Result<(), CommandError> {
+    pub(crate) fn cancel_scan(&self) -> Result<()> {
         self.call(SyncCommand::CancelScan)
     }
 
-    /// Stops the worker, its watchers and the scan in progress, and waits for them.
+    /// Stops the worker, its watchers and the scan in progress, and waits for them. A worker that
+    /// has already stopped has nothing left to stop.
     pub(crate) fn shutdown(&self) {
-        if let Err(cause) = self.call(SyncCommand::Shutdown) {
-            debug!("library.sync.shutdown_failed cause={cause}");
+        if self.call(SyncCommand::Shutdown).is_err() {
+            debug!("library.sync.already_stopped");
         }
         self.thread.join();
     }
@@ -262,12 +253,13 @@ impl LibraryWorker {
                 answer(&reply, result);
             }
             SyncCommand::StartScan(reply) => {
+                // A scan that is running, or no enabled directory, has nothing to start.
                 let result = if self.scan.is_some() {
-                    Err(CommandError::ScanAlreadyRunning)
+                    Ok(())
                 } else {
                     self.enabled_directories().and_then(|directories| {
                         if directories.is_empty() {
-                            return Err(CommandError::NoEnabledDirectories);
+                            return Ok(());
                         }
                         // A whole scan covers every change too, so the pending ones go.
                         self.dirty.clear();
@@ -282,14 +274,10 @@ impl LibraryWorker {
                 answer(&reply, result);
             }
             SyncCommand::CancelScan(reply) => {
-                let result = match &self.scan {
-                    Some(scan) => {
-                        scan.cancellation.cancel();
-                        Ok(())
-                    }
-                    None => Err(CommandError::ScanNotRunning),
-                };
-                answer(&reply, result);
+                if let Some(scan) = &self.scan {
+                    scan.cancellation.cancel();
+                }
+                answer(&reply, Ok(()));
             }
             SyncCommand::Shutdown(reply) => {
                 self.stop();
@@ -301,12 +289,9 @@ impl LibraryWorker {
     }
 
     /// Runs a change to the directories, unless a scan is running: directories cannot change under one.
-    fn while_idle<T>(
-        &mut self,
-        change: impl FnOnce(&Database) -> Result<T, CommandError>,
-    ) -> Result<T, CommandError> {
+    fn while_idle<T>(&mut self, change: impl FnOnce(&Database) -> Result<T>) -> Result<T> {
         if self.scan.is_some() {
-            return Err(CommandError::ScanAlreadyRunning);
+            return Err(Error::ScanRunning);
         }
         change(&self.database)
     }
@@ -325,7 +310,6 @@ impl LibraryWorker {
         let directories = self
             .database
             .read()
-            .map_err(StoreError::from)
             .and_then(|connection| directories::list(&connection));
         match directories {
             Ok(directories) => self.state.directories = directories,
@@ -404,8 +388,8 @@ impl LibraryWorker {
             // The scan thread died before it published how the scan ended.
             self.state.scan.status = ScanStatus::Failed;
             self.state.scan.current_directory = None;
-            self.state.scan.failure = Some(ScanFailure::Panicked);
-            error!("library.scan.failed failure={:?}", ScanFailure::Panicked);
+            self.state.scan.failure = Some(ScanFailure::Failed);
+            error!("library.scan.failed failure={:?}", ScanFailure::Failed);
         }
         self.read_directories();
         self.publish();
@@ -436,7 +420,7 @@ impl LibraryWorker {
     fn begin_scan(
         &mut self,
         mut targets: HashMap<DirectoryId, Option<HashSet<PathBuf>>>,
-    ) -> Result<(), CommandError> {
+    ) -> Result<()> {
         self.wait_for_collection();
         let jobs: Vec<scan::ScanJob> = self
             .enabled_directories()?
@@ -466,7 +450,9 @@ impl LibraryWorker {
             .spawn(move || {
                 run_in_background();
                 let mut ending = ScanEnding::new(messages.clone());
-                let publish = |scan: ScanState| send(&messages, SyncInput::ScanProgress(scan));
+                let publish = |scan: ScanState| {
+                    let _ = messages.send(SyncInput::ScanProgress(scan));
+                };
                 let status = scan::run(&database, &jobs, &publish, &version, &thread_cancellation);
                 ending.finish(match status {
                     ScanStatus::Completed => ScanOutcome::Completed,
@@ -496,16 +482,15 @@ impl LibraryWorker {
     fn collect_artwork_in_background(&mut self) {
         self.wait_for_collection();
         let database = self.database.clone();
-        match thread::Builder::new()
+        let collector = thread::Builder::new()
             .name("library-artwork-collect".into())
             .spawn(move || {
                 if let Err(cause) = artwork::collect(&database) {
-                    warn!("library.artwork.collect_failed cause={cause:?}");
+                    warn!("library.artwork.collect_failed cause={cause}");
                 }
-            }) {
-            Ok(collector) => self.collector = Some(collector),
-            Err(cause) => warn!("library.artwork.thread_failed cause={cause}"),
-        }
+            })
+            .expect("the OS starts a thread unless it is out of resources");
+        self.collector = Some(collector);
     }
 
     fn wait_for_collection(&mut self) {
@@ -516,8 +501,8 @@ impl LibraryWorker {
         }
     }
 
-    fn enabled_directories(&self) -> Result<Vec<LibraryDirectory>, CommandError> {
-        let connection = self.database.read().map_err(StoreError::from)?;
+    fn enabled_directories(&self) -> Result<Vec<LibraryDirectory>> {
+        let connection = self.database.read()?;
         Ok(directories::list(&connection)?
             .into_iter()
             .filter(|directory| directory.enabled)
@@ -557,12 +542,11 @@ fn attach(
             Ok(event) if !event.paths.is_empty() => Some(event.paths),
             Ok(_) | Err(_) => None,
         };
-        if let Err(cause) = messages.send(SyncInput::Changed {
+        // The worker may have stopped; then no one needs the change.
+        let _ = messages.send(SyncInput::Changed {
             directory: id,
             dirs,
-        }) {
-            debug!("library.watcher.input_send_failed cause={cause}");
-        }
+        });
     })?;
     watcher.watch(Path::new(&directory.path), RecursiveMode::Recursive)?;
     Ok(watcher)
@@ -585,14 +569,16 @@ impl ScanEnding {
 
     fn finish(&mut self, outcome: ScanOutcome) {
         self.finished = true;
-        send(&self.messages, SyncInput::ScanEnded(outcome));
+        let _ = self.messages.send(SyncInput::ScanEnded(outcome));
     }
 }
 
 impl Drop for ScanEnding {
     fn drop(&mut self) {
         if !self.finished {
-            send(&self.messages, SyncInput::ScanEnded(ScanOutcome::Failed));
+            let _ = self
+                .messages
+                .send(SyncInput::ScanEnded(ScanOutcome::Failed));
         }
     }
 }
@@ -632,7 +618,7 @@ mod tests {
 
         let scan = host.library().expect("the scan's end is sent").scan;
         assert_eq!(scan.status, ScanStatus::Failed);
-        assert_eq!(scan.failure, Some(ScanFailure::Panicked));
+        assert_eq!(scan.failure, Some(ScanFailure::Failed));
     }
 
     #[test]

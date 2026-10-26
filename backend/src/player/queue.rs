@@ -12,6 +12,8 @@ use std::sync::Arc;
 
 use rand::{Rng, seq::SliceRandom};
 
+use crate::Result;
+use crate::errors::Error;
 use crate::ids::{QueueItemId, TrackId};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type, serde::Deserialize)]
@@ -28,16 +30,6 @@ pub enum AdvanceReason {
     Natural,
     UserNext,
     UserPrevious,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum QueueError {
-    /// `replace` needs at least one item and a start index inside them.
-    #[error("the queue start is outside its items")]
-    InvalidStart,
-    /// The id is unknown, or names the current or an already played item.
-    #[error("the item is not upcoming in the queue")]
-    ItemNotUpcoming,
 }
 
 /// One place in the queue: its own id, and the library track it plays.
@@ -162,10 +154,11 @@ impl Queue {
         track_ids: Vec<TrackId>,
         start_index: usize,
         rng: &mut R,
-    ) -> Result<(), QueueError> {
-        if start_index >= track_ids.len() {
-            return Err(QueueError::InvalidStart);
-        }
+    ) {
+        assert!(
+            start_index < track_ids.len(),
+            "a queue start names one of its items"
+        );
         let entries: Vec<QueueEntry> = track_ids
             .into_iter()
             .map(|track_id| self.new_entry(track_id))
@@ -176,7 +169,6 @@ impl Queue {
         if self.shuffle {
             self.shuffle_around_current(rng);
         }
-        Ok(())
     }
 
     /// Puts back a queue that was replaced, keeping this queue's repeat and shuffle settings
@@ -220,7 +212,7 @@ impl Queue {
         true
     }
 
-    pub fn remove_upcoming(&mut self, id: QueueItemId) -> Result<(), QueueError> {
+    pub fn remove_upcoming(&mut self, id: QueueItemId) -> Result<()> {
         let index = self.upcoming_index(id)?;
         let removed = edit_order(self.play_order_mut(), |order| order.remove(index));
         if self.shuffled.is_some() {
@@ -237,7 +229,7 @@ impl Queue {
     ///
     /// While shuffled this moves the item in the play order, and in the arranged order it lands
     /// right after the entry that now plays before it.
-    pub fn move_upcoming(&mut self, id: QueueItemId, to: usize) -> Result<bool, QueueError> {
+    pub fn move_upcoming(&mut self, id: QueueItemId, to: usize) -> Result<bool> {
         let index = self.upcoming_index(id)?;
         let target = self
             .position()
@@ -254,7 +246,7 @@ impl Queue {
             let predecessor = order.get(target.saturating_sub(1)).map(|entry| entry.id);
             (entry, predecessor)
         });
-        let predecessor = predecessor.ok_or(QueueError::ItemNotUpcoming)?;
+        let predecessor = predecessor.ok_or(Error::QueueItemNotFound)?;
         if self.shuffled.is_some() {
             edit_order(&mut self.arranged, |arranged| {
                 arranged.retain(|other| other.id != entry.id);
@@ -269,10 +261,10 @@ impl Queue {
     }
 
     /// Makes any other item current, played or upcoming: the listener picked it from the queue.
-    pub fn jump_to(&mut self, id: QueueItemId) -> Result<(), QueueError> {
+    pub fn jump_to(&mut self, id: QueueItemId) -> Result<()> {
         let known = self.play_order().iter().any(|entry| entry.id == id);
         if !known || self.current == Some(id) {
-            return Err(QueueError::ItemNotUpcoming);
+            return Err(Error::QueueItemNotFound);
         }
         self.current = Some(id);
         Ok(())
@@ -283,10 +275,8 @@ impl Queue {
     ///
     /// While shuffled the items are added in the same place of both orders: after the current
     /// item, or at the end.
-    pub fn enqueue(&mut self, track_ids: Vec<TrackId>, next: bool) -> Result<(), QueueError> {
-        if self.is_empty() {
-            return Err(QueueError::InvalidStart);
-        }
+    pub fn enqueue(&mut self, track_ids: Vec<TrackId>, next: bool) {
+        assert!(!self.is_empty(), "enqueue needs a current item");
         let entries: Vec<QueueEntry> = track_ids
             .into_iter()
             .map(|track_id| self.new_entry(track_id))
@@ -312,19 +302,18 @@ impl Queue {
         edit_order(self.play_order_mut(), |order| {
             order.splice(at..at, entries);
         });
-        Ok(())
     }
 
     fn play_order_mut(&mut self) -> &mut Arc<[QueueEntry]> {
         self.shuffled.as_mut().unwrap_or(&mut self.arranged)
     }
 
-    fn upcoming_index(&self, id: QueueItemId) -> Result<usize, QueueError> {
+    fn upcoming_index(&self, id: QueueItemId) -> Result<usize> {
         self.play_order()
             .iter()
             .position(|entry| entry.id == id)
             .filter(|index| *index > self.position())
-            .ok_or(QueueError::ItemNotUpcoming)
+            .ok_or(Error::QueueItemNotFound)
     }
 
     pub fn set_repeat(&mut self, repeat: RepeatMode) -> bool {
@@ -488,9 +477,7 @@ mod tests {
 
     fn queue_of(count: usize, start: usize, repeat: RepeatMode, shuffle: bool) -> Queue {
         let mut queue = Queue::new(repeat, shuffle);
-        queue
-            .replace(ids(count), start, &mut StdRng::seed_from_u64(7))
-            .expect("valid start");
+        queue.replace(ids(count), start, &mut StdRng::seed_from_u64(7));
         queue
     }
 
@@ -499,25 +486,17 @@ mod tests {
     }
 
     #[test]
-    fn replace_rejects_empty_and_out_of_range_starts_without_changing_the_queue() {
+    #[should_panic(expected = "names one of its items")]
+    fn replace_panics_on_an_out_of_range_start() {
         let mut queue = queue_of(3, 1, RepeatMode::Off, false);
-        assert_eq!(
-            queue.replace(vec![], 0, &mut rng()),
-            Err(QueueError::InvalidStart)
-        );
-        assert_eq!(
-            queue.replace(ids(2), 2, &mut rng()),
-            Err(QueueError::InvalidStart)
-        );
-        assert_eq!(queue.len(), 3);
-        assert_eq!(current(&queue), 2);
+        queue.replace(ids(2), 2, &mut rng());
     }
 
     #[test]
     fn item_ids_stay_unique_across_replacements() {
         let mut queue = queue_of(2, 0, RepeatMode::Off, false);
         let first = queue.current().unwrap().id;
-        queue.replace(ids(2), 0, &mut rng()).unwrap();
+        queue.replace(ids(2), 0, &mut rng());
         assert_ne!(queue.current().unwrap().id, first);
     }
 
@@ -561,7 +540,7 @@ mod tests {
     #[test]
     fn replace_while_shuffled_starts_at_the_requested_item() {
         let mut queue = Queue::new(RepeatMode::Off, true);
-        queue.replace(ids(8), 4, &mut rng()).unwrap();
+        queue.replace(ids(8), 4, &mut rng());
         assert_eq!(current(&queue), 5);
         assert_eq!(queue.len(), 8);
     }
@@ -670,14 +649,14 @@ mod tests {
         let first_upcoming = queue.upcoming()[0].id;
         let current_id = queue.current().unwrap().id;
 
-        assert_eq!(queue.move_upcoming(first_upcoming, 0), Ok(false));
+        assert_eq!(queue.move_upcoming(first_upcoming, 0).ok(), Some(false));
         assert_eq!(queue.current().unwrap().id, current_id);
-        assert_eq!(
+        assert!(matches!(
             queue.move_upcoming(current_id, 0),
-            Err(QueueError::ItemNotUpcoming)
-        );
+            Err(Error::QueueItemNotFound)
+        ));
 
-        assert_eq!(queue.move_upcoming(first_upcoming, 1), Ok(true));
+        assert_eq!(queue.move_upcoming(first_upcoming, 1).ok(), Some(true));
         assert_eq!(queue.upcoming()[1].id, first_upcoming);
         assert_eq!(queue.current().unwrap().id, current_id);
     }
@@ -691,31 +670,31 @@ mod tests {
         let ids = upcoming(&queue);
 
         // Forward over several items, then back to the front.
-        assert_eq!(queue.move_upcoming(ids[0], 3), Ok(true));
+        assert_eq!(queue.move_upcoming(ids[0], 3).ok(), Some(true));
         assert_eq!(upcoming(&queue), [ids[1], ids[2], ids[3], ids[0]]);
-        assert_eq!(queue.move_upcoming(ids[0], 0), Ok(true));
+        assert_eq!(queue.move_upcoming(ids[0], 0).ok(), Some(true));
         assert_eq!(queue.upcoming()[0].id, ids[0]);
 
         // Past the end clamps to the end; an unchanged position reports no change.
-        assert_eq!(queue.move_upcoming(ids[0], 99), Ok(true));
+        assert_eq!(queue.move_upcoming(ids[0], 99).ok(), Some(true));
         assert_eq!(queue.upcoming().last().unwrap().id, ids[0]);
-        assert_eq!(queue.move_upcoming(ids[0], 99), Ok(false));
+        assert_eq!(queue.move_upcoming(ids[0], 99).ok(), Some(false));
     }
 
     #[test]
     fn edits_reject_played_and_unknown_items() {
         let mut queue = queue_of(4, 2, RepeatMode::Off, false);
         let played = queue.history()[0].id;
-        assert_eq!(
+        assert!(matches!(
             queue.remove_upcoming(played),
-            Err(QueueError::ItemNotUpcoming)
-        );
-        assert_eq!(
+            Err(Error::QueueItemNotFound)
+        ));
+        assert!(matches!(
             queue.remove_upcoming(unknown_item()),
-            Err(QueueError::ItemNotUpcoming)
-        );
+            Err(Error::QueueItemNotFound)
+        ));
         let upcoming = queue.upcoming()[0].id;
-        assert_eq!(queue.remove_upcoming(upcoming), Ok(()));
+        assert_eq!(queue.remove_upcoming(upcoming).ok(), Some(()));
         assert_eq!(queue.len(), 3);
         assert!(!queue.clear_upcoming());
     }
@@ -735,14 +714,14 @@ mod tests {
     fn items_enqueued_while_shuffled_keep_their_place_when_shuffle_turns_off() {
         // The review's B1: four items, shuffle on, enqueue one, shuffle off must leave five.
         let mut queue = queue_of(4, 0, RepeatMode::Off, true);
-        queue.enqueue(vec![track(51)], false).unwrap();
+        queue.enqueue(vec![track(51)], false);
         queue.set_shuffle(false, &mut rng());
         assert_eq!(order(&queue), [1, 2, 3, 4, 51]);
 
         // Play next while shuffled lands right after the current item in the arranged order.
         let mut queue = queue_of(5, 2, RepeatMode::Off, false);
         queue.set_shuffle(true, &mut rng());
-        queue.enqueue(vec![track(50)], true).unwrap();
+        queue.enqueue(vec![track(50)], true);
         assert_eq!(queue.upcoming()[0].track_id, track(50));
         queue.set_shuffle(false, &mut rng());
         assert_eq!(order(&queue), [1, 2, 3, 50, 4, 5]);
@@ -753,7 +732,7 @@ mod tests {
     fn a_move_made_while_shuffled_is_kept_after_the_entry_that_now_precedes_it() {
         let mut queue = queue_of(6, 0, RepeatMode::Off, true);
         let last = queue.upcoming().last().unwrap().clone();
-        assert_eq!(queue.move_upcoming(last.id, 1), Ok(true));
+        assert_eq!(queue.move_upcoming(last.id, 1).ok(), Some(true));
         assert_eq!(queue.upcoming()[1], last);
         let predecessor = queue.upcoming()[0].track_id.rowid();
 
@@ -782,7 +761,7 @@ mod tests {
         for seed_value in 0..50u64 {
             let mut rng = StdRng::seed_from_u64(seed_value);
             let mut queue = Queue::new(RepeatMode::Off, false);
-            queue.replace(ids(9), 0, &mut rng).unwrap();
+            queue.replace(ids(9), 0, &mut rng);
             for step in 0..300u32 {
                 match rng.random_range(0..11) {
                     0 => {
@@ -822,14 +801,12 @@ mod tests {
                         if !queue.is_empty() {
                             let ids =
                                 vec![track(1000 + i64::from(step)), track(2000 + i64::from(step))];
-                            queue.enqueue(ids, rng.random_bool(0.5)).unwrap();
+                            queue.enqueue(ids, rng.random_bool(0.5));
                         }
                     }
                     _ => {
                         if queue.len() < 3 {
-                            queue
-                                .replace(ids(9), rng.random_range(0..9), &mut rng)
-                                .unwrap();
+                            queue.replace(ids(9), rng.random_range(0..9), &mut rng);
                         }
                     }
                 }
@@ -881,11 +858,11 @@ mod tests {
         queue.jump_to(id).expect("played");
         assert_eq!(current(&queue), 1);
         assert_eq!(queue.upcoming().len(), 3);
-        assert_eq!(queue.jump_to(id), Err(QueueError::ItemNotUpcoming));
-        assert_eq!(
+        assert!(matches!(queue.jump_to(id), Err(Error::QueueItemNotFound)));
+        assert!(matches!(
             queue.jump_to(unknown_item()),
-            Err(QueueError::ItemNotUpcoming)
-        );
+            Err(Error::QueueItemNotFound)
+        ));
     }
 
     #[test]
@@ -901,19 +878,17 @@ mod tests {
     #[test]
     fn enqueue_adds_after_current_or_at_the_end() {
         let mut queue = queue_of(3, 0, RepeatMode::Off, false);
-        queue.enqueue(vec![track(52)], false).expect("enqueue");
-        queue.enqueue(vec![track(50)], true).expect("enqueue");
+        queue.enqueue(vec![track(52)], false);
+        queue.enqueue(vec![track(50)], true);
         assert_eq!(order(&queue), [1, 50, 2, 3, 52]);
         assert_eq!(current(&queue), 1);
     }
 
     #[test]
-    fn enqueue_needs_a_queue() {
+    #[should_panic(expected = "needs a current item")]
+    fn enqueue_panics_without_a_current_item() {
         let mut queue = Queue::new(RepeatMode::Off, false);
-        assert_eq!(
-            queue.enqueue(vec![track(1)], true),
-            Err(QueueError::InvalidStart)
-        );
+        queue.enqueue(vec![track(1)], true);
     }
 
     #[test]
@@ -934,7 +909,7 @@ mod tests {
     fn a_replaced_queue_can_be_put_back_with_the_current_settings() {
         let mut queue = queue_of(5, 2, RepeatMode::Off, false);
         let before = queue.clone();
-        queue.replace(ids(3), 0, &mut rng()).unwrap();
+        queue.replace(ids(3), 0, &mut rng());
         queue.set_repeat(RepeatMode::All);
         queue.set_shuffle(true, &mut rng());
 
@@ -948,7 +923,7 @@ mod tests {
         assert_eq!(restored, [1, 2, 3, 4, 5]);
         queue.set_shuffle(false, &mut rng());
         assert_eq!(order(&queue), [1, 2, 3, 4, 5]);
-        queue.enqueue(vec![track(53)], false).unwrap();
+        queue.enqueue(vec![track(53)], false);
         let unique: HashSet<_> = queue.arranged.iter().map(|e| e.id).collect();
         assert_eq!(unique.len(), 6, "ids stay unique across the restored queue");
     }

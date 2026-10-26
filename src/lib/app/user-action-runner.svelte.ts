@@ -1,4 +1,3 @@
-import { isSuperseded } from "#lib/native/errors";
 import { errorMessage } from "#lib/native/messages";
 import type { NoticeCenter, NoticePlace } from "./notice-center.svelte";
 
@@ -16,7 +15,7 @@ export class UserActionRunner {
     return (this.#running[place] ?? 0) > 0;
   }
 
-  /** Clears the error at `place`, runs `action`, and shows its failure at `place`. Ignores superseded requests. */
+  /** Clears the error at `place`, runs `action`, and shows its failure at `place`. */
   public run(action: () => Promise<unknown>, place: NoticePlace = "dock"): void {
     this.#notices.clearError(place);
     this.#count(place, 1);
@@ -28,8 +27,6 @@ export class UserActionRunner {
     try {
       await action();
     } catch (error) {
-      // A request replaced by a newer one has nothing to report.
-      if (isSuperseded(error)) return;
       this.#notices.showError(place, errorMessage(error));
     } finally {
       this.#count(place, -1);

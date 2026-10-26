@@ -1,20 +1,15 @@
-import type { LibraryStatus, LibraryUnavailableReason, ScanFailure } from "#lib/native/bindings";
-
-const unavailableMessages = {
-  databaseOpenFailed: "The library storage is unavailable.",
-} as const satisfies Record<LibraryUnavailableReason, string>;
+import type { LibraryStatus, ScanFailure } from "#lib/native/bindings";
 
 const scanFailureMessages = {
-  persistenceFailed: "The library database could not be updated.",
-  directoryTraversalFailed: "A library directory could not be read.",
-  panicked: "The scan stopped unexpectedly.",
+  directoryUnreadable: "A library directory could not be read.",
+  failed: "The scan stopped unexpectedly.",
 } as const satisfies Record<ScanFailure, string>;
 
 /** The user-facing messages for Library states and scan failures. Command failures use errorMessage. */
 export class LibraryErrors {
   public static statusMessage(status: LibraryStatus): string | null {
     if (status.status === "ready") return null;
-    return unavailableMessages[status.reason] ?? "The library is unavailable.";
+    return "The library storage is unavailable.";
   }
 
   /** Explains why a scan failed; the caller already shows that it failed. */

@@ -4,8 +4,6 @@
 
 use std::sync::mpsc::Sender;
 
-use log::debug;
-
 use crate::library::models::LibraryState;
 use crate::player::waveform::PlaybackWaveform;
 use crate::player::{PlaybackPosition, PlayerState, QueueState};
@@ -31,7 +29,5 @@ pub enum BackendMessage {
 
 /// Sends `message` to the Host. A Host that has gone away takes nothing, which is not an error.
 pub(crate) fn send(messages: &Sender<BackendMessage>, message: BackendMessage) {
-    if let Err(cause) = messages.send(message) {
-        debug!("backend.message.send_failed cause={cause}");
-    }
+    let _ = messages.send(message);
 }

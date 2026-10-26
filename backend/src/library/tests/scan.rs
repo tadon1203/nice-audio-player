@@ -307,7 +307,7 @@ fn an_unreadable_directory_fails_the_scan_but_keeps_other_directories_files_avai
     let scan = run_scan(&fixture, false);
 
     assert_eq!(scan.status, ScanStatus::Failed);
-    assert_eq!(scan.failure, Some(ScanFailure::DirectoryTraversalFailed));
+    assert_eq!(scan.failure, Some(ScanFailure::DirectoryUnreadable));
     assert_eq!(
         files(&fixture)[0].1,
         "available",
@@ -408,10 +408,10 @@ fn a_directory_holding_the_data_directory_cannot_be_registered() {
 
     let refused = directories::add(&fixture.database, &parent.to_string_lossy());
 
-    assert!(matches!(
-        refused,
-        Err(crate::errors::CommandError::DirectoryContainsDataDirectory)
-    ));
+    assert_eq!(
+        refused.err().map(|error| error.code()),
+        Some(crate::errors::CommandError::DirectoryContainsDataDirectory)
+    );
 }
 
 pub(super) fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {

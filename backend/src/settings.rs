@@ -162,9 +162,8 @@ impl SettingsStore {
         }
         if state.file != before
             && let Some(writer) = &state.writer
-            && let Err(cause) = writer.sender.send(state.file.clone())
         {
-            log::debug!("settings.writer_send_failed cause={cause}");
+            let _ = writer.sender.send(state.file.clone());
         }
     }
 
@@ -198,11 +197,8 @@ fn write_loop(receiver: &mpsc::Receiver<SettingsFile>, path: &Path) {
         let next = if pending.is_some() {
             receiver.recv_timeout(WRITE_DEBOUNCE)
         } else {
-            receiver.recv().map_err(|cause| {
-                // Closing the channel is how a normal shutdown ends the writer, so it is `debug`.
-                log::debug!("settings.writer_closed cause={cause}");
-                RecvTimeoutError::Disconnected
-            })
+            // Closing the channel is how a normal shutdown ends the writer.
+            receiver.recv().ok().ok_or(RecvTimeoutError::Disconnected)
         };
         match next {
             Ok(file) => pending = Some(file),

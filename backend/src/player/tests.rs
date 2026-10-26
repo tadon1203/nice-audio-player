@@ -166,15 +166,6 @@ impl Fixture {
         })
     }
 
-    /// How many transport states have been sent.
-    fn transport_messages(&self) -> usize {
-        self.messages
-            .sent()
-            .iter()
-            .filter(|message| matches!(message, BackendMessage::Player(_)))
-            .count()
-    }
-
     /// The titles of the current item and then the upcoming ones.
     fn titles(&self) -> Vec<String> {
         let queue = self.queue();

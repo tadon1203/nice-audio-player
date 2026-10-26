@@ -3,6 +3,8 @@
 //! change Symphonia playability.
 
 use super::artwork::ArtworkMimeType;
+use crate::Result;
+use crate::errors::Error;
 use lofty::{
     config::ParseOptions,
     file::TaggedFileExt,
@@ -11,7 +13,6 @@ use lofty::{
     probe::Probe,
     tag::ItemKey,
 };
-use serde::Serialize;
 use std::{
     borrow::Cow,
     fs::File,
@@ -50,56 +51,43 @@ pub struct ValidatedAudioFile {
     pub extension: String,
 }
 
-#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
-#[serde(tag = "code", content = "details", rename_all = "camelCase")]
-pub(crate) enum AudioFileValidationError {
-    EmptyPath,
-    NotFound,
-    NotAFile,
-    UnsupportedExtension { extension: Option<String> },
-    InvalidFileName,
-}
-
 pub(crate) fn is_supported_extension(extension: &str) -> bool {
     SUPPORTED_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
 }
 
-/// Checks that `path` names an existing supported audio file.
-pub(crate) fn validate_audio_file(
-    path: &Path,
-) -> Result<ValidatedAudioFile, AudioFileValidationError> {
+/// Checks that `path` names an existing supported audio file. A file that is not one is a track
+/// that cannot be played.
+pub(crate) fn validate_audio_file(path: &Path) -> Result<ValidatedAudioFile> {
     if is_blank(path) {
-        return Err(AudioFileValidationError::EmptyPath);
+        return Err(Error::TrackUnavailable);
     }
-    let metadata = std::fs::metadata(path)
-        .inspect_err(|cause| log::warn!("media.validation.metadata_failed cause={cause}"))
-        .map_err(|_| AudioFileValidationError::NotFound)?;
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return Err(Error::TrackUnavailable);
+    };
     if !metadata.is_file() {
-        return Err(AudioFileValidationError::NotAFile);
+        return Err(Error::TrackUnavailable);
     }
     describe_audio_file(path)
 }
 
 /// Names a supported audio file without touching the filesystem. Playback contexts describe
 /// thousands of library files at once; a file that vanished fails when it is loaded instead.
-pub(crate) fn describe_audio_file(
-    path: &Path,
-) -> Result<ValidatedAudioFile, AudioFileValidationError> {
+pub(crate) fn describe_audio_file(path: &Path) -> Result<ValidatedAudioFile> {
     if is_blank(path) {
-        return Err(AudioFileValidationError::EmptyPath);
+        return Err(Error::TrackUnavailable);
     }
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.is_empty())
-        .ok_or(AudioFileValidationError::InvalidFileName)?;
+        .ok_or(Error::TrackUnavailable)?;
     let extension = path
         .extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_ascii_lowercase);
     let extension = match extension {
         Some(extension) if SUPPORTED_EXTENSIONS.contains(&extension.as_str()) => extension,
-        extension => return Err(AudioFileValidationError::UnsupportedExtension { extension }),
+        _ => return Err(Error::TrackUnavailable),
     };
     Ok(ValidatedAudioFile {
         path: path.to_path_buf(),
@@ -152,7 +140,8 @@ pub(crate) fn inspect_audio_file(
 ) -> Result<InspectedAudioFile, Undecodable> {
     let source = File::open(path)
         .inspect_err(|cause| log::warn!("media.inspection.open_failed cause={cause}"))
-        .map_err(|_| Undecodable)?;
+        .ok()
+        .ok_or(Undecodable)?;
     let stream = MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
     hint.with_extension(extension);
@@ -164,7 +153,8 @@ pub(crate) fn inspect_audio_file(
             MetadataOptions::default(),
         )
         .inspect_err(|cause| log::warn!("media.inspection.probe_failed cause={cause}"))
-        .map_err(|_| Undecodable)?;
+        .ok()
+        .ok_or(Undecodable)?;
     let track = format.default_track(TrackType::Audio).ok_or(Undecodable)?;
     let params = track
         .codec_params
@@ -176,7 +166,8 @@ pub(crate) fn inspect_audio_file(
     get_codecs()
         .make_audio_decoder(params, &AudioDecoderOptions::default())
         .inspect_err(|cause| log::warn!("media.inspection.decoder_failed cause={cause}"))
-        .map_err(|_| Undecodable)?;
+        .ok()
+        .ok_or(Undecodable)?;
     let sample_rate = params
         .sample_rate
         .filter(|rate| *rate > 0)
@@ -189,7 +180,8 @@ pub(crate) fn inspect_audio_file(
         .ok_or(Undecodable)?;
     let channel_count = u16::try_from(count)
         .inspect_err(|cause| log::warn!("media.inspection.channels_out_of_range cause={cause}"))
-        .map_err(|_| Undecodable)?;
+        .ok()
+        .ok_or(Undecodable)?;
     Ok(InspectedAudioFile {
         info: AudioFileInfo {
             codec,
@@ -279,21 +271,10 @@ pub(crate) enum ArtworkRead {
         mime_type: ArtworkMimeType,
     },
 }
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum MetadataReadError {
-    Read,
-}
-
-pub(crate) fn read_source_metadata(
-    path: &Path,
-) -> Result<Option<SourceMetadata>, MetadataReadError> {
-    let tagged = Probe::open(path)
-        .inspect_err(|cause| log::warn!("media.metadata.open_failed cause={cause}"))
-        .map_err(|_| MetadataReadError::Read)?
+pub(crate) fn read_source_metadata(path: &Path) -> Result<Option<SourceMetadata>> {
+    let tagged = Probe::open(path)?
         .options(ParseOptions::new().read_properties(false))
-        .read()
-        .inspect_err(|cause| log::warn!("media.metadata.read_failed cause={cause}"))
-        .map_err(|_| MetadataReadError::Read)?;
+        .read()?;
     let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
         return Ok(None);
     };

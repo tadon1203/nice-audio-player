@@ -1,7 +1,7 @@
 use backend::{
     app::{
-        AudioOutputDevice, AudioOutputSelection, BackendApp, PlaybackContext, QueueWindow,
-        RepeatMode,
+        AudioOutputDevice, AudioOutputSelection, BackendApp, NormalizedVolume, PlaybackContext,
+        QueueWindow, RepeatMode,
     },
     errors::CommandError,
     ids::{QueueItemId, TrackId},
@@ -73,10 +73,10 @@ pub(crate) async fn player_seek(
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn player_set_volume(
-    volume: f64,
+    volume: NormalizedVolume,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, move |backend| backend.set_volume(volume as f32)).await
+    blocking(&state, move |backend| backend.set_volume(volume)).await
 }
 
 #[tauri::command]

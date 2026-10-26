@@ -12,12 +12,12 @@ pub(crate) fn open_in_file_manager(path: &Path) -> Result<(), CommandError> {
         .spawn()
         .map(|_| ())
         .inspect_err(|cause| log::warn!("host.os.explorer_failed cause={cause}"))
-        .map_err(|_| CommandError::TaskFailed)
+        .map_err(|_| CommandError::Internal)
 }
 
 #[cfg(not(windows))]
 pub fn open_in_file_manager(_path: &Path) -> Result<(), CommandError> {
-    Err(CommandError::TaskFailed)
+    Err(CommandError::Internal)
 }
 
 /// Shows the file at `path` in the file manager, selected.
@@ -34,10 +34,10 @@ pub(crate) fn reveal_in_file_manager(path: &Path) -> Result<(), CommandError> {
         .spawn()
         .map(|_| ())
         .inspect_err(|cause| log::warn!("host.os.reveal_failed cause={cause}"))
-        .map_err(|_| CommandError::TaskFailed)
+        .map_err(|_| CommandError::Internal)
 }
 
 #[cfg(not(windows))]
 pub fn reveal_in_file_manager(_path: &Path) -> Result<(), CommandError> {
-    Err(CommandError::TaskFailed)
+    Err(CommandError::Internal)
 }

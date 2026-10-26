@@ -22,11 +22,11 @@ pub(crate) mod text;
 pub(crate) mod tracks;
 pub(crate) mod version;
 
-use crate::errors::CommandError;
+use crate::Result;
+use crate::errors::Error;
 use crate::ids::DirectoryId;
 use crate::messages::BackendMessage;
-use database::{Database, DatabaseError, ReadConnection};
-use log::error;
+use database::{Database, ReadConnection};
 #[cfg(test)]
 use models::LibraryDirectory;
 use serde::Serialize;
@@ -124,77 +124,13 @@ sql_text_enum!(ArtworkStatus {
     StoreFailed => "storeFailed",
 });
 
-/// Why the Library is unavailable. The only reason left is a database that cannot be opened: any
+/// Whether the Library is usable. It is unavailable only when its database cannot be opened: any
 /// other database is replaced at open.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type, thiserror::Error)]
-#[serde(rename_all = "camelCase")]
-pub enum LibraryUnavailableReason {
-    #[error("the database could not be opened")]
-    DatabaseOpenFailed,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum LibraryStatus {
     Ready,
-    Unavailable { reason: LibraryUnavailableReason },
-}
-
-/// The Library's read-side errors. The read side logs a failure once, where it is built; the facade
-/// maps it to a code that carries no implementation detail.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum StoreError {
-    TrackNotFound,
-    TrackUnavailable,
-    AlbumNotFound,
-    AlbumArtistNotFound,
-    /// The database failed; the cause was logged where the error was built.
-    Persistence,
-}
-
-impl From<rusqlite::Error> for StoreError {
-    fn from(cause: rusqlite::Error) -> Self {
-        error!("library.store.failed cause={cause}");
-        Self::Persistence
-    }
-}
-
-impl From<DatabaseError> for StoreError {
-    fn from(cause: DatabaseError) -> Self {
-        error!("library.store.unavailable cause={cause}");
-        Self::Persistence
-    }
-}
-
-/// The shared codes a store failure maps to. A failure that no shared code describes is reported as
-/// a persistence failure, which is how the lyrics and playback commands have always reported it.
-impl From<StoreError> for CommandError {
-    fn from(error: StoreError) -> Self {
-        match error {
-            StoreError::TrackNotFound => Self::TrackNotFound,
-            StoreError::TrackUnavailable => Self::TrackUnavailable,
-            StoreError::AlbumNotFound => Self::AlbumNotFound,
-            StoreError::AlbumArtistNotFound => Self::ArtistNotFound,
-            StoreError::Persistence => Self::PersistenceFailed,
-        }
-    }
-}
-
-/// A track's file is not where the Library says it is, or not inside its directory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("the track's location is unavailable")]
-pub struct Unavailable;
-
-impl From<Unavailable> for StoreError {
-    fn from(_: Unavailable) -> Self {
-        Self::TrackUnavailable
-    }
-}
-
-impl From<Unavailable> for CommandError {
-    fn from(_: Unavailable) -> Self {
-        Self::TrackUnavailable
-    }
+    Unavailable,
 }
 
 /// Where a track's file is: a directory and a path below it. Every consumer (playback, properties,
@@ -225,36 +161,32 @@ impl TrackLocation {
 
     /// The file's path, without touching the filesystem: the directory joined with a relative path that
     /// only descends. Cheap enough to take for every track of a playback context.
-    pub(crate) fn path(&self) -> Result<PathBuf, Unavailable> {
+    pub(crate) fn path(&self) -> Result<PathBuf> {
         let descends = self
             .relative
             .components()
             .all(|component| matches!(component, Component::Normal(_)));
         if !descends || self.relative.as_os_str().is_empty() {
-            return Err(Unavailable);
+            return Err(Error::TrackUnavailable);
         }
         Ok(self.directory.join(&self.relative))
     }
 
     /// The file itself: still marked available, still there, and (symbolic links resolved) still
-    /// inside its directory.
-    pub(crate) fn existing(&self) -> Result<ExistingFile, Unavailable> {
+    /// inside its directory. A path that cannot be resolved is a file that is not there.
+    pub(crate) fn existing(&self) -> Result<ExistingFile> {
         if !self.available {
-            return Err(Unavailable);
+            return Err(Error::TrackUnavailable);
         }
         let path = self.path()?;
-        let directory = dunce::canonicalize(&self.directory)
-            .inspect_err(|cause| {
-                log::warn!("library.location.directory_canonicalize_failed cause={cause}");
-            })
-            .map_err(|_| Unavailable)?;
-        let path = dunce::canonicalize(path)
-            .inspect_err(|cause| {
-                log::warn!("library.location.path_canonicalize_failed cause={cause}");
-            })
-            .map_err(|_| Unavailable)?;
+        let Ok(directory) = dunce::canonicalize(&self.directory) else {
+            return Err(Error::TrackUnavailable);
+        };
+        let Ok(path) = dunce::canonicalize(path) else {
+            return Err(Error::TrackUnavailable);
+        };
         if !path.starts_with(&directory) || !path.is_file() {
-            return Err(Unavailable);
+            return Err(Error::TrackUnavailable);
         }
         Ok(ExistingFile { directory, path })
     }
@@ -272,14 +204,8 @@ pub(crate) struct Library {
 impl Library {
     /// Opens the Library in `directory`: opens its database (see `Database::initialize`), then
     /// starts watching and scanning the registered directories.
-    pub(crate) fn open(
-        directory: &Path,
-        host: Sender<BackendMessage>,
-    ) -> Result<Self, LibraryUnavailableReason> {
-        let database = Database::initialize(directory).map_err(|error| {
-            error!("library.database.unavailable cause={error}");
-            LibraryUnavailableReason::DatabaseOpenFailed
-        })?;
+    pub(crate) fn open(directory: &Path, host: Sender<BackendMessage>) -> Result<Self> {
+        let database = Database::initialize(directory)?;
         let version = Arc::new(LibraryVersion::default());
         let sync = LibrarySync::start(database.clone(), host, Arc::clone(&version));
         Ok(Self {
@@ -294,58 +220,53 @@ impl Library {
         self.version.get()
     }
 
-    fn read(&self) -> Result<ReadConnection, StoreError> {
-        Ok(self.database.read()?)
+    fn read(&self) -> Result<ReadConnection> {
+        self.database.read()
     }
 
     #[cfg(test)]
-    pub(crate) fn directories(&self) -> Result<Vec<LibraryDirectory>, CommandError> {
+    pub(crate) fn directories(&self) -> Result<Vec<LibraryDirectory>> {
         let connection = self.read()?;
-        Ok(directories::list(&connection)?)
+        directories::list(&connection)
     }
 
     /// Adds a directory. A path that is not valid Unicode cannot be stored, so it is refused rather
     /// than changed.
-    pub(crate) fn add_directory(&self, path: PathBuf) -> Result<(), CommandError> {
-        let path = path
-            .into_os_string()
-            .into_string()
-            .map_err(|_| CommandError::InvalidDirectory)?;
+    pub(crate) fn add_directory(&self, path: PathBuf) -> Result<()> {
+        let Ok(path) = path.into_os_string().into_string() else {
+            return Err(Error::InvalidDirectory(None));
+        };
         self.sync.add_directory(path)
     }
 
-    pub(crate) fn set_directory_enabled(
-        &self,
-        id: DirectoryId,
-        enabled: bool,
-    ) -> Result<(), CommandError> {
+    pub(crate) fn set_directory_enabled(&self, id: DirectoryId, enabled: bool) -> Result<()> {
         self.sync.set_directory_enabled(id, enabled)
     }
 
-    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), CommandError> {
+    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<()> {
         self.sync.remove_directory(id)
     }
 
     /// Deletes every Missing track from the Library. Source files are never touched.
-    pub(crate) fn delete_missing_tracks(&self) -> Result<(), CommandError> {
+    pub(crate) fn delete_missing_tracks(&self) -> Result<()> {
         self.sync.delete_missing_tracks()
     }
 
-    pub(crate) fn start_scan(&self) -> Result<(), CommandError> {
+    pub(crate) fn start_scan(&self) -> Result<()> {
         self.sync.start_scan()
     }
 
-    pub(crate) fn cancel_scan(&self) -> Result<(), CommandError> {
+    pub(crate) fn cancel_scan(&self) -> Result<()> {
         self.sync.cancel_scan()
     }
 
     /// The accent color of the stored original image at `path` (the path the Renderer holds), computed
     /// on first request and cached. A path that names no stored image has no accent.
-    pub(crate) fn artwork_accent(&self, path: &str) -> Result<Option<String>, CommandError> {
+    pub(crate) fn artwork_accent(&self, path: &str) -> Result<Option<String>> {
         let Some(hash) = artwork::hash_of_original(path) else {
             return Ok(None);
         };
-        Ok(artwork::artwork_accent(&self.database, &hash)?)
+        artwork::artwork_accent(&self.database, &hash)
     }
 
     /// Stops the watchers and any scan in progress, waits for them, and drops the idle read

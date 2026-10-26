@@ -7,10 +7,9 @@ use std::sync::Arc;
 use cpal::StreamInstant;
 
 use super::output::{
-    AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError, OutputError,
-    OutputEvent, OutputEvents, OutputStream, OutputStreamFactory, OutputStreamId, PcmConsumer,
-    PipelineId, PreparedOutput, PreparedOutputConfig, StreamCallbacks, StreamFailureKind,
-    make_queue,
+    AudioOutputDeviceIdentity, AudioOutputSelection, OutputError, OutputEvent, OutputEvents,
+    OutputStream, OutputStreamFactory, OutputStreamId, PcmConsumer, PipelineId, PreparedOutput,
+    PreparedOutputConfig, StreamCallbacks, StreamFailureKind, make_queue,
 };
 use super::pcm::PcmSpec;
 use super::processing::OutputProcessingPlan;
@@ -151,23 +150,23 @@ impl OutputStreamFactory for FakeOutput {
     fn resolve(
         &self,
         selection: &AudioOutputSelection,
-    ) -> Result<AudioOutputDeviceIdentity, DeviceResolutionError> {
+    ) -> Result<AudioOutputDeviceIdentity, OutputError> {
         let shared = self.shared();
         match selection {
             AudioOutputSelection::SystemDefault => shared
                 .devices
                 .first()
                 .cloned()
-                .ok_or(DeviceResolutionError::NoDefaultOutputDevice),
+                .ok_or(OutputError::NoOutputDevice),
             AudioOutputSelection::Device { device_id } if device_id.is_empty() => {
-                Err(DeviceResolutionError::InvalidDeviceId)
+                Err(OutputError::DeviceUnavailable)
             }
             AudioOutputSelection::Device { device_id } => shared
                 .devices
                 .iter()
                 .find(|device| &device.id == device_id)
                 .cloned()
-                .ok_or(DeviceResolutionError::DeviceUnavailable),
+                .ok_or(OutputError::DeviceUnavailable),
         }
     }
 
@@ -185,7 +184,8 @@ impl OutputStreamFactory for FakeOutput {
         self.shared().selections.push(selection.clone());
         let plan = OutputProcessingPlan::new(spec, spec)
             .inspect_err(|cause| log::warn!("audio.fake_output.plan_failed cause={cause}"))
-            .map_err(|_| OutputError::UnsupportedConfiguration)?;
+            .ok()
+            .ok_or(OutputError::UnsupportedConfiguration)?;
         let config = PreparedOutputConfig {
             device_id: device.id,
             device_name: device.name,

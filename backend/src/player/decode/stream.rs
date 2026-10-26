@@ -198,7 +198,8 @@ impl StreamingDecoder {
                 },
             )
             .inspect_err(|cause| log::warn!("audio.decode.seek_failed cause={cause}"))
-            .map_err(|_| DecodeError::SeekFailed)?;
+            .ok()
+            .ok_or(DecodeError::SeekFailed)?;
         self.decoder.reset();
         self.finished = false;
 
@@ -295,7 +296,8 @@ impl StreamingDecoder {
             destination
                 .try_reserve(packet_sample_count)
                 .inspect_err(|cause| log::warn!("audio.decode.buffer_failed cause={cause}"))
-                .map_err(|_| DecodeError::BufferAllocationFailed)?;
+                .ok()
+                .ok_or(DecodeError::BufferAllocationFailed)?;
             destination.resize(packet_sample_count, 0.0);
             decoded.copy_to_slice_interleaved(destination);
             return Ok(DecodeStep::Samples);
@@ -321,7 +323,8 @@ fn timestamp_delta_to_frames(
     }
     let delta = u128::try_from(required.get() - actual.get())
         .inspect_err(|cause| log::warn!("audio.decode.seek_delta_failed cause={cause}"))
-        .map_err(|_| DecodeError::SeekFailed)?;
+        .ok()
+        .ok_or(DecodeError::SeekFailed)?;
     let numerator = delta
         .checked_mul(u128::from(time_base.numer.get()))
         .and_then(|value| value.checked_mul(u128::from(sample_rate)))
@@ -333,7 +336,8 @@ fn timestamp_delta_to_frames(
         .ok_or(DecodeError::SeekFailed)?;
     u64::try_from(frames)
         .inspect_err(|cause| log::warn!("audio.decode.seek_frames_failed cause={cause}"))
-        .map_err(|_| DecodeError::SeekFailed)
+        .ok()
+        .ok_or(DecodeError::SeekFailed)
 }
 
 fn map_probe_error(error: &SymphoniaError) -> DecodeError {

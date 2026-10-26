@@ -17,7 +17,7 @@ These rules cover code and documentation that lint cannot check. Do not write a 
 - Each Backend state has one owner thread. The owner holds the state. It sends the whole value when the value changes. No other thread reads the state back.
 - Remove a forwarding layer. A forwarding layer is a function, class, or module that only passes its arguments on.
 - Do not add a trait or interface that has one real implementation. A seam is real only when something varies across it.
-- Do not add a seam that only tests use.
+- Do not add a seam that only tests use. The exception is a seam at a hardware or operating-system boundary, such as the output device.
 - Put a class or file that has one caller into that caller. Do this unless it adds something that the caller does not have.
 - Do not write a static-only class. Write plain functions.
 - Do not write a wrapper type that only copies fields.
@@ -26,6 +26,7 @@ These rules cover code and documentation that lint cannot check. Do not write a 
 - Clamp a value in one place. Do not clamp it in several layers.
 - Do not write a fallback that hides a bug.
 - Do not retry a failure that a later user action recovers.
+- A Command with nothing to do does nothing and succeeds. The Renderer disables controls from the pushed state.
 
 ## Naming
 
@@ -81,9 +82,13 @@ Casing and conversion names follow the standards below. The Rust compiler lints 
 ## Rust
 
 - Do not write `unreachable!`. Remove the impossible branch with the types. Split the enum, or carry a validated value.
-- Write an error as an enum with `#[derive(thiserror::Error)]` when it carries a cause. Do not use `anyhow`.
-- Log a failure once, where it is handled. Log the cause at `warn` when it maps to a typed error. Log it at `debug` when the caller drops it.
-- Do not write `let _ = <Result>`. Log the error, or handle it.
+- The Backend has one error type, `backend::Error`, which derives `thiserror::Error`. Do not use `anyhow`.
+- A function that can fail returns `crate::Result<T>` and uses `?`. Keep the cause with `#[from]` or `#[source]`. Do not re-map an error on the way up.
+- A separate error enum stays only where its module matches on its variants. Each such enum converts into `Error` with `#[from]` where it leaves the module.
+- The Host command boundary converts a returned Backend error to a `CommandError` and logs it once, with its chain of causes. No other code logs a returned Backend error.
+- A failure that a worker handles is logged where the worker handles it. A `From` impl never logs.
+- Do not write `let _ = <Result>`. Log the error, or handle it. The exception is a send to a channel whose receiver may be gone: write `let _ = sender.send(..);` with no log.
+- A thread that the OS cannot start panics. Use `expect` and give the reason.
 - A cause with no `Display` is logged inline with its `Debug` form. A thread's `join` returns a panic payload that has no `Display`. Check `join().is_err()`, and log it at `debug`.
 - Remove a file on a best-effort basis. Log every error except "not found".
 - Lock a `Mutex`, `RwLock`, or `Condvar` with `parking_lot`.

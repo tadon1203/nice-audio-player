@@ -3,7 +3,7 @@
 //! ids a playback queue is built from, and reading those tracks back when they are needed.
 
 use super::{
-    Availability, InspectionStatus, Library, StoreError, TrackLocation,
+    Availability, InspectionStatus, Library, TrackLocation,
     artwork::{ArtworkMimeType, ArtworkRef},
     database::Database,
     lists::{ALBUM_ORDER, track_listing},
@@ -12,7 +12,8 @@ use super::{
         TrackSortKey, TrackState, TrackSummary,
     },
 };
-use crate::errors::CommandError;
+use crate::Result;
+use crate::errors::Error;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, TrackId, album_id_column, track_id_column};
 use crate::library::media::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -172,11 +173,10 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
 }
 
 /// Why a track in this state cannot be played, or `Ok` when it can.
-fn ensure_playable(state: TrackState) -> Result<(), CommandError> {
+fn ensure_playable(state: TrackState) -> Result<()> {
     match state {
         TrackState::Playable => Ok(()),
-        TrackState::Missing => Err(StoreError::TrackUnavailable.into()),
-        TrackState::Unsupported => Err(CommandError::TrackUnavailable),
+        TrackState::Missing | TrackState::Unsupported => Err(Error::TrackUnavailable),
     }
 }
 
@@ -187,23 +187,15 @@ fn playable_track(
     row: PlaybackRow,
     counts: &AlbumCounts,
     requested: bool,
-) -> Result<Option<PlayableTrack>, CommandError> {
+) -> Result<Option<PlayableTrack>> {
     if let Err(error) = ensure_playable(row.state) {
         return if requested { Err(error) } else { Ok(None) };
     }
     // A file that vanished since the scan fails when it is loaded, and the queue moves on.
     // The track the listener picked is checked now so they get a clear answer.
     let file = if requested {
-        let existing = row
-            .location
-            .existing()
-            .inspect_err(|cause| log::warn!("library.store.track_missing cause={cause}"))
-            .map_err(|_| StoreError::TrackUnavailable)?;
-        // The cause is an IPC enum with no `Display`, so it is logged here with its `Debug` form.
-        validate_audio_file(&existing.path).map_err(|cause| {
-            log::warn!("library.store.track_invalid cause={cause:?}");
-            StoreError::TrackUnavailable
-        })?
+        let existing = row.location.existing()?;
+        validate_audio_file(&existing.path)?
     } else {
         let Ok(path) = row.location.path() else {
             return Ok(None);
@@ -260,10 +252,10 @@ struct SelectionRow {
 fn select_playable(
     rows: &[SelectionRow],
     start_track_id: Option<TrackId>,
-) -> Result<PlaybackSelection, CommandError> {
+) -> Result<PlaybackSelection> {
     if let Some(requested) = start_track_id {
         let Some(row) = rows.iter().find(|row| row.track_id == requested) else {
-            return Err(CommandError::TrackNotFound);
+            return Err(Error::TrackNotFound);
         };
         ensure_playable(row.state)?;
     }
@@ -276,7 +268,7 @@ fn select_playable(
         track_ids.push(row.track_id);
     }
     if track_ids.is_empty() {
-        return Err(CommandError::TrackUnavailable);
+        return Err(Error::TrackUnavailable);
     }
     Ok(PlaybackSelection {
         track_ids,
@@ -302,7 +294,7 @@ fn selection_row(row: &Row<'_>) -> rusqlite::Result<SelectionRow> {
 const IDS_PER_QUERY: usize = 400;
 
 /// Where the track's file is. The one query every consumer of a track's path goes through.
-pub(crate) fn location_of(database: &Database, id: TrackId) -> Result<TrackLocation, StoreError> {
+pub(crate) fn location_of(database: &Database, id: TrackId) -> Result<TrackLocation> {
     let connection = database.read()?;
     let (directory, relative, availability): (String, String, Availability) = connection
         .query_row(
@@ -315,7 +307,7 @@ pub(crate) fn location_of(database: &Database, id: TrackId) -> Result<TrackLocat
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?
-        .ok_or(StoreError::TrackNotFound)?;
+        .ok_or(Error::TrackNotFound)?;
     Ok(TrackLocation::new(
         &directory,
         &relative,
@@ -325,12 +317,12 @@ pub(crate) fn location_of(database: &Database, id: TrackId) -> Result<TrackLocat
 
 impl Library {
     /// Where the track's file is (see [`location_of`]).
-    pub(crate) fn track_location(&self, id: TrackId) -> Result<TrackLocation, StoreError> {
+    pub(crate) fn track_location(&self, id: TrackId) -> Result<TrackLocation> {
         location_of(&self.database, id)
     }
 
     /// Tags, audio format and the file's path, or `TrackNotFound` for an unknown track.
-    pub(crate) fn track_properties(&self, id: TrackId) -> Result<TrackProperties, CommandError> {
+    pub(crate) fn track_properties(&self, id: TrackId) -> Result<TrackProperties> {
         let location = self.track_location(id)?;
         let path = location.path()?.to_string_lossy().into_owned();
         let connection = self.read()?;
@@ -377,9 +369,8 @@ impl Library {
                     })
                 },
             )
-            .optional()
-            .map_err(StoreError::from)?
-            .ok_or(StoreError::TrackNotFound)?;
+            .optional()?
+            .ok_or(Error::TrackNotFound)?;
         Ok(properties)
     }
 
@@ -388,7 +379,7 @@ impl Library {
         &self,
         album_id: AlbumId,
         start_track_id: Option<TrackId>,
-    ) -> Result<PlaybackSelection, CommandError> {
+    ) -> Result<PlaybackSelection> {
         let connection = self.read()?;
         let rows = collect_selection(
             &connection,
@@ -400,17 +391,14 @@ impl Library {
             params![album_id.to_hex()],
         )?;
         if rows.is_empty() {
-            return Err(CommandError::AlbumNotFound);
+            return Err(Error::AlbumNotFound);
         }
         select_playable(&rows, start_track_id)
     }
 
     /// One track, for starting from it or adding it to a queue that is already playing. The
     /// track must be playable: anything else is reported.
-    pub(crate) fn playback_for_track(
-        &self,
-        track_id: TrackId,
-    ) -> Result<PlayableTrack, CommandError> {
+    pub(crate) fn playback_for_track(&self, track_id: TrackId) -> Result<PlayableTrack> {
         let connection = self.read()?;
         let rows = collect_rows(
             &connection,
@@ -418,10 +406,10 @@ impl Library {
             params![track_id.rowid()],
         )?;
         let Some(row) = rows.into_iter().next() else {
-            return Err(StoreError::TrackNotFound.into());
+            return Err(Error::TrackNotFound);
         };
         let counts = album_counts(&connection, [row.album_id.to_hex()])?;
-        playable_track(row, &counts, true)?.ok_or(CommandError::TrackUnavailable)
+        playable_track(row, &counts, true)?.ok_or(Error::TrackUnavailable)
     }
 
     /// The tracks with these ids, in the order given: `None` for an id that is unknown, not
@@ -429,7 +417,7 @@ impl Library {
     pub(crate) fn playable_tracks(
         &self,
         track_ids: &[TrackId],
-    ) -> Result<Vec<Option<PlayableTrack>>, CommandError> {
+    ) -> Result<Vec<Option<PlayableTrack>>> {
         let connection = self.read()?;
         let mut found: HashMap<TrackId, PlayableTrack> = HashMap::with_capacity(track_ids.len());
         for chunk in track_ids.chunks(IDS_PER_QUERY) {
@@ -461,7 +449,7 @@ impl Library {
         sort: TrackSortKey,
         direction: SortDirection,
         start_track_id: Option<TrackId>,
-    ) -> Result<PlaybackSelection, CommandError> {
+    ) -> Result<PlaybackSelection> {
         let listing = track_listing(search, sort, direction);
         let connection = self.read()?;
         let rows = collect_selection(
@@ -482,27 +470,23 @@ impl Library {
 fn album_counts(
     connection: &Connection,
     album_ids: impl IntoIterator<Item = String>,
-) -> Result<AlbumCounts, CommandError> {
+) -> Result<AlbumCounts> {
     let mut wanted: Vec<String> = album_ids.into_iter().collect();
     wanted.sort();
     wanted.dedup();
     let mut counts = AlbumCounts::new();
     for chunk in wanted.chunks(IDS_PER_QUERY) {
         let marks = vec!["?"; chunk.len()].join(",");
-        let mut statement = connection
-            .prepare(&format!(
-                "SELECT album_id, COUNT(*) FROM track_source_metadata
+        let mut statement = connection.prepare(&format!(
+            "SELECT album_id, COUNT(*) FROM track_source_metadata
                  WHERE album_id IN ({marks})
                  GROUP BY album_id"
-            ))
-            .map_err(StoreError::from)?;
-        let rows = statement
-            .query_map(rusqlite::params_from_iter(chunk), |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
-            })
-            .map_err(StoreError::from)?;
+        ))?;
+        let rows = statement.query_map(rusqlite::params_from_iter(chunk), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+        })?;
         for row in rows {
-            let (album_id, count) = row.map_err(StoreError::from)?;
+            let (album_id, count) = row?;
             counts.insert(album_id, count);
         }
     }
@@ -513,7 +497,7 @@ fn collect_rows(
     connection: &Connection,
     sql: &str,
     params: impl rusqlite::Params,
-) -> Result<Vec<PlaybackRow>, StoreError> {
+) -> Result<Vec<PlaybackRow>> {
     let mut statement = connection.prepare(sql)?;
     let rows = statement.query_map(params, playback_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -523,7 +507,7 @@ fn collect_selection(
     connection: &Connection,
     sql: &str,
     params: impl rusqlite::Params,
-) -> Result<Vec<SelectionRow>, StoreError> {
+) -> Result<Vec<SelectionRow>> {
     let mut statement = connection.prepare(sql)?;
     let rows = statement.query_map(params, selection_row)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)

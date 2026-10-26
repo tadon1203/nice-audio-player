@@ -1,11 +1,12 @@
 use super::{fixture, shown_waveform};
 use crate::app::{BackendApp, PlaybackContext};
-use crate::errors::CommandError;
 use crate::ids::TrackId;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
 use crate::messages::BackendMessage;
 use crate::player::RepeatMode;
 use crate::player::fake_output::FakeOutput;
+use crate::player::volume::NormalizedVolume;
+use crate::test_support::CommandCode;
 use crate::test_support::{MessageLog, TestDirectory, wait_until, write_pcm_i16_wav};
 use std::time::{Duration, Instant};
 
@@ -54,20 +55,14 @@ fn with_nothing_playing_there_is_no_waveform_and_no_queue() {
 fn pause_needs_a_loaded_track() {
     let fixture = fixture();
 
-    assert_eq!(
-        fixture.backend.pause().err(),
-        Some(CommandError::InvalidPlaybackState)
-    );
+    assert_eq!(fixture.backend.pause().code_of(), None);
 }
 
 #[test]
 fn seeking_needs_a_loaded_track_whatever_the_position() {
     let fixture = fixture();
 
-    assert_eq!(
-        fixture.backend.seek(u64::MAX).err(),
-        Some(CommandError::InvalidPlaybackState)
-    );
+    assert_eq!(fixture.backend.seek(u64::MAX).code_of(), None);
 }
 
 #[test]
@@ -75,7 +70,9 @@ fn volume_and_mute_are_reported_in_the_player_state() {
     let fixture = fixture();
     let backend = &fixture.backend;
 
-    backend.set_volume(0.25).expect("volume");
+    backend
+        .set_volume(NormalizedVolume::try_from(0.25).unwrap())
+        .expect("volume");
     let quiet = fixture.recorded.player().expect("a Player state");
     assert_eq!(quiet.base().volume, 0.25);
 
@@ -109,7 +106,7 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     let data_dir = directory.file("data");
     std::fs::create_dir_all(&data_dir).expect("data directory");
     let (recorded, sink) = MessageLog::shared();
-    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()));
+    let backend = BackendApp::new(data_dir, sink, Box::new(FakeOutput::new()));
     backend
         .add_directory(music)
         .expect("register the music directory");

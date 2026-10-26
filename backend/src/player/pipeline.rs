@@ -10,7 +10,7 @@ use super::worker::{WorkerInput, send};
 use crate::errors::contain;
 use crate::library::media::ValidatedAudioFile;
 use crate::player::decode::{CompressedAudioSource, DecodeError, DecodeStep, StreamingDecoder};
-use crate::player::output::{PcmProducer, PcmWaker, PipelineId, WaitCancelled};
+use crate::player::output::{OutputError, PcmProducer, PcmWaker, PipelineId, WaitCancelled};
 use crate::player::pcm::{millis_to_frame, rescale_frame};
 use crate::player::processing::{OutputProcessingError, OutputProcessingPlan, PcmConverter};
 use crate::threads::Cancellation;
@@ -32,23 +32,22 @@ pub(super) enum PipelineError {
     /// The sample rate conversion failed after the first packet.
     Conversion,
     ProcessorCreate,
-    /// The OS would not start the decode thread.
-    DecodeThread,
+    /// The output could not take the decoded samples.
+    Output(OutputError),
 }
 
 impl PipelineError {
     pub(super) fn code(self) -> PlaybackFailureCode {
         match self {
-            Self::ProcessorCreate | Self::Conversion => {
-                PlaybackFailureCode::SampleRateConversionFailed
-            }
+            Self::Output(error) => error.code(),
             Self::SourceOpen
             | Self::DecoderOpen
             | Self::SpecChanged
             | Self::FirstPacketDecode
             | Self::SeekFailed
             | Self::Decode
-            | Self::DecodeThread => PlaybackFailureCode::DecodeFailed,
+            | Self::ProcessorCreate
+            | Self::Conversion => PlaybackFailureCode::DecodeFailed,
         }
     }
 }
@@ -89,12 +88,13 @@ pub(super) struct SourceLoad {
 
 impl SourceLoad {
     /// Starts loading `file` at `position`. The thread is detached: the worker never waits for it.
+    /// Panics if the OS cannot start the thread.
     pub(super) fn spawn(
         file: ValidatedAudioFile,
         id: SourceLoadId,
         position: LoadPosition,
         inbox: Sender<WorkerInput>,
-    ) -> Result<Self, ()> {
+    ) -> Self {
         // A stalled network read must not block the worker, so the thread is never joined.
         // Cancellation is the only way to stop it early, and a stopped load reports nothing.
         let cancellation = Cancellation::default();
@@ -106,14 +106,10 @@ impl SourceLoad {
                     prepare(&file, position, &worker_cancellation)
                 })
                 .unwrap_or(Err(PipelineError::SourceOpen));
-                send(
-                    &inbox,
-                    WorkerInput::Load(LoadEvent::SourceReady { id, result }),
-                );
+                let _ = inbox.send(WorkerInput::Load(LoadEvent::SourceReady { id, result }));
             })
-            .inspect_err(|cause| log::warn!("playback.source_load.thread_failed cause={cause}"))
-            .map_err(|_| ())?;
-        Ok(Self { id, cancellation })
+            .expect("the OS starts a thread unless it is out of resources");
+        Self { id, cancellation }
     }
 }
 
@@ -149,11 +145,13 @@ fn prepare(
     gate::wait_if_gated(file);
     let source = CompressedAudioSource::open(file, cancellation)
         .inspect_err(|cause| log::warn!("pipeline.source.open cause={cause}"))
-        .map_err(|_| PipelineError::SourceOpen)?;
+        .ok()
+        .ok_or(PipelineError::SourceOpen)?;
     let mut decoder = source
         .decoder()
         .inspect_err(|cause| log::warn!("pipeline.source.decoder_open cause={cause}"))
-        .map_err(|_| PipelineError::DecoderOpen)?;
+        .ok()
+        .ok_or(PipelineError::DecoderOpen)?;
     match position {
         LoadPosition::Start => from_the_beginning(decoder),
         LoadPosition::Prefetch { plan } => {
@@ -171,7 +169,8 @@ fn prepare(
             let target_source_frame = millis_to_frame(target_ms, source_rate);
             let converter = PcmConverter::new(plan)
                 .inspect_err(|cause| log::warn!("pipeline.seek.converter cause={cause}"))
-                .map_err(|_| PipelineError::ProcessorCreate)?;
+                .ok()
+                .ok_or(PipelineError::ProcessorCreate)?;
             let preroll_frames = converter.seek_preroll_frames(target_source_frame);
             let seek = match decoder.seek_to_frame_with_preroll(target_source_frame, preroll_frames)
             {
@@ -230,7 +229,7 @@ pub(super) fn start_decoding(
     producer: PcmProducer,
     converter: PcmConverter,
     plan: OutputProcessingPlan,
-) -> Result<Pipeline, PipelineError> {
+) -> Pipeline {
     let discard_output_samples = usize::try_from(prepared.discard_output_frames)
         .unwrap_or(usize::MAX)
         .saturating_mul(usize::from(plan.output().channel_count().get()));
@@ -247,11 +246,11 @@ pub(super) fn start_decoding(
         prebuffer_frames: prebuffer_frames(plan.output().sample_rate().get()),
         prebuffer_sent: false,
     }
-    .spawn()?;
-    Ok(Pipeline {
+    .spawn();
+    Pipeline {
         id,
         _decode: decode,
-    })
+    }
 }
 
 /// Why a decode task ended without reaching the end of the stream.
@@ -306,8 +305,8 @@ impl Drop for DecodeHandle {
 
 impl DecodeTask {
     /// Starts the thread. The thread is detached: nothing waits for it, and dropping the handle
-    /// stops it.
-    fn spawn(self) -> Result<DecodeHandle, PipelineError> {
+    /// stops it. Panics if the OS cannot start the thread.
+    fn spawn(self) -> DecodeHandle {
         let worker = DecodeHandle {
             cancellation: self.cancellation.clone(),
             waker: self.producer.waker(),
@@ -315,9 +314,8 @@ impl DecodeTask {
         thread::Builder::new()
             .name("decode".into())
             .spawn(move || self.run_contained())
-            .inspect_err(|cause| log::warn!("pipeline.decode_thread.start_failed cause={cause}"))
-            .map_err(|_| PipelineError::DecodeThread)?;
-        Ok(worker)
+            .expect("the OS starts a thread unless it is out of resources");
+        worker
     }
 
     /// A decoder that panics on a bad file fails that playback, not the app.
@@ -512,8 +510,7 @@ mod tests {
             prebuffer_frames: prebuffer_frames(spec.sample_rate().get()),
             prebuffer_sent: false,
         }
-        .spawn()
-        .unwrap();
+        .spawn();
         (worker, consumer, events)
     }
 
@@ -611,7 +608,7 @@ mod tests {
         let directory = TestDirectory::new();
         let file = wav_file(&directory, 1_000);
         let (inbox, _events) = mpsc::channel();
-        let load = SourceLoad::spawn(file, SourceLoadId(1), LoadPosition::Start, inbox).unwrap();
+        let load = SourceLoad::spawn(file, SourceLoadId(1), LoadPosition::Start, inbox);
         let cancellation = load.cancellation.clone();
 
         drop(load);

@@ -1,74 +1,92 @@
-//! The error a command answers with, and the helper that keeps a panic from a parser from
-//! reaching the Host. Each code is what the Renderer sees; the messages only reach the log.
+//! The error of the Backend, and the code a command answers the Renderer with. A function that can
+//! fail returns `crate::Result<T>` and uses `?`. The Host converts the error to a `CommandError` and
+//! logs it once, at the command boundary.
+//!
+//! `contain` keeps a panic from a parser from reaching the Host.
 
-use crate::player::PlaybackFailureCode;
 use std::any::Any;
 use std::panic::{UnwindSafe, catch_unwind};
 
-/// The codes a command can answer with, so the Renderer shows each one the same way.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error, serde::Serialize, specta::Type)]
-#[serde(tag = "code", rename_all = "camelCase")]
-pub enum CommandError {
-    // shared
+/// The failure of a Backend function. It keeps its cause, so the Host's log shows the whole chain.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
     #[error("the track was not found")]
     TrackNotFound,
-    #[error("the track cannot be played")]
+    #[error("the album was not found")]
+    AlbumNotFound,
+    #[error("the artist was not found")]
+    ArtistNotFound,
+    #[error("the queue item is not upcoming or is not in the queue")]
+    QueueItemNotFound,
+    #[error("the track's file is unavailable")]
     TrackUnavailable,
     #[error("the library is unavailable")]
     LibraryUnavailable,
-    #[error("the change could not be saved")]
-    PersistenceFailed,
-    #[error("the background task failed")]
-    TaskFailed,
-    // library
+    /// The path is blank, is not a directory, or is not Unicode. `Some` carries the error from
+    /// reading the path.
     #[error("the directory is invalid")]
-    InvalidDirectory,
-    #[error("the path is not a directory")]
-    DirectoryNotDirectory,
+    InvalidDirectory(#[source] Option<std::io::Error>),
     #[error("the directory is already in the library")]
     DuplicateDirectory,
     #[error("the directory overlaps another directory")]
     OverlappingDirectory,
     #[error("the directory contains the app's data directory")]
     DirectoryContainsDataDirectory,
-    #[error("the directory is missing")]
-    DirectoryMissing,
-    #[error("the album was not found")]
-    AlbumNotFound,
-    #[error("the artist was not found")]
-    ArtistNotFound,
-    #[error("a scan is already running")]
-    ScanAlreadyRunning,
-    #[error("no scan is running")]
-    ScanNotRunning,
-    #[error("no directory is enabled")]
-    NoEnabledDirectories,
-    // player
-    #[error("the output failed: {failure:?}")]
-    Output { failure: PlaybackFailureCode },
-    #[error("the playback was superseded")]
-    Superseded,
-    #[error("the queue item was not found")]
-    QueueItemNotFound,
-    #[error("the queue is busy")]
-    QueueBusy,
-    #[error("the volume is invalid")]
-    InvalidVolume,
-    #[error("the playback state is invalid")]
-    InvalidPlaybackState,
-    #[error("the duration is unavailable")]
-    DurationUnavailable,
-    #[error("the seek failed")]
-    SeekFailed,
-    // devices
-    #[error("the audio devices could not be listed")]
-    DeviceEnumerationFailed,
+    /// The user changes a directory while a scan runs. The Renderer disables that control during a
+    /// scan, so this is a rare race.
+    #[error("a scan is running")]
+    ScanRunning,
+    #[error("a worker has stopped")]
+    WorkerStopped,
+    #[error(transparent)]
+    Database(#[from] rusqlite::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Lofty(#[from] lofty::error::FileParseError),
+    #[error(transparent)]
+    Cpal(#[from] cpal::Error),
 }
 
-impl From<PlaybackFailureCode> for CommandError {
-    fn from(failure: PlaybackFailureCode) -> Self {
-        Self::Output { failure }
+impl Error {
+    /// The code the Renderer sees. Every failure that the Renderer cannot act on is `Internal`.
+    pub fn code(&self) -> CommandError {
+        match self {
+            Self::TrackNotFound
+            | Self::AlbumNotFound
+            | Self::ArtistNotFound
+            | Self::QueueItemNotFound => CommandError::NotFound,
+            Self::TrackUnavailable => CommandError::TrackUnavailable,
+            Self::LibraryUnavailable => CommandError::LibraryUnavailable,
+            Self::InvalidDirectory(_) => CommandError::InvalidDirectory,
+            Self::DuplicateDirectory => CommandError::DuplicateDirectory,
+            Self::OverlappingDirectory => CommandError::OverlappingDirectory,
+            Self::DirectoryContainsDataDirectory => CommandError::DirectoryContainsDataDirectory,
+            Self::ScanRunning
+            | Self::WorkerStopped
+            | Self::Database(_)
+            | Self::Io(_)
+            | Self::Lofty(_)
+            | Self::Cpal(_) => CommandError::Internal,
+        }
     }
+}
+
+/// The result of a Backend function.
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+/// The codes a command answers with. Each code has one message in the Renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum CommandError {
+    NotFound,
+    TrackUnavailable,
+    LibraryUnavailable,
+    InvalidDirectory,
+    DuplicateDirectory,
+    OverlappingDirectory,
+    DirectoryContainsDataDirectory,
+    Internal,
 }
 
 /// A panic caught by [`contain`]. The payload is logged there and not kept.
@@ -105,8 +123,51 @@ fn panic_message(payload: &(dyn Any + Send)) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{Panicked, contain, panic_message};
+    use super::{CommandError, Error, Panicked, contain, panic_message};
     use std::panic::catch_unwind;
+
+    #[test]
+    fn each_error_has_one_command_code() {
+        let cases = [
+            (Error::TrackNotFound, CommandError::NotFound),
+            (Error::AlbumNotFound, CommandError::NotFound),
+            (Error::ArtistNotFound, CommandError::NotFound),
+            (Error::QueueItemNotFound, CommandError::NotFound),
+            (Error::TrackUnavailable, CommandError::TrackUnavailable),
+            (Error::LibraryUnavailable, CommandError::LibraryUnavailable),
+            (
+                Error::InvalidDirectory(None),
+                CommandError::InvalidDirectory,
+            ),
+            (Error::DuplicateDirectory, CommandError::DuplicateDirectory),
+            (
+                Error::OverlappingDirectory,
+                CommandError::OverlappingDirectory,
+            ),
+            (
+                Error::DirectoryContainsDataDirectory,
+                CommandError::DirectoryContainsDataDirectory,
+            ),
+            (Error::WorkerStopped, CommandError::Internal),
+        ];
+        for (error, code) in cases {
+            assert_eq!(error.code(), code, "{error}");
+        }
+    }
+
+    #[test]
+    fn the_database_and_io_errors_show_their_cause_and_code_is_internal() {
+        let database = Error::from(rusqlite::Error::InvalidQuery);
+        assert_eq!(
+            database.to_string(),
+            rusqlite::Error::InvalidQuery.to_string()
+        );
+        assert_eq!(database.code(), CommandError::Internal);
+
+        let io = Error::from(std::io::Error::other("disk"));
+        assert_eq!(io.to_string(), "disk");
+        assert_eq!(io.code(), CommandError::Internal);
+    }
 
     #[test]
     fn contain_returns_panicked_for_a_panicking_closure_and_ok_otherwise() {

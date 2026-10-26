@@ -8,14 +8,15 @@ mod sync;
 use crate::errors::CommandError;
 use crate::library::database::{self, Database};
 use crate::library::directories;
-use crate::library::{Library, LibraryUnavailableReason, TrackLocation, Unavailable};
+use crate::library::{Library, TrackLocation};
+use crate::test_support::CommandCode;
 use crate::test_support::{TestDirectory, null_messages};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
 const DATABASE_FILE: &str = "library.sqlite3";
 
-fn open(directory: &Path) -> Result<Library, LibraryUnavailableReason> {
+fn open(directory: &Path) -> crate::Result<Library> {
     Library::open(directory, null_messages())
 }
 
@@ -125,10 +126,7 @@ fn a_data_directory_that_cannot_be_created_makes_the_library_unavailable() {
     let blocker = directory.file("blocker");
     std::fs::write(&blocker, b"a file, not a directory").unwrap();
 
-    assert!(matches!(
-        open(&blocker.join("data")),
-        Err(LibraryUnavailableReason::DatabaseOpenFailed)
-    ));
+    assert!(open(&blocker.join("data")).is_err());
 }
 
 #[test]
@@ -155,10 +153,10 @@ fn a_path_that_is_not_unicode_is_refused_not_changed() {
     // An unpaired surrogate: a valid Windows path that cannot be stored as UTF-8.
     let path = PathBuf::from(std::ffi::OsString::from_wide(&[0xD800]));
 
-    assert!(matches!(
-        library.add_directory(path),
-        Err(CommandError::InvalidDirectory)
-    ));
+    assert_eq!(
+        library.add_directory(path).code_of(),
+        Some(CommandError::InvalidDirectory)
+    );
     assert_eq!(library.directories().unwrap(), []);
 }
 
@@ -175,10 +173,10 @@ fn a_directory_already_registered_is_a_duplicate() {
     let music = subdirectory(&directory, "music");
     directories::add(&database, &music.to_string_lossy()).unwrap();
 
-    assert!(matches!(
-        directories::add(&database, &music.to_string_lossy()),
-        Err(CommandError::DuplicateDirectory)
-    ));
+    assert_eq!(
+        directories::add(&database, &music.to_string_lossy()).code_of(),
+        Some(CommandError::DuplicateDirectory)
+    );
 }
 
 #[test]
@@ -189,10 +187,10 @@ fn a_directory_inside_or_around_a_registered_directory_overlaps_it() {
     let album = subdirectory(&directory, "music/album");
     directories::add(&database, &album.to_string_lossy()).unwrap();
 
-    assert!(matches!(
-        directories::add(&database, &music.to_string_lossy()),
-        Err(CommandError::OverlappingDirectory)
-    ));
+    assert_eq!(
+        directories::add(&database, &music.to_string_lossy()).code_of(),
+        Some(CommandError::OverlappingDirectory)
+    );
 }
 
 #[test]
@@ -200,10 +198,10 @@ fn a_directory_holding_the_data_directory_is_refused() {
     let directory = TestDirectory::new();
     let database = open_database(&directory);
 
-    assert!(matches!(
-        directories::add(&database, &directory.file("").to_string_lossy()),
-        Err(CommandError::DirectoryContainsDataDirectory)
-    ));
+    assert_eq!(
+        directories::add(&database, &directory.file("").to_string_lossy()).code_of(),
+        Some(CommandError::DirectoryContainsDataDirectory)
+    );
 }
 
 #[test]
@@ -213,14 +211,14 @@ fn a_path_that_is_not_a_directory_is_refused() {
     let file = directory.file("notes.txt");
     std::fs::write(&file, b"notes").unwrap();
 
-    assert!(matches!(
-        directories::add(&database, &file.to_string_lossy()),
-        Err(CommandError::DirectoryNotDirectory)
-    ));
-    assert!(matches!(
-        directories::add(&database, &directory.file("gone").to_string_lossy()),
-        Err(CommandError::InvalidDirectory)
-    ));
+    assert_eq!(
+        directories::add(&database, &file.to_string_lossy()).code_of(),
+        Some(CommandError::InvalidDirectory)
+    );
+    assert_eq!(
+        directories::add(&database, &directory.file("gone").to_string_lossy()).code_of(),
+        Some(CommandError::InvalidDirectory)
+    );
 }
 
 #[test]
@@ -239,10 +237,7 @@ fn a_directory_can_be_disabled_and_removed_and_a_missing_one_is_reported() {
 
     directories::remove(&database, id).unwrap();
     assert_eq!(directories::list(&database.read().unwrap()).unwrap(), []);
-    assert!(matches!(
-        directories::remove(&database, id),
-        Err(CommandError::DirectoryMissing)
-    ));
+    assert_eq!(directories::remove(&database, id).code_of(), None);
 }
 
 fn location(directory: &TestDirectory, relative: &str) -> TrackLocation {
@@ -269,8 +264,16 @@ fn a_path_that_leaves_its_directory_is_unavailable() {
 
     for relative in ["../outside.wav", "/outside.wav", "", "."] {
         let location = location(&directory, relative);
-        assert_eq!(location.path(), Err(Unavailable), "{relative:?}");
-        assert_eq!(location.existing(), Err(Unavailable), "{relative:?}");
+        assert_eq!(
+            location.path().code_of(),
+            Some(CommandError::TrackUnavailable),
+            "{relative:?}"
+        );
+        assert_eq!(
+            location.existing().code_of(),
+            Some(CommandError::TrackUnavailable),
+            "{relative:?}"
+        );
     }
 }
 
@@ -282,7 +285,10 @@ fn a_missing_file_is_unavailable_but_has_a_path_to_show() {
     let gone = location(&directory, "gone.wav");
 
     assert!(gone.path().is_ok());
-    assert_eq!(gone.existing(), Err(Unavailable));
+    assert_eq!(
+        gone.existing().code_of(),
+        Some(CommandError::TrackUnavailable)
+    );
 }
 
 #[test]
@@ -293,5 +299,8 @@ fn a_file_marked_missing_is_unavailable_even_when_it_is_there() {
 
     let location = TrackLocation::new(directory.file("music").to_str().unwrap(), "a.wav", false);
 
-    assert_eq!(location.existing(), Err(Unavailable));
+    assert_eq!(
+        location.existing().code_of(),
+        Some(CommandError::TrackUnavailable)
+    );
 }

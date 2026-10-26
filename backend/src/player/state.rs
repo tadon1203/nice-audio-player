@@ -151,15 +151,9 @@ impl PlayerState {
 pub enum PlaybackFailureCode {
     NoOutputDevice,
     OutputDeviceUnavailable,
-    UnsupportedOutputConfiguration,
-    OutputStreamBuildFailed,
-    OutputStreamStartFailed,
-    OutputStreamPauseFailed,
-    OutputStreamResumeFailed,
-    OutputStreamRuntimeFailed,
-    CompletionTimingFailed,
+    UnsupportedOutput,
+    OutputFailed,
     DecodeFailed,
-    SampleRateConversionFailed,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]

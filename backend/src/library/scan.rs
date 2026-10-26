@@ -24,7 +24,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use super::{
     ArtworkStatus, Availability, InspectionStatus, TagStatus, albums,
     artwork::{self, StoredArtwork},
-    database::{Database, DatabaseError},
+    database::Database,
     media::{
         ArtworkRead, InspectedAudioFile, SourceMetadata, Undecodable, inspect_audio_file,
         is_supported_extension, read_source_metadata,
@@ -33,7 +33,8 @@ use super::{
     text::{SortTags, TrackKeys, album_edition_of},
     version::LibraryVersion,
 };
-use crate::errors::contain;
+use crate::Result;
+use crate::errors::{Error, contain};
 use crate::threads::{Cancellation, run_in_background};
 
 /// Files inspected per transaction.
@@ -55,15 +56,15 @@ pub(crate) struct ScanJob {
     pub dirs: Option<Vec<PathBuf>>,
 }
 
-/// Why a scan stopped before finishing.
+/// Why a scan stopped before finishing: the listener cancelled it, or a step failed.
 enum Stop {
     Cancelled,
-    Persistence,
+    Failed(Error),
 }
 
-impl From<PersistError> for Stop {
-    fn from(_: PersistError) -> Self {
-        Self::Persistence
+impl From<Error> for Stop {
+    fn from(cause: Error) -> Self {
+        Self::Failed(cause)
     }
 }
 
@@ -89,21 +90,20 @@ pub(crate) fn run(
         match scan_directory(database, job, cancel, version, &mut progress) {
             Ok(complete) => traversal_failed |= !complete,
             Err(Stop::Cancelled) => return progress.finish(ScanStatus::Cancelled, None),
-            Err(Stop::Persistence) => {
-                return progress.finish(ScanStatus::Failed, Some(ScanFailure::PersistenceFailed));
+            Err(Stop::Failed(cause)) => {
+                error!("library.scan.step_failed cause={cause}");
+                return progress.finish(ScanStatus::Failed, Some(ScanFailure::Failed));
             }
         }
     }
     if traversal_failed {
-        return progress.finish(
-            ScanStatus::Failed,
-            Some(ScanFailure::DirectoryTraversalFailed),
-        );
+        return progress.finish(ScanStatus::Failed, Some(ScanFailure::DirectoryUnreadable));
     }
     // Only once every directory has been seen in full is a Missing track known to be missing, and so
     // a file that arrived known to be that track moved.
-    if relink_moved(database, version).is_err() {
-        return progress.finish(ScanStatus::Failed, Some(ScanFailure::PersistenceFailed));
+    if let Err(cause) = relink_moved(database, version) {
+        error!("library.scan.relink_failed cause={cause}");
+        return progress.finish(ScanStatus::Failed, Some(ScanFailure::Failed));
     }
     if let Err(cause) = artwork::collect(database) {
         error!("library.scan.collect_failed cause={cause:?}");
@@ -112,13 +112,15 @@ pub(crate) fn run(
 }
 
 /// How many files earlier scans left in `directories`: a rescan should find about as many again.
-/// It only sizes the progress bar, so a failed read (already logged by `PersistError`) counts as 0
-/// rather than failing the scan.
+/// It only sizes the progress bar, so a failed read counts as 0 rather than failing the scan.
 fn expected_files(database: &Database, jobs: &[ScanJob]) -> u64 {
-    count_expected_files(database, jobs).unwrap_or(0)
+    count_expected_files(database, jobs).unwrap_or_else(|cause| {
+        error!("library.scan.expected_count_failed cause={cause}");
+        0
+    })
 }
 
-fn count_expected_files(database: &Database, jobs: &[ScanJob]) -> Result<u64, PersistError> {
+fn count_expected_files(database: &Database, jobs: &[ScanJob]) -> Result<u64> {
     let connection = database.read()?;
     let mut total = 0;
     for job in jobs.iter().filter(|job| job.dirs.is_none()) {
@@ -142,8 +144,8 @@ fn scan_directory(
 ) -> Result<bool, Stop> {
     let directory = &job.directory;
     let directory_id = directory.id.rowid();
-    let reader = database.read().map_err(PersistError::from)?;
-    let mut writer = LibraryWriter::new(database.write().map_err(PersistError::from)?);
+    let reader = database.read()?;
+    let mut writer = LibraryWriter::new(database.write()?);
     let generation = writer.begin_scan(directory_id)?;
     let dirs = scope(Path::new(&directory.path), job.dirs.as_deref());
     // The prefixes the walk covers, to mark only those files Missing.
@@ -240,7 +242,7 @@ fn walk_directory(
     Ok(complete)
 }
 
-fn relink_moved(database: &Database, version: &LibraryVersion) -> Result<usize, PersistError> {
+fn relink_moved(database: &Database, version: &LibraryVersion) -> Result<usize> {
     let mut connection = database.write()?;
     let relinked = relink(&mut connection, version)?;
     if relinked > 0 {
@@ -398,7 +400,7 @@ const SELECT_EXISTING_FILE: &str = "
 
 /// Compares a discovered file with the database. Read-only. A file is unchanged when its size
 /// and modification time both are.
-fn plan(reader: &Connection, directory_id: i64, file: DiscoveredFile) -> Persisted<Plan> {
+fn plan(reader: &Connection, directory_id: i64, file: DiscoveredFile) -> Result<Plan> {
     type Existing = (
         i64,
         i64,
@@ -468,7 +470,10 @@ impl ArtworkOutcome {
             ArtworkRead::Selected { bytes, mime_type } => {
                 match artwork::store(data_dir, bytes, *mime_type) {
                     Ok(stored) => (ArtworkStatus::Stored, Some(stored)),
-                    Err(_) => (ArtworkStatus::StoreFailed, None),
+                    Err(cause) => {
+                        log::warn!("library.artwork.store_failed cause={cause}");
+                        (ArtworkStatus::StoreFailed, None)
+                    }
                 }
             }
         };
@@ -709,27 +714,6 @@ fn read_batch(
     }
 }
 
-/// Any database failure. The scan stops on it; the cause is logged where it is built and stays
-/// out of the IPC surface.
-#[derive(Debug)]
-struct PersistError;
-
-impl From<rusqlite::Error> for PersistError {
-    fn from(cause: rusqlite::Error) -> Self {
-        log::error!("library.scan.persist_failed cause={cause}");
-        Self
-    }
-}
-
-impl From<DatabaseError> for PersistError {
-    fn from(cause: DatabaseError) -> Self {
-        log::error!("library.scan.persist_failed cause={cause:?}");
-        Self
-    }
-}
-
-type Persisted<T> = Result<T, PersistError>;
-
 const INSERT_FILE: &str = "
     INSERT INTO library_files(directory_id, relative_path, file_name, extension, modification_key,
                               source_revision, seen_generation, availability, inspection_status,
@@ -792,7 +776,7 @@ impl LibraryWriter {
     }
 
     /// Starts a new pass over a directory and returns its generation number.
-    fn begin_scan(&self, directory_id: i64) -> Persisted<i64> {
+    fn begin_scan(&self, directory_id: i64) -> Result<i64> {
         Ok(self.connection.query_row(
             "UPDATE directories SET scan_generation = scan_generation + 1
              WHERE id = ?1 RETURNING scan_generation",
@@ -809,7 +793,7 @@ impl LibraryWriter {
         generation: i64,
         outcomes: &[Outcome],
         version: &LibraryVersion,
-    ) -> Persisted<()> {
+    ) -> Result<()> {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -859,7 +843,7 @@ impl LibraryWriter {
     }
 
     /// Rebuilds the albums if the tracks changed since they were last rebuilt.
-    fn settle_albums(&mut self, version: &LibraryVersion) -> Persisted<()> {
+    fn settle_albums(&mut self, version: &LibraryVersion) -> Result<()> {
         if !self.albums_stale {
             return Ok(());
         }
@@ -882,7 +866,7 @@ impl LibraryWriter {
         directory_id: i64,
         generation: i64,
         within: Option<&[String]>,
-    ) -> Persisted<u64> {
+    ) -> Result<u64> {
         let mut gone = 0;
         let whole = [String::new()];
         for prefix in within.unwrap_or(&whole) {
@@ -903,7 +887,7 @@ impl LibraryWriter {
     }
 }
 
-fn touch(transaction: &Transaction<'_>, file_id: i64, generation: i64) -> Persisted<()> {
+fn touch(transaction: &Transaction<'_>, file_id: i64, generation: i64) -> Result<()> {
     transaction.prepare_cached(TOUCH_FILE)?.execute(params![
         file_id,
         generation,
@@ -921,7 +905,7 @@ fn store_file(
     known: Option<(i64, i64)>,
     file: &DiscoveredFile,
     result: &Result<InspectedFile, Undecodable>,
-) -> Persisted<()> {
+) -> Result<()> {
     let status = match result {
         Ok(_) => InspectionStatus::Indexed,
         Err(Undecodable) => InspectionStatus::Unsupported,
@@ -982,7 +966,7 @@ fn store_inspected(
     revision: i64,
     (directory_id, directory_path, file): (i64, &str, &DiscoveredFile),
     inspected: &InspectedFile,
-) -> Persisted<()> {
+) -> Result<()> {
     transaction.execute(
         "INSERT OR IGNORE INTO tracks(file_id) VALUES (?1)",
         params![file_id],
@@ -1064,7 +1048,7 @@ fn clear_metadata(
     revision: i64,
     directory_id: i64,
     file: &DiscoveredFile,
-) -> Persisted<()> {
+) -> Result<()> {
     let keys = TrackKeys::new(None, None, None, None, None, &file.file_name);
     transaction.execute(
         "UPDATE track_source_metadata
@@ -1098,7 +1082,7 @@ fn apply_artwork(
     file_id: i64,
     revision: i64,
     artwork: &ArtworkOutcome,
-) -> Persisted<()> {
+) -> Result<()> {
     let track_id: i64 = transaction.query_row(
         "SELECT id FROM tracks WHERE file_id = ?1",
         params![file_id],
@@ -1117,7 +1101,7 @@ fn apply_artwork(
 fn store_artwork(
     transaction: &Transaction<'_>,
     artwork: &ArtworkOutcome,
-) -> Persisted<Option<String>> {
+) -> Result<Option<String>> {
     match (&artwork.status, &artwork.stored) {
         (ArtworkStatus::Stored, Some(stored)) => {
             transaction.execute(
@@ -1199,7 +1183,7 @@ fn pair_moves<'a>(
 
 /// Relinks what arrived since the last complete scan, then forgets that it arrived. Returns how
 /// many Missing tracks were found again. One transaction: a failure relinks nothing.
-fn relink(connection: &mut Connection, version: &LibraryVersion) -> rusqlite::Result<usize> {
+fn relink(connection: &mut Connection, version: &LibraryVersion) -> Result<usize> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let arrived = identities(
         &transaction,

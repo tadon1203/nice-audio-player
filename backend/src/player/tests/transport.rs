@@ -1,6 +1,8 @@
 //! Transport through `Player`: start, pause, navigation, position and the end of a track.
 
 use super::*;
+use crate::player::volume::NormalizedVolume;
+use crate::test_support::CommandCode;
 
 #[test]
 fn a_start_plays_the_track_at_the_start_index() {
@@ -54,14 +56,18 @@ fn pause_keeps_the_position_and_resume_continues_from_it() {
 fn pause_and_resume_need_a_loaded_track() {
     let fixture = Fixture::with(&[]);
 
-    assert_eq!(
-        fixture.player.pause().err(),
-        Some(CommandError::InvalidPlaybackState)
-    );
-    assert_eq!(
-        fixture.player.resume().err(),
-        Some(CommandError::InvalidPlaybackState)
-    );
+    assert_eq!(fixture.player.pause().code_of(), None);
+    assert_eq!(fixture.player.resume().code_of(), None);
+}
+
+#[test]
+fn pause_with_nothing_loaded_publishes_nothing() {
+    let fixture = Fixture::with(&[]);
+    let sent_before = fixture.messages.sent().len();
+
+    assert_eq!(fixture.player.pause().code_of(), None);
+
+    assert_eq!(fixture.messages.sent().len(), sent_before);
 }
 
 #[test]
@@ -271,13 +277,16 @@ fn seeks_reuse_the_one_output_stream_of_the_session() {
 }
 
 #[test]
-fn commands_after_shutdown_report_a_failed_task() {
+fn commands_after_shutdown_report_an_internal_failure() {
     let fixture = Fixture::with(&[]);
 
     fixture.player.shutdown();
 
     assert_eq!(
-        fixture.player.set_volume(0.5).err(),
-        Some(CommandError::TaskFailed)
+        fixture
+            .player
+            .set_volume(NormalizedVolume::try_from(0.5).unwrap())
+            .code_of(),
+        Some(CommandError::Internal)
     );
 }

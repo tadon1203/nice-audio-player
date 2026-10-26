@@ -44,7 +44,7 @@ describe("Appearance", () => {
   });
 
   it("throws the failure when the backend refuses the update", async () => {
-    const failure = { code: "persistenceFailed" };
+    const failure = { code: "internal" };
     mocks.update.mockRejectedValue(failure);
     const store = new Appearance(appearanceCommands);
     store.accept(saved);

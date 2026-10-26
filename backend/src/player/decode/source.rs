@@ -29,11 +29,13 @@ impl CompressedAudioSource {
         }
         let source = File::open(&file.path)
             .inspect_err(|cause| log::warn!("audio.source.open_failed cause={cause}"))
-            .map_err(|_| DecodeError::FileOpenFailed)?;
+            .ok()
+            .ok_or(DecodeError::FileOpenFailed)?;
         let byte_len = source
             .metadata()
             .inspect_err(|cause| log::warn!("audio.source.metadata_failed cause={cause}"))
-            .map_err(|_| DecodeError::MetadataFailed)?
+            .ok()
+            .ok_or(DecodeError::MetadataFailed)?
             .len();
         Ok(Self {
             file: Arc::new(source),

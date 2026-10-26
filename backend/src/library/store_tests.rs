@@ -7,6 +7,7 @@ use crate::library::database::Database;
 use crate::library::models::*;
 use crate::library::text::{SortTags, TrackKeys, album_edition_of};
 use crate::library::{Library, albums};
+use crate::test_support::CommandCode;
 use crate::test_support::{TestDirectory, null_messages};
 use rusqlite::params;
 use std::path::PathBuf;
@@ -516,13 +517,13 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
     assert_eq!(
         library
             .playback_for_tracks(Some("alp"), TrackSortKey::Title, ASC, Some(track_id_of(1)))
-            .err(),
-        Some(CommandError::TrackNotFound)
+            .code_of(),
+        Some(CommandError::NotFound)
     );
     assert_eq!(
         library
             .playback_for_tracks(None, TrackSortKey::Title, ASC, Some(track_id_of(4)))
-            .err(),
+            .code_of(),
         Some(CommandError::TrackUnavailable)
     );
 }

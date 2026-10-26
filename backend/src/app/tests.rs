@@ -25,7 +25,7 @@ fn fixture() -> Fixture {
     let data_dir = directory.file("data");
     std::fs::create_dir_all(&data_dir).expect("data directory");
     let (recorded, sink) = MessageLog::shared();
-    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()));
+    let backend = BackendApp::new(data_dir, sink, Box::new(FakeOutput::new()));
     Fixture {
         backend,
         recorded,

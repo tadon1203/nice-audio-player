@@ -2,6 +2,7 @@
 //! is given the schema; anything else is replaced by an empty database. Every connection goes
 //! through `configure_common`, so the SQL functions are registered on each.
 
+use crate::Result;
 use crate::ids::register_sql_functions;
 use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags};
@@ -31,25 +32,6 @@ const ARTWORK_DIRECTORY: &str = "artwork";
 const MAX_IDLE_READERS: usize = 4;
 
 type ReaderPool = Arc<Mutex<Vec<Connection>>>;
-
-/// The database cannot be opened. The cause was logged where it happened.
-#[derive(Debug, thiserror::Error)]
-#[error("the database could not be opened")]
-pub(crate) struct DatabaseError;
-
-impl From<rusqlite::Error> for DatabaseError {
-    fn from(cause: rusqlite::Error) -> Self {
-        log::warn!("library.database.failed cause={cause}");
-        Self
-    }
-}
-
-impl From<std::io::Error> for DatabaseError {
-    fn from(cause: std::io::Error) -> Self {
-        log::warn!("library.database.io_failed cause={cause}");
-        Self
-    }
-}
 
 #[derive(Clone)]
 pub(crate) struct Database {
@@ -87,7 +69,7 @@ impl Drop for ReadConnection {
 impl Database {
     /// Opens the database in `directory`, giving it the schema or replacing it as its contents
     /// call for (see the module docs).
-    pub(crate) fn initialize(directory: &Path) -> Result<Self, DatabaseError> {
+    pub(crate) fn initialize(directory: &Path) -> Result<Self> {
         std::fs::create_dir_all(directory)?;
         let path = directory.join(DATABASE_FILE);
         // A file that cannot be read at all is replaced, as a file of another version is; the cause
@@ -111,7 +93,7 @@ impl Database {
         self.path.parent().unwrap_or_else(|| Path::new("."))
     }
 
-    pub(crate) fn read(&self) -> Result<ReadConnection, DatabaseError> {
+    pub(crate) fn read(&self) -> Result<ReadConnection> {
         let idle = self.readers.lock().pop();
         let connection = match idle {
             Some(connection) => connection,
@@ -123,7 +105,7 @@ impl Database {
         })
     }
 
-    pub(crate) fn write(&self) -> Result<Connection, DatabaseError> {
+    pub(crate) fn write(&self) -> Result<Connection> {
         self.open(OpenFlags::SQLITE_OPEN_READ_WRITE)
     }
 
@@ -132,7 +114,7 @@ impl Database {
         self.readers.lock().clear();
     }
 
-    fn open(&self, flags: OpenFlags) -> Result<Connection, DatabaseError> {
+    fn open(&self, flags: OpenFlags) -> Result<Connection> {
         let connection = Connection::open_with_flags(&self.path, flags)?;
         configure_common(&connection)?;
         Ok(connection)
@@ -179,7 +161,7 @@ fn table_names(connection: &Connection) -> rusqlite::Result<Vec<String>> {
 }
 
 /// Creates an empty database at `path` with the schema. WAL is set here, once: the file keeps it.
-fn create(path: &Path) -> Result<(), DatabaseError> {
+fn create(path: &Path) -> Result<()> {
     let mut connection = Connection::open(path)?;
     configure_common(&connection)?;
     connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -192,7 +174,7 @@ fn create(path: &Path) -> Result<(), DatabaseError> {
 
 /// Deletes the database with its WAL files, and the artwork store, then creates an empty database.
 /// The caller holds no connection to the database. Used at open and by a reset.
-pub(crate) fn reset(directory: &Path) -> Result<(), DatabaseError> {
+pub(crate) fn reset(directory: &Path) -> Result<()> {
     std::fs::create_dir_all(directory)?;
     for suffix in ["", "-wal", "-shm"] {
         remove_if_present(
@@ -206,17 +188,11 @@ pub(crate) fn reset(directory: &Path) -> Result<(), DatabaseError> {
     create(&directory.join(DATABASE_FILE))
 }
 
-fn remove_if_present(
-    path: &Path,
-    remove: fn(&Path) -> std::io::Result<()>,
-) -> Result<(), DatabaseError> {
+/// Removes `path` with `remove`. A file that is already gone is not an error.
+fn remove_if_present(path: &Path, remove: fn(&Path) -> std::io::Result<()>) -> Result<()> {
     match remove(path) {
-        Ok(()) => Ok(()),
-        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(cause) => {
-            log::error!("library.database.remove_failed cause={cause}");
-            Err(DatabaseError)
-        }
+        Err(cause) if cause.kind() != std::io::ErrorKind::NotFound => Err(cause.into()),
+        _ => Ok(()),
     }
 }
 

@@ -1,5 +1,6 @@
 use super::fixture;
 use crate::messages::BackendMessage;
+use crate::player::volume::NormalizedVolume;
 use crate::settings::AppearancePatch;
 
 fn artwork_backdrop(enabled: bool) -> AppearancePatch {
@@ -46,7 +47,10 @@ fn changes_reach_the_listener_in_the_order_they_are_made() {
     let fixture = fixture();
 
     fixture.backend.appearance_update(&artwork_backdrop(false));
-    fixture.backend.set_volume(0.5).expect("volume");
+    fixture
+        .backend
+        .set_volume(NormalizedVolume::try_from(0.5).unwrap())
+        .expect("volume");
 
     let sent = fixture.recorded.sent();
     let last_appearance = sent

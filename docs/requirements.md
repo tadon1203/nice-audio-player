@@ -32,7 +32,9 @@ MP3, FLAC, WAV, AAC, and M4A. The app counts a file as supported only if it can 
 - The app reports decode and output failures clearly:
   - A file that cannot be read or decoded is skipped. A short notice appears. Consecutive skips share one notice. The queue stays.
   - A few damaged packets inside a file are skipped without a notice. The track plays on.
-  - An output failure (device or stream) stops playback. The queue stays. The dock shows the reason and a Retry button. Retry restarts the current item.
+  - An output failure (device or stream) stops playback. The queue stays. The dock shows the reason and a Retry button. Retry restarts the current item. There are five reasons: no output device, the output device is unavailable, the output configuration is unsupported, the output failed, and the audio file could not be decoded.
+- A control that has nothing to do does nothing and shows no error.
+- An internal failure shows one general message: "Something went wrong. Try again."
 
 ## Keyboard
 

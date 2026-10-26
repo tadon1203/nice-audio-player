@@ -117,7 +117,8 @@ impl HighQualityResampler {
             FixedSync::Both,
         )
         .inspect_err(|cause| log::warn!("audio.processing.resampler_build cause={cause}"))
-        .map_err(|_| OutputProcessingError::ResamplerConstructionFailed)?;
+        .ok()
+        .ok_or(OutputProcessingError::ResamplerConstructionFailed)?;
         let input_capacity_frames = resampler.input_frames_max();
         let output_frames = resampler.output_frames_max();
         let input_chunk_frames = resampler.input_frames_next();
@@ -160,19 +161,22 @@ impl HighQualityResampler {
         let output_frames = self.resampler.output_frames_next();
         let input = InterleavedSlice::new(&self.input, self.channels, input_frames)
             .inspect_err(|cause| log::warn!("audio.processing.resampler_input cause={cause}"))
-            .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
+            .ok()
+            .ok_or(OutputProcessingError::ResamplerProcessingFailed)?;
         let mut resampled = InterleavedSlice::new_mut(
             &mut self.output,
             self.channels,
             self.resampler.output_frames_max(),
         )
         .inspect_err(|cause| log::warn!("audio.processing.resampler_output cause={cause}"))
-        .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
+        .ok()
+        .ok_or(OutputProcessingError::ResamplerProcessingFailed)?;
         let indexing = partial_len.map(|len| Indexing::new().partial_len(len));
         self.resampler
             .process_into_buffer(&input, &mut resampled, indexing.as_ref())
             .inspect_err(|cause| log::warn!("audio.processing.resample cause={cause}"))
-            .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
+            .ok()
+            .ok_or(OutputProcessingError::ResamplerProcessingFailed)?;
         self.input_frames = 0;
         let mut emitted = 0;
         let frames = output_frames * self.channels;

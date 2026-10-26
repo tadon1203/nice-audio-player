@@ -26,21 +26,22 @@ use super::pipeline::{
     LoadEvent, LoadPosition, Pipeline, PipelineError, PreparedSource, SourceLoad, SourceLoadId,
     start_decoding,
 };
-use super::queue::{AdvanceReason, Queue, QueueEntry, QueueError, RepeatMode};
+use super::queue::{AdvanceReason, Queue, QueueEntry, RepeatMode};
 use super::state::{
     CurrentPlayback, PlaybackFailureCode, PlaybackPosition, PlaybackProcessingInfo, PlayerControls,
     PlayerState, QueueItem, QueueState, QueueWindow, StartedBy,
 };
 use super::transport::{Output, Position, Track};
-use crate::errors::CommandError;
+use crate::Result;
+use crate::errors::Error;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
 use crate::library::tracks::PlayableTrack;
 use crate::messages::{self, BackendMessage};
 use crate::meter::Meter;
 use crate::player::output::{
-    AudioOutputSelection, DeviceResolutionError, OutputError, OutputEvent, OutputStreamFactory,
-    OutputStreamId, PcmConsumer, PipelineId, StreamCallbacks, StreamFailureKind, make_queue,
+    AudioOutputSelection, OutputError, OutputEvent, OutputStreamFactory, OutputStreamId,
+    PcmConsumer, PipelineId, StreamCallbacks, StreamFailureKind, make_queue,
 };
 use crate::player::pcm::millis_to_frame;
 use crate::player::processing::PcmConverter;
@@ -48,7 +49,7 @@ use crate::player::volume::{AtomicEffectiveGain, NormalizedVolume, VolumeState};
 use crate::player::waveform::Waveforms;
 use crate::settings::SettingsStore;
 use crate::threads::{Reply, answer};
-use log::{debug, error, info};
+use log::{error, info};
 
 /// How often a playing track is looked at when nothing else arrives.
 const TICK: Duration = Duration::from_millis(100);
@@ -154,9 +155,7 @@ pub(super) enum Failure {
 
 /// Sends an input to the worker. A worker that has stopped takes nothing, which is not an error.
 pub(super) fn send(inbox: &Sender<WorkerInput>, input: WorkerInput) {
-    if let Err(cause) = inbox.send(input) {
-        debug!("audio.playback.input_send_failed cause={cause}");
-    }
+    let _ = inbox.send(input);
 }
 
 /// A start: what to play and how to begin.
@@ -400,7 +399,8 @@ impl PlayerWorker {
                 answer(&reply, self.enqueue(tracks, next));
             }
             PlayerCommand::Pause { reply } => {
-                answer(&reply, self.pause());
+                self.pause();
+                answer(&reply, Ok(()));
             }
             PlayerCommand::Resume { reply } => {
                 answer(&reply, self.resume());
@@ -423,7 +423,8 @@ impl PlayerWorker {
                 answer(&reply, Ok(()));
             }
             PlayerCommand::SetOutputSelection { selection, reply } => {
-                answer(&reply, self.set_output_selection(selection));
+                self.set_output_selection(selection);
+                answer(&reply, Ok(()));
             }
             PlayerCommand::SetRepeatMode { mode, reply } => {
                 self.set_repeat_mode(mode);
@@ -536,34 +537,24 @@ impl PlayerWorker {
 
     // ----- commands -----
 
-    pub(super) fn play_queue(
-        &mut self,
-        track_ids: Vec<TrackId>,
-        start_index: usize,
-    ) -> Result<(), CommandError> {
-        self.replace_queue(track_ids, start_index)
-            .map_err(|_| CommandError::InvalidPlaybackState)?;
+    pub(super) fn play_queue(&mut self, track_ids: Vec<TrackId>, start_index: usize) -> Result<()> {
+        self.replace_queue(track_ids, start_index);
         self.start_current(false, StartedBy::Jump)
     }
 
     /// Replaces the queue, keeping the old one for one-step undo. Nothing is kept when nothing
     /// was queued, so an Undo never resurrects something older than what was just replaced.
-    fn replace_queue(
-        &mut self,
-        track_ids: Vec<TrackId>,
-        start_index: usize,
-    ) -> Result<(), QueueError> {
+    fn replace_queue(&mut self, track_ids: Vec<TrackId>, start_index: usize) {
         let before = self.queue.clone();
-        self.queue.replace(track_ids, start_index, &mut self.rng)?;
+        self.queue.replace(track_ids, start_index, &mut self.rng);
         self.previous_queue = (!before.is_empty()).then_some(before);
-        Ok(())
     }
 
     /// Puts back the queue the last replacement or Clear upcoming took away. When the same item
     /// is still current, it keeps playing; otherwise the restored current item starts.
-    pub(super) fn restore_previous_queue(&mut self) -> Result<(), CommandError> {
+    pub(super) fn restore_previous_queue(&mut self) -> Result<()> {
         let Some(previous) = self.previous_queue.take() else {
-            return Err(CommandError::InvalidPlaybackState);
+            return Ok(());
         };
         let same_current = matches!(
             (self.queue.current(), previous.current()),
@@ -579,21 +570,20 @@ impl PlayerWorker {
     }
 
     /// Items enqueued with nothing current: they start playing.
-    fn start_enqueued(&mut self, track_ids: Vec<TrackId>) -> Result<(), CommandError> {
-        self.replace_queue(track_ids, 0)
-            .map_err(|_| CommandError::InvalidPlaybackState)?;
+    fn start_enqueued(&mut self, track_ids: Vec<TrackId>) -> Result<()> {
+        self.replace_queue(track_ids, 0);
         self.start_current(false, StartedBy::Jump)
     }
 
-    pub(super) fn previous(&mut self) -> Result<(), CommandError> {
+    pub(super) fn previous(&mut self) -> Result<()> {
         self.navigate(AdvanceReason::UserPrevious)
     }
 
-    pub(super) fn next(&mut self) -> Result<(), CommandError> {
+    pub(super) fn next(&mut self) -> Result<()> {
         self.navigate(AdvanceReason::UserNext)
     }
 
-    fn navigate(&mut self, reason: AdvanceReason) -> Result<(), CommandError> {
+    fn navigate(&mut self, reason: AdvanceReason) -> Result<()> {
         if reason == AdvanceReason::UserPrevious
             && let Some(current) = self.current()
             && previous_restarts_track(current.position_ms(), current.position.duration_ms)
@@ -611,62 +601,65 @@ impl PlayerWorker {
         self.start_current(paused, started_by)
     }
 
-    pub(super) fn pause(&mut self) -> Result<(), CommandError> {
+    /// Pauses the playing track. Nothing happens when no track is loaded.
+    pub(super) fn pause(&mut self) {
         if self.set_pending_pause(true) {
-            return Ok(());
+            return;
         }
         let Transport::Loaded {
             output, current, ..
         } = &mut self.transport
         else {
-            return Err(CommandError::InvalidPlaybackState);
+            return;
         };
         if current.paused {
-            return Ok(());
+            return;
         }
         if let Err(error) = output.stream.pause() {
-            return Err(self.control_failure(error));
+            // The stream is stopped with the queue intact.
+            self.fail_output(error.code());
+            return;
         }
         current.position.sample(output.stream.as_mut());
         output.stream.clear_timing_anchor();
         current.paused = true;
         self.meter.set_running(false);
         self.send_state();
-        Ok(())
     }
 
     /// Resume, or after a failure Retry: starts the current queue item again, queue intact.
-    pub(super) fn resume(&mut self) -> Result<(), CommandError> {
+    pub(super) fn resume(&mut self) -> Result<()> {
         if matches!(self.transport, Transport::Idle { failed: Some(_) }) {
             return self.start_current(false, StartedBy::Jump);
         }
-        self.unpause()
+        self.unpause();
+        Ok(())
     }
 
-    fn unpause(&mut self) -> Result<(), CommandError> {
+    fn unpause(&mut self) {
         if self.set_pending_pause(false) {
-            return Ok(());
+            return;
         }
         let Transport::Loaded {
             output, current, ..
         } = &mut self.transport
         else {
-            return Err(CommandError::InvalidPlaybackState);
+            return;
         };
         if !current.paused {
-            return Ok(());
+            return;
         }
         if let Err(error) = output.stream.start() {
             let error = match error {
                 OutputError::StreamStartFailed => OutputError::StreamResumeFailed,
                 other => other,
             };
-            return Err(self.control_failure(error));
+            self.fail_output(error.code());
+            return;
         }
         current.paused = false;
         self.meter.set_running(true);
         self.send_state();
-        Ok(())
     }
 
     /// Pause and resume while a start is still loading only change what the start does once it
@@ -688,21 +681,17 @@ impl PlayerWorker {
 
     /// Switches the output device. While a track is loaded, playback restarts on the new device at
     /// the same position and keeps its paused state and queue.
-    pub(super) fn set_output_selection(
-        &mut self,
-        selection: AudioOutputSelection,
-    ) -> Result<(), CommandError> {
+    pub(super) fn set_output_selection(&mut self, selection: AudioOutputSelection) {
         let Transport::Loaded { current, seek, .. } = &self.transport else {
-            return self.set_idle_output_selection(selection);
+            self.set_idle_output_selection(selection);
+            return;
         };
-        if !matches!(seek, Seek::None) {
-            return Err(CommandError::InvalidPlaybackState);
-        }
-        if selection == self.output_selection {
-            return Ok(());
+        if !matches!(seek, Seek::None) || selection == self.output_selection {
+            return;
         }
         if let Err(error) = self.output_stream_factory.resolve(&selection) {
-            return Err(resolution_error(error));
+            self.fail_output(error.code());
+            return;
         }
         let request = StartPlan {
             id: current.id,
@@ -713,20 +702,18 @@ impl PlayerWorker {
             resume_at_ms: Some(current.position_ms()),
             selection: Some(selection),
         };
-        self.begin_start(request)
+        self.begin_start(request);
     }
 
-    fn set_idle_output_selection(
-        &mut self,
-        selection: AudioOutputSelection,
-    ) -> Result<(), CommandError> {
+    fn set_idle_output_selection(&mut self, selection: AudioOutputSelection) {
         if self.is_starting() {
-            return Err(CommandError::InvalidPlaybackState);
+            return;
         }
-        if let AudioOutputSelection::Device { .. } = &selection {
-            self.output_stream_factory
-                .resolve(&selection)
-                .map_err(resolution_error)?;
+        if let AudioOutputSelection::Device { .. } = &selection
+            && let Err(error) = self.output_stream_factory.resolve(&selection)
+        {
+            self.fail_output(error.code());
+            return;
         }
         let unchanged = self.output_selection == selection;
         self.output_selection = selection;
@@ -735,22 +722,21 @@ impl PlayerWorker {
         }
         self.transport = Transport::Idle { failed: None };
         self.send_state();
-        Ok(())
     }
 
     /// Seeks the playing track. The new position is prebuffered while the old one keeps playing.
     /// A seek that fails while it loads leaves the playing track as it is.
-    pub(super) fn seek(&mut self, requested_position_ms: u64) -> Result<(), CommandError> {
+    pub(super) fn seek(&mut self, requested_position_ms: u64) -> Result<()> {
         self.set_seek(Seek::None);
         self.set_next(Next::None);
         let Transport::Loaded {
             output, current, ..
         } = &self.transport
         else {
-            return Err(CommandError::InvalidPlaybackState);
+            return Ok(());
         };
         let Some(duration_ms) = current.position.duration_ms else {
-            return Err(CommandError::DurationUnavailable);
+            return Ok(());
         };
         let target_ms = requested_position_ms.min(duration_ms);
         if target_ms == duration_ms {
@@ -760,14 +746,12 @@ impl PlayerWorker {
         let file = current.playable.file.clone();
         let plan = output.config.processing_plan;
         let id = self.next_source_load_id();
-        let Ok(load) = SourceLoad::spawn(
+        let load = SourceLoad::spawn(
             file,
             id,
             LoadPosition::Seek { target_ms, plan },
             self.inbox.clone(),
-        ) else {
-            return Err(CommandError::TaskFailed);
-        };
+        );
         self.set_seek(Seek::Loading(SeekLoad { load, duration_ms }));
         Ok(())
     }
@@ -811,39 +795,29 @@ impl PlayerWorker {
         self.queue_changed(changed);
     }
 
-    pub(super) fn remove_queue_item(&mut self, id: QueueItemId) -> Result<(), CommandError> {
-        let changed = self.edit_queue(|queue| queue.remove_upcoming(id).map(|()| true))?;
+    pub(super) fn remove_queue_item(&mut self, id: QueueItemId) -> Result<()> {
+        self.queue.remove_upcoming(id)?;
+        self.queue_changed(true);
+        Ok(())
+    }
+
+    pub(super) fn move_queue_item(&mut self, id: QueueItemId, to: usize) -> Result<()> {
+        let changed = self.queue.move_upcoming(id, to)?;
         self.queue_changed(changed);
         Ok(())
     }
 
-    pub(super) fn move_queue_item(
-        &mut self,
-        id: QueueItemId,
-        to: usize,
-    ) -> Result<(), CommandError> {
-        let changed = self.edit_queue(|queue| queue.move_upcoming(id, to))?;
-        self.queue_changed(changed);
-        Ok(())
+    pub(super) fn play_queue_item(&mut self, id: QueueItemId) -> Result<()> {
+        self.queue.jump_to(id)?;
+        self.start_current(false, StartedBy::Jump)
     }
 
-    pub(super) fn play_queue_item(&mut self, id: QueueItemId) -> Result<(), CommandError> {
-        match self.queue.jump_to(id) {
-            Ok(()) => self.start_current(false, StartedBy::Jump),
-            Err(_) => Err(CommandError::QueueItemNotFound),
-        }
-    }
-
-    pub(super) fn enqueue(
-        &mut self,
-        track_ids: Vec<TrackId>,
-        next: bool,
-    ) -> Result<(), CommandError> {
+    pub(super) fn enqueue(&mut self, track_ids: Vec<TrackId>, next: bool) -> Result<()> {
         if self.queue.current().is_none() {
             return self.start_enqueued(track_ids);
         }
-        let changed = self.edit_queue(|queue| queue.enqueue(track_ids, next).map(|()| true))?;
-        self.queue_changed(changed);
+        self.queue.enqueue(track_ids, next);
+        self.queue_changed(true);
         Ok(())
     }
 
@@ -871,13 +845,9 @@ impl PlayerWorker {
     // ----- starting -----
 
     /// Starts whatever the queue points at, after telling listeners where the queue stands.
-    fn start_current(
-        &mut self,
-        start_paused: bool,
-        started_by: StartedBy,
-    ) -> Result<(), CommandError> {
+    fn start_current(&mut self, start_paused: bool, started_by: StartedBy) -> Result<()> {
         let Some(entry) = self.queue.current().cloned() else {
-            return Err(CommandError::InvalidPlaybackState);
+            return Ok(());
         };
         self.send_queue();
         self.start_entry(entry, started_by, start_paused)
@@ -890,7 +860,7 @@ impl PlayerWorker {
         entry: QueueEntry,
         started_by: StartedBy,
         start_paused: bool,
-    ) -> Result<(), CommandError> {
+    ) -> Result<()> {
         match self.library_track(entry.track_id) {
             Ok(Some(playable)) => {
                 let request = StartPlan {
@@ -902,14 +872,23 @@ impl PlayerWorker {
                     resume_at_ms: None,
                     selection: None,
                 };
-                self.begin_start(request)
+                self.begin_start(request);
+                Ok(())
             }
-            Ok(None) => self.fail(
-                Failure::SkipItem,
-                PlaybackFailureCode::DecodeFailed,
-                CommandError::TrackUnavailable,
-                started_by,
-            ),
+            // A track the library no longer has. When nothing follows it, the command says so.
+            Ok(None) => {
+                let skipping = self.will_skip();
+                self.fail(
+                    Failure::SkipItem,
+                    PlaybackFailureCode::DecodeFailed,
+                    started_by,
+                );
+                if skipping {
+                    Ok(())
+                } else {
+                    Err(Error::TrackUnavailable)
+                }
+            }
             Err(error) => {
                 self.discard_transport();
                 self.send_queue();
@@ -920,23 +899,13 @@ impl PlayerWorker {
     }
 
     /// Begins a start: its file is read from now on, and the transport shows the track as loading.
-    fn begin_start(&mut self, request: StartPlan) -> Result<(), CommandError> {
+    fn begin_start(&mut self, request: StartPlan) {
         self.discard_transport();
         let file = request.playable.file.clone();
         let id = self.next_source_load_id();
-        match SourceLoad::spawn(file, id, LoadPosition::Start, self.inbox.clone()) {
-            Ok(load) => {
-                self.transport = Transport::Loading(StartLoad { load, request });
-                self.send_state();
-                Ok(())
-            }
-            Err(()) => self.fail(
-                Failure::StopOutput,
-                PlaybackFailureCode::DecodeFailed,
-                CommandError::TaskFailed,
-                request.started_by,
-            ),
-        }
+        let load = SourceLoad::spawn(file, id, LoadPosition::Start, self.inbox.clone());
+        self.transport = Transport::Loading(StartLoad { load, request });
+        self.send_state();
     }
 
     /// The file of a start is read: open the stream and start decoding into it.
@@ -957,19 +926,13 @@ impl PlayerWorker {
             {
                 Ok(prepared_output) => prepared_output,
                 Err(error) => {
-                    let code = output_failure_code(error);
-                    let _ = self.fail(
-                        Failure::StopOutput,
-                        code,
-                        CommandError::from(code),
-                        request.started_by,
-                    );
+                    self.fail(Failure::StopOutput, error.code(), request.started_by);
                     return;
                 }
             };
         let plan = prepared_output.config.processing_plan;
         let Ok(converter) = PcmConverter::new(plan) else {
-            let _ = self.fail_pipeline(
+            self.fail_pipeline(
                 PipelineError::ProcessorCreate,
                 device_switch,
                 request.started_by,
@@ -977,20 +940,14 @@ impl PlayerWorker {
             return;
         };
         let duration_ms = prepared.duration_ms;
-        let pipeline = match start_decoding(
+        let pipeline = start_decoding(
             &self.inbox,
             pipeline_id,
             prepared,
             prepared_output.producer,
             converter,
             plan,
-        ) {
-            Ok(pipeline) => pipeline,
-            Err(error) => {
-                let _ = self.fail_pipeline(error, device_switch, request.started_by);
-                return;
-            }
-        };
+        );
         let output = Output {
             id: stream_id,
             stream: prepared_output.stream,
@@ -1025,13 +982,7 @@ impl PlayerWorker {
         if !request.start_paused
             && let Err(error) = output.stream.start()
         {
-            let code = output_failure_code(error);
-            let _ = self.fail(
-                Failure::StopOutput,
-                code,
-                CommandError::from(code),
-                request.started_by,
-            );
+            self.fail(Failure::StopOutput, error.code(), request.started_by);
             return;
         }
         let StartPlan {
@@ -1055,8 +1006,10 @@ impl PlayerWorker {
         self.meter.set_running(running);
         self.send_state();
         self.send_position();
-        if let Some(position_ms) = resume_at_ms {
-            let _ = self.seek(position_ms);
+        if let Some(position_ms) = resume_at_ms
+            && let Err(cause) = self.seek(position_ms)
+        {
+            error!("playback.resume_seek_failed cause={cause}");
         }
     }
 
@@ -1086,7 +1039,7 @@ impl PlayerWorker {
             Ok(prepared) => self.open_start(request, prepared),
             Err(error) => {
                 let device_switch = request.selection.is_some();
-                let _ = self.fail_pipeline(error, device_switch, request.started_by);
+                self.fail_pipeline(error, device_switch, request.started_by);
             }
         }
     }
@@ -1105,38 +1058,21 @@ impl PlayerWorker {
         }
     }
 
-    fn fail_pipeline(
-        &mut self,
-        error: PipelineError,
-        device_switch: bool,
-        started_by: StartedBy,
-    ) -> Result<(), CommandError> {
+    fn fail_pipeline(&mut self, error: PipelineError, device_switch: bool, started_by: StartedBy) {
         // A device switch that cannot play is a failed output, not a file to skip.
         let failure = if device_switch {
             Failure::StopOutput
         } else {
             Failure::SkipItem
         };
-        self.fail(
-            failure,
-            error.code(),
-            CommandError::from(error.code()),
-            started_by,
-        )
+        self.fail(failure, error.code(), started_by);
     }
 
     // ----- failures -----
 
-    /// Stops the transport on a failure. A skip moves on to the next item, and the listener is told.
-    /// Returns the answer to the command that caused the start: the next item's start when the
-    /// failure skipped to it, otherwise the error.
-    fn fail(
-        &mut self,
-        failure: Failure,
-        code: PlaybackFailureCode,
-        error: CommandError,
-        started_by: StartedBy,
-    ) -> Result<(), CommandError> {
+    /// Stops the transport on a failure and keeps the reason for the listener. A skip moves on to
+    /// the next item, which is logged if it cannot start.
+    fn fail(&mut self, failure: Failure, code: PlaybackFailureCode, started_by: StartedBy) {
         error!("playback.failed code={code:?} failure={failure:?} started_by={started_by:?}");
         self.discard_transport();
         let skipping = failure == Failure::SkipItem && self.will_skip();
@@ -1149,19 +1085,14 @@ impl PlayerWorker {
         }
         if failure == Failure::SkipItem
             && let Some(entry) = self.next_after_item_failure()
+            && let Err(cause) = self.start_entry(entry, StartedBy::Auto, false)
         {
-            return self.start_entry(entry, StartedBy::Auto, false);
+            error!("playback.skip_start_failed cause={cause}");
         }
-        Err(error)
     }
 
     fn fail_output(&mut self, code: PlaybackFailureCode) {
-        let _ = self.fail(
-            Failure::StopOutput,
-            code,
-            CommandError::from(code),
-            StartedBy::Jump,
-        );
+        self.fail(Failure::StopOutput, code, StartedBy::Jump);
     }
 
     /// Whether a failure of the current item is followed by trying the next one.
@@ -1204,10 +1135,10 @@ impl PlayerWorker {
                     return;
                 };
                 let device_switch = request.selection.is_some();
-                let _ = self.fail_pipeline(error, device_switch, request.started_by);
+                self.fail_pipeline(error, device_switch, request.started_by);
             }
             Transport::Loaded { current, .. } if current.pipeline.id == pipeline => {
-                let _ = self.fail_pipeline(error, false, StartedBy::Auto);
+                self.fail_pipeline(error, false, StartedBy::Auto);
             }
             Transport::Loaded {
                 seek: Seek::Decoding(seek),
@@ -1268,13 +1199,6 @@ impl PlayerWorker {
         true
     }
 
-    /// A control call failed on the stream: the stream is stopped with the queue intact.
-    fn control_failure(&mut self, error: OutputError) -> CommandError {
-        let code = output_failure_code(error);
-        self.fail_output(code);
-        CommandError::from(code)
-    }
-
     // ----- playing on -----
 
     /// The stream has handed the last frames of `pipeline` to the device. The end of the track is
@@ -1307,12 +1231,14 @@ impl PlayerWorker {
         if self.adopt_next() {
             return;
         }
-        let _ = self.advance_after_track(false);
+        if let Err(cause) = self.advance_after_track(false) {
+            error!("playback.advance_failed cause={cause}");
+        }
     }
 
     /// The track is over, because it played out or a seek went past its end: play the next one or
     /// stop.
-    fn advance_after_track(&mut self, start_paused: bool) -> Result<(), CommandError> {
+    fn advance_after_track(&mut self, start_paused: bool) -> Result<()> {
         if self
             .queue
             .advance(AdvanceReason::Natural, &mut self.rng)
@@ -1367,15 +1293,12 @@ impl PlayerWorker {
         self.waveforms.upcoming(&playable);
         let id = self.next_source_load_id();
         let file = playable.file.clone();
-        let Ok(load) = SourceLoad::spawn(
+        let load = SourceLoad::spawn(
             file,
             id,
             LoadPosition::Prefetch { plan },
             self.inbox.clone(),
-        ) else {
-            self.set_next(Next::Failed(entry.id));
-            return;
-        };
+        );
         self.set_next(Next::Loading(NextLoad {
             load,
             entry,
@@ -1432,10 +1355,7 @@ impl PlayerWorker {
             return Err(failed);
         };
         let duration_ms = prepared.duration_ms;
-        let Ok(pipeline) = start_decoding(&inbox, pipeline_id, prepared, producer, converter, plan)
-        else {
-            return Err(failed);
-        };
+        let pipeline = start_decoding(&inbox, pipeline_id, prepared, producer, converter, plan);
         output.stream.queue_next(after, consumer, pipeline_id);
         let position = Position::from_start(output.sample_rate(), duration_ms);
         Ok(Track {
@@ -1547,20 +1467,17 @@ impl PlayerWorker {
         &mut self,
         result: Result<PreparedSource, PipelineError>,
         duration_ms: u64,
-    ) -> Result<PendingSeek, CommandError> {
-        let prepared = result.map_err(|error| match error {
-            PipelineError::SeekFailed => CommandError::SeekFailed,
-            other => CommandError::from(other.code()),
-        })?;
+    ) -> Result<PendingSeek, PipelineError> {
+        let prepared = result?;
         let pipeline_id = self.next_pipeline_id();
         let plan = self
             .output()
             .map(|output| output.config.processing_plan)
-            .ok_or(CommandError::InvalidPlaybackState)?;
-        let (producer, queue) = make_queue(plan.output())
-            .map_err(|error| CommandError::from(output_failure_code(error)))?;
+            .expect("a seek is prepared only while a track is loaded");
+        let (producer, queue) = make_queue(plan.output()).map_err(PipelineError::Output)?;
         let converter = PcmConverter::new(plan)
-            .map_err(|_| CommandError::from(PlaybackFailureCode::SampleRateConversionFailed))?;
+            .ok()
+            .ok_or(PipelineError::ProcessorCreate)?;
         let rate = plan.output().sample_rate().get();
         let total_frames = millis_to_frame(duration_ms, rate);
         let base_frame = prepared.start_output_frame.min(total_frames);
@@ -1572,8 +1489,7 @@ impl PlayerWorker {
             producer,
             converter,
             plan,
-        )
-        .map_err(|error| CommandError::from(error.code()))?;
+        );
         Ok(PendingSeek {
             pipeline,
             queue,
@@ -1698,26 +1614,11 @@ impl PlayerWorker {
         }
     }
 
-    fn edit_queue(
-        &mut self,
-        edit: impl FnOnce(&mut Queue) -> Result<bool, QueueError>,
-    ) -> Result<bool, CommandError> {
-        if self.is_starting() {
-            return Err(CommandError::QueueBusy);
-        }
-        edit(&mut self.queue)
-            .inspect_err(|cause| log::warn!("playback.queue.edit_failed cause={cause}"))
-            .map_err(|_| CommandError::QueueItemNotFound)
-    }
-
     // ----- library -----
 
     /// The track of `track_id`, read from the library now. `None` when the library no longer has it.
-    fn library_track(&self, track_id: TrackId) -> Result<Option<PlayableTrack>, CommandError> {
-        let library = self
-            .library
-            .as_ref()
-            .ok_or(CommandError::LibraryUnavailable)?;
+    fn library_track(&self, track_id: TrackId) -> Result<Option<PlayableTrack>> {
+        let library = self.library.as_ref().ok_or(Error::LibraryUnavailable)?;
         Ok(library.playable_tracks(&[track_id])?.pop().flatten())
     }
 
@@ -1922,36 +1823,8 @@ fn stream_signal_action(
         StreamFailureKind::DeviceUnavailable => {
             StreamSignalAction::Fail(PlaybackFailureCode::OutputDeviceUnavailable)
         }
-        StreamFailureKind::RuntimeFailed => {
-            StreamSignalAction::Fail(PlaybackFailureCode::OutputStreamRuntimeFailed)
+        StreamFailureKind::RuntimeFailed | StreamFailureKind::CompletionTimingFailed => {
+            StreamSignalAction::Fail(PlaybackFailureCode::OutputFailed)
         }
-        StreamFailureKind::CompletionTimingFailed => {
-            StreamSignalAction::Fail(PlaybackFailureCode::CompletionTimingFailed)
-        }
-    }
-}
-
-fn resolution_error(error: DeviceResolutionError) -> CommandError {
-    match error {
-        DeviceResolutionError::InvalidDeviceId => CommandError::TaskFailed,
-        DeviceResolutionError::DeviceUnavailable | DeviceResolutionError::NoDefaultOutputDevice => {
-            CommandError::from(PlaybackFailureCode::OutputDeviceUnavailable)
-        }
-    }
-}
-
-pub(super) fn output_failure_code(error: OutputError) -> PlaybackFailureCode {
-    match error {
-        OutputError::NoOutputDevice => PlaybackFailureCode::NoOutputDevice,
-        OutputError::UnsupportedConfiguration
-        | OutputError::ConfigurationQueryFailed
-        | OutputError::StreamConfigurationUnsupported => {
-            PlaybackFailureCode::UnsupportedOutputConfiguration
-        }
-        OutputError::StreamBuildFailed => PlaybackFailureCode::OutputStreamBuildFailed,
-        OutputError::StreamStartFailed => PlaybackFailureCode::OutputStreamStartFailed,
-        OutputError::StreamPauseFailed => PlaybackFailureCode::OutputStreamPauseFailed,
-        OutputError::StreamResumeFailed => PlaybackFailureCode::OutputStreamResumeFailed,
-        OutputError::DeviceUnavailable => PlaybackFailureCode::OutputDeviceUnavailable,
     }
 }

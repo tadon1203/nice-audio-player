@@ -2,6 +2,7 @@
 //! after the start is answered is the transport's: it arrives as a Failed state.
 
 use super::*;
+use crate::test_support::CommandCode;
 
 #[test]
 fn an_output_that_cannot_be_prepared_fails_the_start_with_its_code() {
@@ -19,7 +20,7 @@ fn an_output_that_cannot_be_prepared_fails_the_start_with_its_code() {
         matches!(
             state,
             PlayerState::Failed {
-                error: PlaybackFailureCode::OutputStreamBuildFailed,
+                error: PlaybackFailureCode::OutputFailed,
                 ..
             }
         )
@@ -43,7 +44,7 @@ fn a_stream_that_will_not_start_fails_the_start() {
         matches!(
             state,
             PlayerState::Failed {
-                error: PlaybackFailureCode::OutputStreamStartFailed,
+                error: PlaybackFailureCode::OutputFailed,
                 ..
             }
         )
@@ -65,7 +66,7 @@ fn a_stream_failure_stops_with_the_queue_intact() {
         matches!(
             state,
             PlayerState::Failed {
-                error: PlaybackFailureCode::OutputStreamRuntimeFailed,
+                error: PlaybackFailureCode::OutputFailed,
                 ..
             }
         )
@@ -74,7 +75,7 @@ fn a_stream_failure_stops_with_the_queue_intact() {
 }
 
 #[test]
-fn a_failed_pause_fails_the_call_with_its_code() {
+fn a_failed_pause_stops_playback_and_the_state_gives_the_reason() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
     fixture.wait_for(|state| is_playing(state, "a"));
@@ -82,10 +83,12 @@ fn a_failed_pause_fails_the_call_with_its_code() {
         .output
         .fail_next_pause(OutputError::StreamPauseFailed);
 
-    assert_eq!(
-        fixture.player.pause().err(),
-        Some(CommandError::Output {
-            failure: PlaybackFailureCode::OutputStreamPauseFailed,
-        })
-    );
+    assert_eq!(fixture.player.pause().code_of(), None);
+    assert!(matches!(
+        fixture.state(),
+        PlayerState::Failed {
+            error: PlaybackFailureCode::OutputFailed,
+            ..
+        }
+    ));
 }

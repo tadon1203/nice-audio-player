@@ -1,12 +1,16 @@
 //! Volume, mute and the saved preferences through `Player`.
 
 use super::*;
+use crate::player::volume::NormalizedVolume;
 
 #[test]
 fn volume_and_mute_are_reported_in_the_transport() {
     let fixture = Fixture::with(&[]);
 
-    fixture.player.set_volume(0.25).unwrap();
+    fixture
+        .player
+        .set_volume(NormalizedVolume::try_from(0.25).unwrap())
+        .unwrap();
     assert_eq!(fixture.state().base().volume, 0.25);
 
     fixture.player.set_muted(true).unwrap();
@@ -19,25 +23,19 @@ fn volume_and_mute_are_reported_in_the_transport() {
 
 #[test]
 fn a_volume_outside_the_range_is_refused_not_clamped() {
-    let fixture = Fixture::with(&[]);
-    let sent_before = fixture.transport_messages();
-
-    assert_eq!(
-        fixture.player.set_volume(1.5).err(),
-        Some(CommandError::InvalidVolume)
-    );
-    assert_eq!(
-        fixture.player.set_volume(f32::NAN).err(),
-        Some(CommandError::InvalidVolume)
-    );
-    assert_eq!(fixture.transport_messages(), sent_before);
+    assert!(NormalizedVolume::try_from(1.5).is_err());
+    assert!(NormalizedVolume::try_from(-0.5).is_err());
+    assert!(NormalizedVolume::try_from(f32::NAN).is_err());
 }
 
 #[test]
 fn volume_changes_are_saved_as_preferences() {
     let fixture = Fixture::with(&[]);
 
-    fixture.player.set_volume(0.5).unwrap();
+    fixture
+        .player
+        .set_volume(NormalizedVolume::try_from(0.5).unwrap())
+        .unwrap();
     fixture.player.set_muted(true).unwrap();
 
     let saved = fixture.settings.player_preferences();

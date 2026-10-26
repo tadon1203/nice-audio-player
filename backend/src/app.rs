@@ -18,22 +18,25 @@ pub use crate::lyrics::Lyrics;
 pub use crate::meter::{Meter, MeterFrame};
 pub use crate::player::output::{AudioOutputDevice, AudioOutputSelection};
 pub use crate::player::output::{CpalOutput, OutputStreamFactory};
+pub use crate::player::volume::NormalizedVolume;
 pub use crate::player::{
     PlaybackPosition, PlayerState, QueueState, QueueWindow, RepeatMode, UPCOMING_WINDOW,
 };
 pub use crate::settings::{Appearance, AppearancePatch};
 
-use crate::errors::CommandError;
+use crate::Result;
+use crate::errors::Error;
 use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
 use crate::library::models::LibraryState;
 use crate::library::{
-    Library, LibraryUnavailableReason,
+    Library,
     artwork::{self},
 };
 use crate::lyrics;
 use crate::messages::{self, BackendMessage};
 use crate::player::{Player, waveform::Waveforms};
 use crate::settings::{self, SettingsStore};
+use log::error;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, mpsc::Sender},
@@ -42,8 +45,8 @@ use std::{
 pub struct BackendApp {
     player: Player,
     meter: Meter,
-    /// The Library, or why it is unavailable.
-    library: Result<Library, LibraryUnavailableReason>,
+    /// The Library, or `None` when its database could not be opened.
+    library: Option<Library>,
     settings: Arc<SettingsStore>,
     data_dir: PathBuf,
 }
@@ -51,7 +54,7 @@ pub struct BackendApp {
 impl BackendApp {
     /// Starts every service on `output`: `CpalOutput` in the Host, a fake device in tests.
     /// `messages` is the channel the services send their state and events on, to the Host.
-    pub fn initialize(
+    pub fn new(
         data_dir: PathBuf,
         messages: Sender<BackendMessage>,
         output: Box<dyn OutputStreamFactory>,
@@ -66,19 +69,21 @@ impl BackendApp {
             data_dir.join("waveforms"),
             messages.clone(),
         ));
-        let library = Library::open(&data_dir, messages.clone());
-        // A Library that did not open has no worker to send its state, so the state is sent here.
-        if let Err(reason) = &library {
-            messages::send(
-                &messages,
-                BackendMessage::Library(LibraryState::empty(LibraryStatus::Unavailable {
-                    reason: reason.clone(),
-                })),
-            );
-        }
+        let library = match Library::open(&data_dir, messages.clone()) {
+            Ok(library) => Some(library),
+            Err(cause) => {
+                error!("app.library.open_failed cause={cause}");
+                // A Library that did not open has no worker to send its state, so the state is sent here.
+                messages::send(
+                    &messages,
+                    BackendMessage::Library(LibraryState::empty(LibraryStatus::Unavailable)),
+                );
+                None
+            }
+        };
         let meter = Meter::new();
         let player = Player::start(
-            library.clone().ok().map(Arc::new),
+            library.clone().map(Arc::new),
             messages,
             meter.clone(),
             Arc::clone(&waveforms),
@@ -96,7 +101,7 @@ impl BackendApp {
 
     pub fn shutdown(&self) {
         self.player.shutdown();
-        if let Ok(library) = &self.library {
+        if let Some(library) = &self.library {
             library.shutdown();
         }
         self.settings.shutdown();
@@ -119,61 +124,48 @@ impl BackendApp {
 
     /// Stops the Library, then deletes its database and artwork and creates an empty database. The
     /// caller restarts the app, and the next start rescans the directories.
-    pub fn reset_library(&self) -> Result<(), CommandError> {
-        if let Ok(library) = &self.library {
+    pub fn reset_library(&self) -> Result<()> {
+        if let Some(library) = &self.library {
             library.shutdown();
         }
-        crate::library::database::reset(&self.data_dir).map_err(|_| CommandError::PersistenceFailed)
+        crate::library::database::reset(&self.data_dir)
     }
 
     /// Adds a directory. A path that is not valid Unicode is refused by the Library, not changed.
-    pub fn add_directory(&self, path: PathBuf) -> Result<(), CommandError> {
+    pub fn add_directory(&self, path: PathBuf) -> Result<()> {
         self.library()?.add_directory(path)
     }
 
-    pub fn set_directory_enabled(
-        &self,
-        id: DirectoryId,
-        enabled: bool,
-    ) -> Result<(), CommandError> {
+    pub fn set_directory_enabled(&self, id: DirectoryId, enabled: bool) -> Result<()> {
         self.library()?.set_directory_enabled(id, enabled)
     }
 
-    pub fn remove_directory(&self, id: DirectoryId) -> Result<(), CommandError> {
+    pub fn remove_directory(&self, id: DirectoryId) -> Result<()> {
         self.library()?.remove_directory(id)
     }
 
     /// Deletes the Missing tracks from the Library. Never touches a source file.
-    pub fn delete_missing_tracks(&self) -> Result<(), CommandError> {
+    pub fn delete_missing_tracks(&self) -> Result<()> {
         self.library()?.delete_missing_tracks()
     }
 
-    pub fn start_scan(&self) -> Result<(), CommandError> {
+    pub fn start_scan(&self) -> Result<()> {
         self.library()?.start_scan()
     }
 
-    pub fn cancel_scan(&self) -> Result<(), CommandError> {
+    pub fn cancel_scan(&self) -> Result<()> {
         self.library()?.cancel_scan()
     }
 
-    pub fn list_tracks(
-        &self,
-        request: &ListRequest<TrackSortKey>,
-    ) -> Result<Page<TrackRow>, CommandError> {
+    pub fn list_tracks(&self, request: &ListRequest<TrackSortKey>) -> Result<Page<TrackRow>> {
         self.library()?.list_tracks(request)
     }
 
-    pub fn list_albums(
-        &self,
-        request: &ListRequest<AlbumSortKey>,
-    ) -> Result<Page<AlbumRow>, CommandError> {
+    pub fn list_albums(&self, request: &ListRequest<AlbumSortKey>) -> Result<Page<AlbumRow>> {
         self.library()?.list_albums(request)
     }
 
-    pub fn list_artists(
-        &self,
-        request: &ListRequest<ArtistSortKey>,
-    ) -> Result<Page<ArtistRow>, CommandError> {
+    pub fn list_artists(&self, request: &ListRequest<ArtistSortKey>) -> Result<Page<ArtistRow>> {
         self.library()?.list_artists(request)
     }
 
@@ -181,33 +173,33 @@ impl BackendApp {
     pub fn track_index(
         &self,
         request: &ListRequest<TrackSortKey>,
-    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+    ) -> Result<Vec<LetterIndexEntry>> {
         self.library()?.track_index(request)
     }
 
     pub fn album_index(
         &self,
         request: &ListRequest<AlbumSortKey>,
-    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+    ) -> Result<Vec<LetterIndexEntry>> {
         self.library()?.album_index(request)
     }
 
     pub fn artist_index(
         &self,
         request: &ListRequest<ArtistSortKey>,
-    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+    ) -> Result<Vec<LetterIndexEntry>> {
         self.library()?.artist_index(request)
     }
 
-    pub fn album_by_id(&self, album_id: AlbumId) -> Result<AlbumDetails, CommandError> {
+    pub fn album_by_id(&self, album_id: AlbumId) -> Result<AlbumDetails> {
         self.library()?.album(album_id)
     }
 
-    pub fn album_tracks(&self, album_id: AlbumId) -> Result<Vec<AlbumTrackRow>, CommandError> {
+    pub fn album_tracks(&self, album_id: AlbumId) -> Result<Vec<AlbumTrackRow>> {
         self.library()?.list_album_tracks(album_id)
     }
 
-    pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistRow, CommandError> {
+    pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistRow> {
         self.library()?.artist(artist_id)
     }
 
@@ -215,36 +207,35 @@ impl BackendApp {
         &self,
         artist_id: ArtistId,
         request: &ListRequest<ArtistAlbumSortKey>,
-    ) -> Result<Page<AlbumRow>, CommandError> {
+    ) -> Result<Page<AlbumRow>> {
         self.library()?.list_artist_albums(artist_id, request)
     }
 
-    pub fn track_properties(&self, track_id: TrackId) -> Result<TrackProperties, CommandError> {
+    pub fn track_properties(&self, track_id: TrackId) -> Result<TrackProperties> {
         self.library()?.track_properties(track_id)
     }
 
     /// The track's file, for the Host to show in Explorer.
-    pub fn track_file(&self, track_id: TrackId) -> Result<PathBuf, CommandError> {
+    pub fn track_file(&self, track_id: TrackId) -> Result<PathBuf> {
         let file = self.library()?.track_location(track_id)?.existing()?;
         Ok(file.path)
     }
 
     /// The accent color of the stored image at `path`, computed on first request and cached.
-    pub fn artwork_accent(&self, path: &str) -> Result<Option<String>, CommandError> {
+    pub fn artwork_accent(&self, path: &str) -> Result<Option<String>> {
         self.library()?.artwork_accent(path)
     }
 
     // ---- lyrics ----
 
     /// Blocking: the host runs it on a blocking thread.
-    pub fn track_lyrics(&self, track_id: TrackId) -> Result<Lyrics, CommandError> {
+    pub fn track_lyrics(&self, track_id: TrackId) -> Result<Lyrics> {
         let library = self.library()?;
         let track = library
             .playable_tracks(&[track_id])?
             .pop()
             .flatten()
-            .ok_or(CommandError::TrackUnavailable)
-            .inspect_err(|cause| log::warn!("app.lyrics.track_unavailable cause={cause}"))?;
+            .ok_or(Error::TrackUnavailable)?;
         Ok(lyrics::load(&track))
     }
 
@@ -259,12 +250,8 @@ impl BackendApp {
 
     /// Replaces the queue with `context` and plays from `start_track_id` (its first track when
     /// `None`). Returns once the track's start has begun; the load and the stream follow.
-    pub fn play(
-        &self,
-        context: &PlaybackContext,
-        start_track_id: Option<TrackId>,
-    ) -> Result<(), CommandError> {
-        let library = self.playback_library()?;
+    pub fn play(&self, context: &PlaybackContext, start_track_id: Option<TrackId>) -> Result<()> {
+        let library = self.library()?;
         let selection = match context {
             PlaybackContext::Album { album_id } => {
                 library.playback_for_album_id(*album_id, start_track_id)
@@ -284,103 +271,90 @@ impl BackendApp {
             .play_queue(selection.track_ids, selection.start_index)
     }
 
-    pub fn pause(&self) -> Result<(), CommandError> {
+    pub fn pause(&self) -> Result<()> {
         self.player.pause()
     }
 
-    pub fn resume(&self) -> Result<(), CommandError> {
+    pub fn resume(&self) -> Result<()> {
         self.player.resume()
     }
 
-    pub fn previous(&self) -> Result<(), CommandError> {
+    pub fn previous(&self) -> Result<()> {
         self.player.previous()
     }
 
-    pub fn next(&self) -> Result<(), CommandError> {
+    pub fn next(&self) -> Result<()> {
         self.player.next()
     }
 
-    pub fn seek(&self, position_ms: u64) -> Result<(), CommandError> {
+    pub fn seek(&self, position_ms: u64) -> Result<()> {
         self.player.seek(position_ms)
     }
 
-    pub fn set_volume(&self, volume: f32) -> Result<(), CommandError> {
+    pub fn set_volume(&self, volume: NormalizedVolume) -> Result<()> {
         self.player.set_volume(volume)
     }
 
-    pub fn set_muted(&self, muted: bool) -> Result<(), CommandError> {
+    pub fn set_muted(&self, muted: bool) -> Result<()> {
         self.player.set_muted(muted)
     }
 
-    pub fn set_output_selection(
-        &self,
-        selection: AudioOutputSelection,
-    ) -> Result<(), CommandError> {
+    pub fn set_output_selection(&self, selection: AudioOutputSelection) -> Result<()> {
         self.player.set_output_selection(selection)
     }
 
     /// The output devices the system has. Blocking: the device query waits on the audio host.
-    pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>, CommandError> {
+    pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>> {
         crate::player::output::list_output_devices()
     }
 
-    pub fn set_repeat_mode(&self, mode: RepeatMode) -> Result<(), CommandError> {
+    pub fn set_repeat_mode(&self, mode: RepeatMode) -> Result<()> {
         self.player.set_repeat_mode(mode)
     }
 
-    pub fn set_shuffle(&self, enabled: bool) -> Result<(), CommandError> {
+    pub fn set_shuffle(&self, enabled: bool) -> Result<()> {
         self.player.set_shuffle(enabled)
     }
 
-    pub fn remove_queue_item(&self, id: QueueItemId) -> Result<(), CommandError> {
+    pub fn remove_queue_item(&self, id: QueueItemId) -> Result<()> {
         self.player.remove_queue_item(id)
     }
 
-    pub fn move_queue_item(&self, id: QueueItemId, to: usize) -> Result<(), CommandError> {
+    pub fn move_queue_item(&self, id: QueueItemId, to: usize) -> Result<()> {
         self.player.move_queue_item(id, to)
     }
 
     /// Makes an upcoming queue item current and plays it.
-    pub fn play_queue_item(&self, id: QueueItemId) -> Result<(), CommandError> {
+    pub fn play_queue_item(&self, id: QueueItemId) -> Result<()> {
         self.player.play_queue_item(id)
     }
 
     /// Adds a library track to the queue: right after the current one (`next`) or at the end.
     /// Blocking, like `play`.
-    pub fn enqueue_track(&self, track_id: TrackId, next: bool) -> Result<(), CommandError> {
-        let library = self.playback_library()?;
+    pub fn enqueue_track(&self, track_id: TrackId, next: bool) -> Result<()> {
+        let library = self.library()?;
         let track = library.playback_for_track(track_id)?;
         self.player.enqueue(track.id(), next)
     }
 
-    pub fn clear_queue(&self) -> Result<(), CommandError> {
+    pub fn clear_queue(&self) -> Result<()> {
         self.player.clear_queue()
     }
 
     /// Puts back the queue the last replacement or Clear upcoming took away.
-    pub fn restore_previous_queue(&self) -> Result<(), CommandError> {
+    pub fn restore_previous_queue(&self) -> Result<()> {
         self.player.restore_previous_queue()
     }
 
     /// Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
     /// state does not carry.
-    pub fn queue_window(&self, offset: u32, limit: u32) -> Result<QueueWindow, CommandError> {
+    pub fn queue_window(&self, offset: u32, limit: u32) -> Result<QueueWindow> {
         self.player.queue_window(offset, limit)
     }
 
     // ---- private helpers ----
 
-    fn library(&self) -> Result<&Library, CommandError> {
-        self.library
-            .as_ref()
-            .inspect_err(|cause| log::warn!("app.library.unavailable cause={cause}"))
-            .map_err(|_| CommandError::LibraryUnavailable)
-    }
-
-    fn playback_library(&self) -> Result<&Library, CommandError> {
-        self.library
-            .as_ref()
-            .inspect_err(|cause| log::warn!("app.playback.library_unavailable cause={cause}"))
-            .map_err(|_| CommandError::LibraryUnavailable)
+    fn library(&self) -> Result<&Library> {
+        self.library.as_ref().ok_or(Error::LibraryUnavailable)
     }
 }

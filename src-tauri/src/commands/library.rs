@@ -199,7 +199,7 @@ pub(crate) async fn library_reveal_track(
     tauri::async_runtime::spawn_blocking(move || reveal_in_file_manager(&path))
         .await
         .inspect_err(|cause| log::warn!("host.library.reveal_task_failed cause={cause}"))
-        .map_err(|_| CommandError::TaskFailed)?
+        .map_err(|_| CommandError::Internal)?
 }
 
 #[tauri::command]

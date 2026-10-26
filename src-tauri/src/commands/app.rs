@@ -22,15 +22,15 @@ pub(crate) async fn app_open_log_directory(app: tauri::AppHandle) -> Result<(), 
         .path()
         .app_log_dir()
         .inspect_err(|cause| log::warn!("host.library.log_dir_failed cause={cause}"))
-        .map_err(|_| CommandError::TaskFailed)?;
+        .map_err(|_| CommandError::Internal)?;
     // The filesystem and a spawned process stay off the main thread.
     tauri::async_runtime::spawn_blocking(move || {
         std::fs::create_dir_all(&directory)
             .inspect_err(|cause| log::warn!("host.library.create_dir_failed cause={cause}"))
-            .map_err(|_| CommandError::TaskFailed)?;
+            .map_err(|_| CommandError::Internal)?;
         open_in_file_manager(&directory)
     })
     .await
     .inspect_err(|cause| log::warn!("host.library.task_failed cause={cause}"))
-    .map_err(|_| CommandError::TaskFailed)?
+    .map_err(|_| CommandError::Internal)?
 }

@@ -10,6 +10,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use parking_lot::Mutex;
 
+use crate::errors::CommandError;
 use crate::ids::TrackId;
 use crate::library::media::ValidatedAudioFile;
 use crate::library::models::{LibraryState, TrackCore, TrackSummary};
@@ -194,4 +195,16 @@ const WAIT: Duration = Duration::from_secs(30);
 /// A sender whose receiver is gone: messages sent to it are dropped.
 pub(crate) fn null_messages() -> Sender<BackendMessage> {
     mpsc::channel().0
+}
+
+/// The code a failed Backend call gives the Renderer, for tests that check what the Renderer sees.
+pub(crate) trait CommandCode<T> {
+    /// The code of the failure, or `None` when the call succeeded.
+    fn code_of(self) -> Option<CommandError>;
+}
+
+impl<T> CommandCode<T> for crate::Result<T> {
+    fn code_of(self) -> Option<CommandError> {
+        self.err().map(|error| error.code())
+    }
 }

@@ -7,9 +7,9 @@ export { isTauri } from "@tauri-apps/api/core";
 
 /** The window chrome the renderer draws itself (the window has no native decorations). */
 export const windowChrome = {
-  minimize: (): Promise<void> => command("app", () => getCurrentWindow().minimize()),
-  toggleMaximize: (): Promise<void> => command("app", () => getCurrentWindow().toggleMaximize()),
-  close: (): Promise<void> => command("app", () => getCurrentWindow().close()),
+  minimize: (): Promise<void> => command(() => getCurrentWindow().minimize()),
+  toggleMaximize: (): Promise<void> => command(() => getCurrentWindow().toggleMaximize()),
+  close: (): Promise<void> => command(() => getCurrentWindow().close()),
   /** Calls `listener` with the current state now and on each change. Returns the unsubscribe. */
   onMaximizedChange: (listener: (maximized: boolean) => void): (() => void) => {
     const appWindow = getCurrentWindow();

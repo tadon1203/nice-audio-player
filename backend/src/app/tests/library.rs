@@ -3,6 +3,7 @@ use crate::app::{BackendApp, PlaybackContext};
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
 use crate::player::fake_output::FakeOutput;
+use crate::test_support::CommandCode;
 
 use crate::library::LibraryStatus;
 use crate::library::models::{LibraryState, ListRequest, SortDirection, TrackSortKey};
@@ -19,7 +20,7 @@ fn fixture_without_library() -> Fixture {
     std::fs::write(&data_dir, "a file, so the data directory cannot be created")
         .expect("a blocker");
     let (recorded, sink) = MessageLog::shared();
-    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()));
+    let backend = BackendApp::new(data_dir, sink, Box::new(FakeOutput::new()));
     Fixture {
         backend,
         recorded,
@@ -83,20 +84,24 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
     let backend = &fixture.backend;
 
     let state = library_state(&fixture.recorded);
-    assert!(matches!(state.status, LibraryStatus::Unavailable { .. }));
+    assert!(matches!(state.status, LibraryStatus::Unavailable));
     assert_eq!(state.directories, []);
-    assert!(matches!(
-        backend.start_scan(),
-        Err(CommandError::LibraryUnavailable)
-    ));
-    assert!(matches!(
-        backend.track_file(TrackId::try_from_rowid(1).unwrap()),
-        Err(CommandError::LibraryUnavailable)
-    ));
-    assert!(matches!(
-        backend.track_lyrics(TrackId::try_from_rowid(1).unwrap()),
-        Err(CommandError::LibraryUnavailable)
-    ));
+    assert_eq!(
+        backend.start_scan().code_of(),
+        Some(CommandError::LibraryUnavailable)
+    );
+    assert_eq!(
+        backend
+            .track_file(TrackId::try_from_rowid(1).unwrap())
+            .code_of(),
+        Some(CommandError::LibraryUnavailable)
+    );
+    assert_eq!(
+        backend
+            .track_lyrics(TrackId::try_from_rowid(1).unwrap())
+            .code_of(),
+        Some(CommandError::LibraryUnavailable)
+    );
 }
 
 #[test]
@@ -106,13 +111,13 @@ fn without_a_library_playing_from_it_says_it_is_unavailable() {
     let unavailable = CommandError::LibraryUnavailable;
 
     assert_eq!(
-        backend.play(&tracks_context(), None).err(),
+        backend.play(&tracks_context(), None).code_of(),
         Some(unavailable)
     );
     assert_eq!(
         backend
             .enqueue_track(TrackId::try_from_rowid(1).unwrap(), true)
-            .err(),
+            .code_of(),
         Some(unavailable)
     );
 }
@@ -139,12 +144,13 @@ fn library_state(recorded: &MessageLog) -> LibraryState {
 fn track_properties_for_a_track_the_library_does_not_hold_are_not_found() {
     let fixture = fixture();
 
-    assert!(matches!(
+    assert_eq!(
         fixture
             .backend
-            .track_properties(TrackId::try_from_rowid(999).unwrap()),
-        Err(CommandError::TrackNotFound)
-    ));
+            .track_properties(TrackId::try_from_rowid(999).unwrap())
+            .code_of(),
+        Some(CommandError::NotFound)
+    );
 }
 
 #[test]
@@ -152,9 +158,9 @@ fn an_album_by_id_that_the_library_does_not_hold_is_not_found() {
     let fixture = fixture();
     let album_id = AlbumId::of("Nobody", "Nope", std::ffi::OsStr::new(""));
 
-    let error = fixture.backend.album_by_id(album_id).err();
+    let error = fixture.backend.album_by_id(album_id).code_of();
 
-    assert_eq!(error, Some(CommandError::AlbumNotFound));
+    assert_eq!(error, Some(CommandError::NotFound));
 }
 
 #[test]
@@ -163,15 +169,15 @@ fn an_album_by_id_that_the_library_does_not_hold_has_no_tracks_and_does_not_play
     let album_id = AlbumId::of("Nobody", "Nope", std::ffi::OsStr::new(""));
 
     assert_eq!(
-        fixture.backend.album_tracks(album_id).err(),
-        Some(CommandError::AlbumNotFound)
+        fixture.backend.album_tracks(album_id).code_of(),
+        Some(CommandError::NotFound)
     );
     assert_eq!(
         fixture
             .backend
             .play(&PlaybackContext::Album { album_id }, None)
-            .err(),
-        Some(CommandError::AlbumNotFound)
+            .code_of(),
+        Some(CommandError::NotFound)
     );
 }
 
@@ -179,7 +185,7 @@ fn an_album_by_id_that_the_library_does_not_hold_has_no_tracks_and_does_not_play
 fn an_album_artist_by_id_that_the_library_does_not_hold_is_not_found() {
     let fixture = fixture();
 
-    let error = fixture.backend.artist(ArtistId::of("Nobody")).err();
+    let error = fixture.backend.artist(ArtistId::of("Nobody")).code_of();
 
-    assert_eq!(error, Some(CommandError::ArtistNotFound));
+    assert_eq!(error, Some(CommandError::NotFound));
 }

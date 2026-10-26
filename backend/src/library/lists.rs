@@ -13,10 +13,11 @@ use super::models::{
     TrackCore, TrackRow, TrackSortKey,
 };
 use super::{
-    Library, StoreError, text,
+    Library, text,
     tracks::{artwork_ref, non_blank, playable_file_condition, track_album, track_state},
 };
-use crate::errors::CommandError;
+use crate::Result;
+use crate::errors::Error;
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, artist_id_column, track_id_column};
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter, types::Value};
 
@@ -82,7 +83,7 @@ pub(super) struct Listing {
 }
 
 impl Listing {
-    fn total(&self, connection: &Connection) -> Result<u32, StoreError> {
+    fn total(&self, connection: &Connection) -> Result<u32> {
         let count: i64 = connection.query_row(
             &format!("SELECT COUNT(*) {} WHERE {}", self.from, self.filter.sql()),
             params_from_iter(&self.filter.params),
@@ -97,7 +98,7 @@ impl Listing {
         offset: u32,
         limit: u32,
         row: fn(&Row<'_>) -> rusqlite::Result<T>,
-    ) -> Result<Vec<T>, StoreError> {
+    ) -> Result<Vec<T>> {
         let limit_at = self.filter.params.len() + 1;
         let mut params = self.filter.params.clone();
         params.push(Value::Integer(i64::from(limit)));
@@ -384,7 +385,7 @@ fn letter_entries(
     (known, unknown): (&str, &str),
     direction: SortDirection,
     to_label: fn(&str) -> String,
-) -> Result<Vec<LetterIndexEntry>, StoreError> {
+) -> Result<Vec<LetterIndexEntry>> {
     let filter = listing.filter.sql();
     let mut statement = connection.prepare(&format!(
         "SELECT CAST({key} AS TEXT), COUNT(*) {} WHERE {filter} AND {known} GROUP BY {key} ORDER BY {key} {}",
@@ -449,7 +450,7 @@ fn name_index(
     listing: &Listing,
     column: &str,
     direction: SortDirection,
-) -> Result<Vec<LetterIndexEntry>, StoreError> {
+) -> Result<Vec<LetterIndexEntry>> {
     letter_entries(
         connection,
         listing,
@@ -465,7 +466,7 @@ fn year_index(
     connection: &Connection,
     listing: &Listing,
     direction: SortDirection,
-) -> Result<Vec<LetterIndexEntry>, StoreError> {
+) -> Result<Vec<LetterIndexEntry>> {
     letter_entries(
         connection,
         listing,
@@ -477,10 +478,7 @@ fn year_index(
 }
 
 /// The details of an album: its summary row, and its tracks for the counts.
-fn album_details_of(
-    connection: &Connection,
-    album_id: AlbumId,
-) -> Result<AlbumDetails, StoreError> {
+fn album_details_of(connection: &Connection, album_id: AlbumId) -> Result<AlbumDetails> {
     let album_hex = album_id.to_hex();
     let summary = connection
         .query_row(
@@ -489,7 +487,7 @@ fn album_details_of(
             album_row,
         )
         .optional()?
-        .ok_or(StoreError::AlbumNotFound)?;
+        .ok_or(Error::AlbumNotFound)?;
     let in_album = "m.album_id = ?1";
     let playable_file = playable_file_condition();
     let (count, duration, year, date, playable): (
@@ -525,7 +523,7 @@ fn album_details_of(
         },
     )?;
     if count == 0 {
-        return Err(StoreError::AlbumNotFound);
+        return Err(Error::AlbumNotFound);
     }
     Ok(AlbumDetails {
         summary: AlbumRow { year, ..summary },
@@ -544,7 +542,7 @@ impl Library {
         offset: u32,
         limit: u32,
         row: fn(&Row<'_>) -> rusqlite::Result<T>,
-    ) -> Result<Page<T>, StoreError> {
+    ) -> Result<Page<T>> {
         // The version is read before the rows: a change that lands while the page is read makes the
         // page look older than it is, so the Renderer restarts the list rather than miss it.
         let version = self.version();
@@ -556,28 +554,19 @@ impl Library {
         })
     }
 
-    pub fn list_tracks(
-        &self,
-        request: &ListRequest<TrackSortKey>,
-    ) -> Result<Page<TrackRow>, CommandError> {
+    pub fn list_tracks(&self, request: &ListRequest<TrackSortKey>) -> Result<Page<TrackRow>> {
         let listing = track_listing(request.search.as_deref(), request.sort, request.direction);
-        Ok(self.page(&listing, request.offset, request.limit, track_row)?)
+        self.page(&listing, request.offset, request.limit, track_row)
     }
 
-    pub fn list_albums(
-        &self,
-        request: &ListRequest<AlbumSortKey>,
-    ) -> Result<Page<AlbumRow>, CommandError> {
+    pub fn list_albums(&self, request: &ListRequest<AlbumSortKey>) -> Result<Page<AlbumRow>> {
         let listing = album_listing(request.search.as_deref(), request.sort, request.direction);
-        Ok(self.page(&listing, request.offset, request.limit, album_row)?)
+        self.page(&listing, request.offset, request.limit, album_row)
     }
 
-    pub fn list_artists(
-        &self,
-        request: &ListRequest<ArtistSortKey>,
-    ) -> Result<Page<ArtistRow>, CommandError> {
+    pub fn list_artists(&self, request: &ListRequest<ArtistSortKey>) -> Result<Page<ArtistRow>> {
         let listing = artist_listing(request.search.as_deref(), request.sort, request.direction);
-        Ok(self.page(&listing, request.offset, request.limit, read_artist)?)
+        self.page(&listing, request.offset, request.limit, read_artist)
     }
 
     /// A page of one Album Artist's albums. An Album Artist with no albums is not found.
@@ -585,7 +574,7 @@ impl Library {
         &self,
         artist: ArtistId,
         request: &ListRequest<ArtistAlbumSortKey>,
-    ) -> Result<Page<AlbumRow>, CommandError> {
+    ) -> Result<Page<AlbumRow>> {
         let listing = artist_album_listing(
             artist,
             request.search.as_deref(),
@@ -594,18 +583,18 @@ impl Library {
         );
         let page = self.page(&listing, request.offset, request.limit, album_row)?;
         if page.total == 0 {
-            return Err(CommandError::ArtistNotFound);
+            return Err(Error::ArtistNotFound);
         }
         Ok(page)
     }
 
     /// Every track of one album, in playing order. An album with no tracks is not found.
-    pub fn list_album_tracks(&self, album: AlbumId) -> Result<Vec<AlbumTrackRow>, CommandError> {
+    pub fn list_album_tracks(&self, album: AlbumId) -> Result<Vec<AlbumTrackRow>> {
         let listing = album_track_listing(album);
         let connection = self.read()?;
         let rows = listing.rows(&connection, 0, u32::MAX, album_track_row)?;
         if rows.is_empty() {
-            return Err(CommandError::AlbumNotFound);
+            return Err(Error::AlbumNotFound);
         }
         Ok(rows)
     }
@@ -614,25 +603,20 @@ impl Library {
     pub fn track_index(
         &self,
         request: &ListRequest<TrackSortKey>,
-    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+    ) -> Result<Vec<LetterIndexEntry>> {
         let Some(column) = track_index_column(request.sort) else {
             return Ok(Vec::new());
         };
         let listing = track_listing(request.search.as_deref(), request.sort, request.direction);
         let connection = self.read()?;
-        Ok(name_index(
-            &connection,
-            &listing,
-            column,
-            request.direction,
-        )?)
+        name_index(&connection, &listing, column, request.direction)
     }
 
     /// The letter index of the Albums list: by name, or by year.
     pub fn album_index(
         &self,
         request: &ListRequest<AlbumSortKey>,
-    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+    ) -> Result<Vec<LetterIndexEntry>> {
         let listing = album_listing(request.search.as_deref(), request.sort, request.direction);
         let connection = self.read()?;
         Ok(match album_index_column(request.sort) {
@@ -645,37 +629,31 @@ impl Library {
     pub fn artist_index(
         &self,
         request: &ListRequest<ArtistSortKey>,
-    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+    ) -> Result<Vec<LetterIndexEntry>> {
         if request.sort != ArtistSortKey::Artist {
             return Ok(Vec::new());
         }
         let listing = artist_listing(request.search.as_deref(), request.sort, request.direction);
         let connection = self.read()?;
-        Ok(name_index(
-            &connection,
-            &listing,
-            "ar.name_sort",
-            request.direction,
-        )?)
+        name_index(&connection, &listing, "ar.name_sort", request.direction)
     }
 
     /// One Album Artist's row, by its ID.
-    pub fn artist(&self, artist: ArtistId) -> Result<ArtistRow, CommandError> {
+    pub fn artist(&self, artist: ArtistId) -> Result<ArtistRow> {
         let connection = self.read()?;
-        Ok(connection
+        connection
             .query_row(
                 &format!("SELECT {ARTIST_COLUMNS} {ARTIST_FROM} WHERE ar.id = ?1"),
                 params![artist.to_hex()],
                 read_artist,
             )
-            .optional()
-            .map_err(StoreError::from)?
-            .ok_or(StoreError::AlbumArtistNotFound)?)
+            .optional()?
+            .ok_or(Error::ArtistNotFound)
     }
 
     /// The details of an album by its ID.
-    pub fn album(&self, album_id: AlbumId) -> Result<AlbumDetails, CommandError> {
+    pub fn album(&self, album_id: AlbumId) -> Result<AlbumDetails> {
         let connection = self.read()?;
-        Ok(album_details_of(&connection, album_id)?)
+        album_details_of(&connection, album_id)
     }
 }

@@ -27,8 +27,9 @@ use serde::{Deserialize, Serialize};
 
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::processing::OutputProcessingPlan;
+use super::state::PlaybackFailureCode;
 use super::volume::{AtomicEffectiveGain, process_sample};
-use crate::errors::CommandError;
+use crate::Result;
 use crate::meter::{Meter, MeterTap};
 
 /// Identifies one output stream, which lives as long as a session.
@@ -127,13 +128,19 @@ pub enum OutputError {
     DeviceUnavailable,
 }
 
-impl From<DeviceResolutionError> for OutputError {
-    fn from(error: DeviceResolutionError) -> Self {
-        match error {
-            DeviceResolutionError::NoDefaultOutputDevice => Self::NoOutputDevice,
-            DeviceResolutionError::InvalidDeviceId | DeviceResolutionError::DeviceUnavailable => {
-                Self::DeviceUnavailable
-            }
+impl OutputError {
+    /// The reason the listener sees for this failure.
+    pub(crate) fn code(self) -> PlaybackFailureCode {
+        match self {
+            Self::NoOutputDevice => PlaybackFailureCode::NoOutputDevice,
+            Self::DeviceUnavailable => PlaybackFailureCode::OutputDeviceUnavailable,
+            Self::UnsupportedConfiguration
+            | Self::ConfigurationQueryFailed
+            | Self::StreamConfigurationUnsupported => PlaybackFailureCode::UnsupportedOutput,
+            Self::StreamBuildFailed
+            | Self::StreamStartFailed
+            | Self::StreamPauseFailed
+            | Self::StreamResumeFailed => PlaybackFailureCode::OutputFailed,
         }
     }
 }
@@ -179,7 +186,7 @@ pub trait OutputStreamFactory: Send {
     fn resolve(
         &self,
         selection: &AudioOutputSelection,
-    ) -> Result<AudioOutputDeviceIdentity, DeviceResolutionError>;
+    ) -> Result<AudioOutputDeviceIdentity, OutputError>;
 
     /// Opens a stream on the device `selection` names, configured for audio of `spec`. The stream
     /// plays `first` from the returned producer's queue once started.
@@ -226,7 +233,7 @@ impl OutputStreamFactory for CpalOutput {
     fn resolve(
         &self,
         selection: &AudioOutputSelection,
-    ) -> Result<AudioOutputDeviceIdentity, DeviceResolutionError> {
+    ) -> Result<AudioOutputDeviceIdentity, OutputError> {
         resolve_output_selection(selection).map(|device| device.identity)
     }
 
@@ -509,7 +516,8 @@ fn build_prepared(
     );
     let plan = OutputProcessingPlan::new(spec, target)
         .inspect_err(|cause| log::warn!("audio.output.plan_failed cause={cause}"))
-        .map_err(|_| OutputError::UnsupportedConfiguration)?;
+        .ok()
+        .ok_or(OutputError::UnsupportedConfiguration)?;
     let (producer, consumer) = make_queue(target)?;
     let stream = build_stream_for_config(
         device,
@@ -538,12 +546,12 @@ pub(crate) fn make_queue(spec: PcmSpec) -> Result<(PcmProducer, PcmConsumer), Ou
         .unwrap_or(usize::MAX)
         .saturating_mul(2)
         .max(1);
-    bounded_pcm_queue(
-        capacity,
-        ChannelCount::new(usize::from(channels)).ok_or(OutputError::UnsupportedConfiguration)?,
-    )
-    .inspect_err(|cause| log::warn!("audio.output.queue_failed cause={cause}"))
-    .map_err(|_| OutputError::UnsupportedConfiguration)
+    let channel_count =
+        ChannelCount::new(usize::from(channels)).ok_or(OutputError::UnsupportedConfiguration)?;
+    bounded_pcm_queue(capacity, channel_count).ok_or_else(|| {
+        log::warn!("audio.output.queue_failed capacity_frames={capacity}");
+        OutputError::UnsupportedConfiguration
+    })
 }
 
 fn select_output_config(
@@ -908,23 +916,13 @@ pub struct AudioOutputDevice {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DeviceResolutionError {
-    NoDefaultOutputDevice,
-    InvalidDeviceId,
-    DeviceUnavailable,
-}
-
 pub(crate) struct ResolvedAudioOutputDevice {
     pub(crate) device: cpal::Device,
     pub(crate) identity: AudioOutputDeviceIdentity,
 }
 
-pub(crate) fn list_output_devices() -> Result<Vec<AudioOutputDevice>, CommandError> {
-    let devices = cpal::default_host()
-        .output_devices()
-        .inspect_err(|cause| log::warn!("audio.devices.enumerate_failed cause={cause}"))
-        .map_err(|_| CommandError::DeviceEnumerationFailed)?;
+pub(crate) fn list_output_devices() -> Result<Vec<AudioOutputDevice>> {
+    let devices = cpal::default_host().output_devices()?;
     let mut output_devices = devices
         .filter_map(|device| {
             let id = device
@@ -944,26 +942,29 @@ pub(crate) fn list_output_devices() -> Result<Vec<AudioOutputDevice>, CommandErr
     Ok(output_devices)
 }
 
+/// The device a selection names. A device that cannot be named, found or identified is unavailable.
 pub(crate) fn resolve_output_selection(
     selection: &AudioOutputSelection,
-) -> Result<ResolvedAudioOutputDevice, DeviceResolutionError> {
+) -> Result<ResolvedAudioOutputDevice, OutputError> {
     let host = cpal::default_host();
     let device = match selection {
         AudioOutputSelection::SystemDefault => host
             .default_output_device()
-            .ok_or(DeviceResolutionError::NoDefaultOutputDevice)?,
+            .ok_or(OutputError::NoOutputDevice)?,
         AudioOutputSelection::Device { device_id } => {
             let id = device_id
                 .parse::<cpal::DeviceId>()
                 .inspect_err(|cause| log::warn!("audio.devices.id_invalid cause={cause}"))
-                .map_err(|_| DeviceResolutionError::InvalidDeviceId)?;
+                .ok()
+                .ok_or(OutputError::DeviceUnavailable)?;
             host.device_by_id(&id)
-                .ok_or(DeviceResolutionError::DeviceUnavailable)?
+                .ok_or(OutputError::DeviceUnavailable)?
         }
     };
     let identity = device_identity(&device)
         .inspect_err(|cause| log::warn!("audio.devices.identity_failed cause={cause}"))
-        .map_err(|_| DeviceResolutionError::DeviceUnavailable)?;
+        .ok()
+        .ok_or(OutputError::DeviceUnavailable)?;
     Ok(ResolvedAudioOutputDevice { device, identity })
 }
 
@@ -993,14 +994,6 @@ fn ignore_full(result: Result<(), TrySendError<()>>) -> Result<(), TrySendError<
         Err(TrySendError::Full(())) => Ok(()),
         other => other,
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum PcmQueueBuildError {
-    #[error("the queue has no capacity")]
-    ZeroCapacity,
-    #[error("the queue capacity overflows")]
-    CapacityOverflow,
 }
 
 /// A wait for room in the queue ended because it was cancelled.
@@ -1033,21 +1026,20 @@ impl PcmWaker {
     }
 }
 
+/// A queue of `capacity_frames` frames. `None` when it has no room or its size overflows.
 pub(crate) fn bounded_pcm_queue(
     capacity_frames: usize,
     channel_count: ChannelCount,
-) -> Result<(PcmProducer, PcmConsumer), PcmQueueBuildError> {
+) -> Option<(PcmProducer, PcmConsumer)> {
     if capacity_frames == 0 {
-        return Err(PcmQueueBuildError::ZeroCapacity);
+        return None;
     }
     let channel_count = usize::from(channel_count.get());
-    let capacity_samples = capacity_frames
-        .checked_mul(channel_count)
-        .ok_or(PcmQueueBuildError::CapacityOverflow)?;
+    let capacity_samples = capacity_frames.checked_mul(channel_count)?;
     let (producer, consumer) = HeapRb::<f32>::new(capacity_samples).split();
     let (room_sender, room) = mpsc::sync_channel(1);
     let finished = Arc::new(AtomicBool::new(false));
-    Ok((
+    Some((
         PcmProducer {
             producer,
             channel_count,
@@ -1214,7 +1206,7 @@ mod device_tests {
 
 #[cfg(test)]
 mod pcm_queue_tests {
-    use super::{PcmQueueBuildError, WaitCancelled, bounded_pcm_queue};
+    use super::{WaitCancelled, bounded_pcm_queue};
     use crate::player::pcm::ChannelCount;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -1254,10 +1246,7 @@ mod pcm_queue_tests {
 
     #[test]
     fn rejects_zero_capacity() {
-        assert_eq!(
-            bounded_pcm_queue(0, ChannelCount::new(2).unwrap()).err(),
-            Some(PcmQueueBuildError::ZeroCapacity)
-        );
+        assert!(bounded_pcm_queue(0, ChannelCount::new(2).unwrap()).is_none());
     }
 
     #[test]

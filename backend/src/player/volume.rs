@@ -5,8 +5,17 @@ pub(crate) const MIN_PLAYBACK_VOLUME: f32 = 0.0;
 pub(crate) const MAX_PLAYBACK_VOLUME: f32 = 1.0;
 pub(crate) const DEFAULT_PLAYBACK_VOLUME: f32 = 1.0;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct NormalizedVolume(f32);
+/// A volume inside the playback range. The check is made where the value comes in: the IPC refuses
+/// a value outside the range, so nothing downstream checks it again.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, specta::Type)]
+#[serde(try_from = "f32")]
+#[specta(type = f32)]
+pub struct NormalizedVolume(f32);
+
+/// A value outside the playback range, or not a number.
+#[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
+#[error("the volume is outside the playback range")]
+pub struct VolumeOutOfRange;
 
 impl NormalizedVolume {
     pub(crate) fn new(value: f32) -> Option<Self> {
@@ -16,6 +25,14 @@ impl NormalizedVolume {
 
     pub(crate) fn value(self) -> f32 {
         self.0
+    }
+}
+
+impl TryFrom<f32> for NormalizedVolume {
+    type Error = VolumeOutOfRange;
+
+    fn try_from(value: f32) -> Result<Self, VolumeOutOfRange> {
+        Self::new(value).ok_or(VolumeOutOfRange)
     }
 }
 

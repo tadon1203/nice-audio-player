@@ -245,10 +245,10 @@ impl ScanState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ScanFailure {
-    PersistenceFailed,
-    DirectoryTraversalFailed,
-    /// The scan thread died unexpectedly.
-    Panicked,
+    /// A directory could not be read.
+    DirectoryUnreadable,
+    /// The scan stopped on a database failure, or its thread died unexpectedly.
+    Failed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]

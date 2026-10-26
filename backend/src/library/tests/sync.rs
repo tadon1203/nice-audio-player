@@ -2,10 +2,10 @@
 //! change in a registered directory is picked up while idle, and a failed scan is reported until a
 //! scan succeeds.
 
-use crate::errors::CommandError;
 use crate::library::Library;
 use crate::library::database::Database;
 use crate::library::models::{ListRequest, ScanStatus, SortDirection, TrackSortKey};
+use crate::test_support::CommandCode;
 use crate::test_support::{MessageLog, TestDirectory, wait_until, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -193,8 +193,9 @@ fn a_manual_scan_while_one_runs_is_refused() {
     );
 
     assert_eq!(
-        harness.library.start_scan(),
-        Err(CommandError::ScanAlreadyRunning)
+        harness.library.start_scan().code_of(),
+        None,
+        "a scan that runs has nothing to start"
     );
 }
 

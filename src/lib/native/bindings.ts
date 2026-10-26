@@ -19,7 +19,7 @@ export const commands = {
 	playerPrevious: () => __TAURI_INVOKE<null>("player_previous"),
 	playerNext: () => __TAURI_INVOKE<null>("player_next"),
 	playerSeek: (positionMs: number) => __TAURI_INVOKE<null>("player_seek", { positionMs }),
-	playerSetVolume: (volume: number) => __TAURI_INVOKE<null>("player_set_volume", { volume }),
+	playerSetVolume: (volume: NormalizedVolume) => __TAURI_INVOKE<null>("player_set_volume", { volume }),
 	playerSetMuted: (muted: boolean) => __TAURI_INVOKE<null>("player_set_muted", { muted }),
 	playerListOutputDevices: () => __TAURI_INVOKE<AudioOutputDevice[]>("player_list_output_devices"),
 	playerSetRepeatMode: (mode: RepeatMode) => __TAURI_INVOKE<null>("player_set_repeat_mode", { mode }),
@@ -189,8 +189,8 @@ export type BackendMessage = { kind: "player"; value: PlayerState } | { kind: "q
 	title: string | null,
 } };
 
-/**  The codes a command can answer with, so the Renderer shows each one the same way. */
-export type CommandError = { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" } | { code: "invalidDirectory" } | { code: "directoryNotDirectory" } | { code: "duplicateDirectory" } | { code: "overlappingDirectory" } | { code: "directoryContainsDataDirectory" } | { code: "directoryMissing" } | { code: "albumNotFound" } | { code: "artistNotFound" } | { code: "scanAlreadyRunning" } | { code: "scanNotRunning" } | { code: "noEnabledDirectories" } | { code: "output"; failure: PlaybackFailureCode } | { code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" } | { code: "deviceEnumerationFailed" };
+/**  The codes a command answers with. Each code has one message in the Renderer. */
+export type CommandError = { code: "notFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "invalidDirectory" } | { code: "duplicateDirectory" } | { code: "overlappingDirectory" } | { code: "directoryContainsDataDirectory" } | { code: "internal" };
 
 /**  A loaded track: identity plus how it reaches the output device. */
 export type CurrentPlayback = {
@@ -262,13 +262,11 @@ export type LibraryState = {
 	scan: ScanState,
 };
 
-export type LibraryStatus = { status: "ready" } | { status: "unavailable"; reason: LibraryUnavailableReason };
-
 /**
- *  Why the Library is unavailable. The only reason left is a database that cannot be opened: any
+ *  Whether the Library is usable. It is unavailable only when its database cannot be opened: any
  *  other database is replaced at open.
  */
-export type LibraryUnavailableReason = "databaseOpenFailed";
+export type LibraryStatus = { status: "ready" } | { status: "unavailable" };
 
 /**  A page request: the search (`None` when empty), the sort, and the window of rows. */
 export type ListRequest<K> = {
@@ -308,6 +306,12 @@ export type MeterFrame = {
 };
 
 /**
+ *  A volume inside the playback range. The check is made where the value comes in: the IPC refuses
+ *  a value outside the range, so nothing downstream checks it again.
+ */
+export type NormalizedVolume = number;
+
+/**
  *  The album of the loaded track: the album it is filed under and how many tracks the library
  *  holds for it.
  */
@@ -333,7 +337,7 @@ export type PlaybackContext =
 /**  The tracks list as currently filtered and sorted. */
 { kind: "tracks"; search: string | null; sort: TrackSortKey; direction: SortDirection };
 
-export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutputConfiguration" | "outputStreamBuildFailed" | "outputStreamStartFailed" | "outputStreamPauseFailed" | "outputStreamResumeFailed" | "outputStreamRuntimeFailed" | "completionTimingFailed" | "decodeFailed" | "sampleRateConversionFailed";
+export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutput" | "outputFailed" | "decodeFailed";
 
 /**
  *  One playback session: a queue item being played, from the playback worker's counter. On
@@ -419,9 +423,11 @@ export type QueueWindow = {
 export type RepeatMode = "off" | "all" | "one";
 
 /**  Why a scan stopped without finishing. */
-export type ScanFailure = "persistenceFailed" | "directoryTraversalFailed" | 
-/**  The scan thread died unexpectedly. */
-"panicked";
+export type ScanFailure = 
+/**  A directory could not be read. */
+"directoryUnreadable" | 
+/**  The scan stopped on a database failure, or its thread died unexpectedly. */
+"failed";
 
 export type ScanState = {
 	status: ScanStatus,

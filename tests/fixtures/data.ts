@@ -195,7 +195,7 @@ export function libraryResponses(library: LibraryData = testLibrary()): Record<s
       bitrateKbps: number | null;
     } => {
       const track = library.tracks.find((entry) => entry.id === id);
-      if (track === undefined) throw { code: "common", error: { code: "trackNotFound" } };
+      if (track === undefined) throw { code: "notFound" };
       return {
         id,
         path: `C:/Music/${track.title}.flac`,
@@ -252,7 +252,7 @@ export function scanSnapshot(status: ScanStatus): ScanState {
     inspectedCount: status === "running" ? 8 : 20,
     indexedCount: status === "running" ? 6 : 18,
     failedCount: status === "failed" ? 2 : 0,
-    failure: status === "failed" ? "directoryTraversalFailed" : null,
+    failure: status === "failed" ? "directoryUnreadable" : null,
   };
 }
 

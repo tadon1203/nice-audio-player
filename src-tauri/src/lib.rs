@@ -74,7 +74,7 @@ pub fn run() {
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
             let (sender, messages) = mpsc::channel();
-            let backend = BackendApp::initialize(data_dir, sender, Box::new(CpalOutput));
+            let backend = BackendApp::new(data_dir, sender, Box::new(CpalOutput));
             let backend = Arc::new(backend);
             let delivery = Arc::new(Delivery::default());
             app.manage(AppState {

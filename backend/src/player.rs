@@ -12,7 +12,7 @@ use std::sync::{
     mpsc::{self, Sender},
 };
 
-use crate::errors::CommandError;
+use crate::Result;
 use crate::ids::{QueueItemId, TrackId};
 use crate::library::Library;
 use crate::messages::BackendMessage;
@@ -22,7 +22,6 @@ use crate::player::volume::{DEFAULT_PLAYBACK_VOLUME, NormalizedVolume};
 use crate::player::waveform::Waveforms;
 use crate::settings::SettingsStore;
 use crate::threads::{Reply, WorkerThread, request};
-use log::debug;
 
 pub(crate) mod decode;
 #[cfg(test)]
@@ -44,9 +43,7 @@ mod worker;
 use worker::{PlayerCommand, PlayerWorker, WorkerInput};
 
 pub use queue::RepeatMode;
-pub use state::{
-    PlaybackFailureCode, PlaybackPosition, PlayerState, QueueState, QueueWindow, UPCOMING_WINDOW,
-};
+pub use state::{PlaybackPosition, PlayerState, QueueState, QueueWindow, UPCOMING_WINDOW};
 
 /// The playback choices that outlive a session: what the listener set, restored at startup.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -122,11 +119,7 @@ impl Player {
 
     /// Upcoming items from `offset`, at most `limit`, read by the worker from the queue and the
     /// library. The rows carry the queue version they were cut from.
-    pub(crate) fn queue_window(
-        &self,
-        offset: u32,
-        limit: u32,
-    ) -> Result<QueueWindow, CommandError> {
+    pub(crate) fn queue_window(&self, offset: u32, limit: u32) -> Result<QueueWindow> {
         self.call(|reply| PlayerCommand::QueueWindow {
             offset,
             limit,
@@ -136,11 +129,7 @@ impl Player {
 
     /// Replaces the queue with the tracks `track_ids` (in play order) and starts the one at
     /// `start`. Returns once that track's start has begun; the load and the stream follow.
-    pub(crate) fn play_queue(
-        &self,
-        track_ids: Vec<TrackId>,
-        start: usize,
-    ) -> Result<(), CommandError> {
+    pub(crate) fn play_queue(&self, track_ids: Vec<TrackId>, start: usize) -> Result<()> {
         self.call(|reply| PlayerCommand::PlayQueue {
             tracks: track_ids,
             start,
@@ -148,70 +137,65 @@ impl Player {
         })
     }
 
-    pub(crate) fn previous(&self) -> Result<(), CommandError> {
+    pub(crate) fn previous(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::Previous { reply })
     }
 
-    pub(crate) fn next(&self) -> Result<(), CommandError> {
+    pub(crate) fn next(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::Next { reply })
     }
 
-    pub(crate) fn pause(&self) -> Result<(), CommandError> {
+    pub(crate) fn pause(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::Pause { reply })
     }
 
-    pub(crate) fn resume(&self) -> Result<(), CommandError> {
+    pub(crate) fn resume(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::Resume { reply })
     }
 
     /// The worker clamps `position_ms` to the duration of the track it has loaded; the clamp is not
     /// done here, where the loaded track could change before the command arrives.
-    pub(crate) fn seek(&self, position_ms: u64) -> Result<(), CommandError> {
+    pub(crate) fn seek(&self, position_ms: u64) -> Result<()> {
         self.call(|reply| PlayerCommand::Seek { position_ms, reply })
     }
 
-    /// The one check of the volume range: a value outside it is refused, not clamped.
-    pub(crate) fn set_volume(&self, volume: f32) -> Result<(), CommandError> {
-        let volume = NormalizedVolume::new(volume).ok_or(CommandError::InvalidVolume)?;
+    pub(crate) fn set_volume(&self, volume: NormalizedVolume) -> Result<()> {
         self.call(|reply| PlayerCommand::SetVolume { volume, reply })
     }
 
-    pub(crate) fn set_muted(&self, muted: bool) -> Result<(), CommandError> {
+    pub(crate) fn set_muted(&self, muted: bool) -> Result<()> {
         self.call(|reply| PlayerCommand::SetMuted { muted, reply })
     }
 
-    pub(crate) fn set_output_selection(
-        &self,
-        selection: AudioOutputSelection,
-    ) -> Result<(), CommandError> {
+    pub(crate) fn set_output_selection(&self, selection: AudioOutputSelection) -> Result<()> {
         self.call(|reply| PlayerCommand::SetOutputSelection { selection, reply })
     }
 
-    pub(crate) fn set_repeat_mode(&self, mode: RepeatMode) -> Result<(), CommandError> {
+    pub(crate) fn set_repeat_mode(&self, mode: RepeatMode) -> Result<()> {
         self.call(|reply| PlayerCommand::SetRepeatMode { mode, reply })
     }
 
-    pub(crate) fn set_shuffle(&self, enabled: bool) -> Result<(), CommandError> {
+    pub(crate) fn set_shuffle(&self, enabled: bool) -> Result<()> {
         self.call(|reply| PlayerCommand::SetShuffle { enabled, reply })
     }
 
-    pub(crate) fn remove_queue_item(&self, id: QueueItemId) -> Result<(), CommandError> {
+    pub(crate) fn remove_queue_item(&self, id: QueueItemId) -> Result<()> {
         self.call(|reply| PlayerCommand::RemoveQueueItem { id, reply })
     }
 
     /// `to` is a position in the upcoming list, 0 being next up.
-    pub(crate) fn move_queue_item(&self, id: QueueItemId, to: usize) -> Result<(), CommandError> {
+    pub(crate) fn move_queue_item(&self, id: QueueItemId, to: usize) -> Result<()> {
         self.call(|reply| PlayerCommand::MoveQueueItem { id, to, reply })
     }
 
     /// Makes an upcoming item current and plays it.
-    pub(crate) fn play_queue_item(&self, id: QueueItemId) -> Result<(), CommandError> {
+    pub(crate) fn play_queue_item(&self, id: QueueItemId) -> Result<()> {
         self.call(|reply| PlayerCommand::PlayQueueItem { id, reply })
     }
 
     /// Adds `track` after the current item (`next`) or at the end. With nothing queued it starts
     /// playing instead; the worker decides, so the check cannot race a stop.
-    pub(crate) fn enqueue(&self, track: TrackId, next: bool) -> Result<(), CommandError> {
+    pub(crate) fn enqueue(&self, track: TrackId, next: bool) -> Result<()> {
         self.call(|reply| PlayerCommand::Enqueue {
             tracks: vec![track],
             next,
@@ -219,30 +203,27 @@ impl Player {
         })
     }
 
-    pub(crate) fn clear_queue(&self) -> Result<(), CommandError> {
+    pub(crate) fn clear_queue(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::ClearQueue { reply })
     }
 
     /// Puts back the queue before the last replacement, playing the item that was current.
-    pub(crate) fn restore_previous_queue(&self) -> Result<(), CommandError> {
+    pub(crate) fn restore_previous_queue(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::RestorePreviousQueue { reply })
     }
 
     /// Stops the worker and waits for it to finish. Calling it again does nothing.
     pub(crate) fn shutdown(&self) {
-        if self
+        // The worker may have stopped already; then there is nothing to stop.
+        let _ = self
             .inputs
-            .send(WorkerInput::Command(PlayerCommand::Shutdown))
-            .is_err()
-        {
-            debug!("playback.shutdown_worker_gone");
-        }
+            .send(WorkerInput::Command(PlayerCommand::Shutdown));
         self.worker.join();
     }
 
     /// Sends a command and waits for the worker's answer. Callers on an async runtime must not call
     /// this on the runtime itself.
-    fn call<T>(&self, command: impl FnOnce(Reply<T>) -> PlayerCommand) -> Result<T, CommandError> {
+    fn call<T>(&self, command: impl FnOnce(Reply<T>) -> PlayerCommand) -> Result<T> {
         request(&self.inputs, |reply| WorkerInput::Command(command(reply)))
     }
 }

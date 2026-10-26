@@ -2,8 +2,8 @@
 //! request that waits for that answer, the handle that joins a worker thread, and the priority
 //! that keeps analysis out of playback's way.
 
-use crate::errors::CommandError;
-use log::{debug, error};
+use crate::errors::Error;
+use log::error;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,27 +25,23 @@ impl Cancellation {
 }
 
 /// Where a worker answers one command. The answer is sent once, by the worker.
-pub type Reply<T> = SyncSender<Result<T, CommandError>>;
+pub type Reply<T> = SyncSender<crate::Result<T>>;
 
 /// Answers a command, if its caller is still waiting. A caller that has gone away is logged, not
 /// an error.
-pub fn answer<T>(reply: &Reply<T>, result: Result<T, CommandError>) {
-    if reply.send(result).is_err() {
-        debug!("thread.reply_closed");
-    }
+pub fn answer<T>(reply: &Reply<T>, result: crate::Result<T>) {
+    let _ = reply.send(result);
 }
 
 /// Sends a command with its reply and waits for the answer. A worker that has stopped, before or
-/// while it answers, is `CommandError::TaskFailed`.
-pub fn request<C, T>(
-    sender: &Sender<C>,
-    command: impl FnOnce(Reply<T>) -> C,
-) -> Result<T, CommandError> {
+/// while it answers, is `Error::WorkerStopped`.
+pub fn request<C, T>(sender: &Sender<C>, command: impl FnOnce(Reply<T>) -> C) -> crate::Result<T> {
     let (reply, answer) = sync_channel(1);
     sender
         .send(command(reply))
-        .map_err(|_| CommandError::TaskFailed)?;
-    answer.recv().map_err(|_| CommandError::TaskFailed)?
+        .ok()
+        .ok_or(Error::WorkerStopped)?;
+    answer.recv().ok().ok_or(Error::WorkerStopped)?
 }
 
 /// A named thread that its owner joins: once in `join`, and again when the handle is dropped.
@@ -104,7 +100,7 @@ pub fn run_in_background() {}
 #[cfg(test)]
 mod tests {
     use super::{Reply, WorkerThread, request};
-    use crate::errors::CommandError;
+    use crate::errors::Error;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::channel;
@@ -115,7 +111,7 @@ mod tests {
         let (sender, receiver) = channel::<Reply<u8>>();
         thread::spawn(move || receiver.recv().unwrap().send(Ok(7)).unwrap());
 
-        assert_eq!(request(&sender, |reply| reply), Ok(7));
+        assert_eq!(request(&sender, |reply| reply).ok(), Some(7));
     }
 
     #[test]
@@ -125,36 +121,36 @@ mod tests {
             receiver
                 .recv()
                 .unwrap()
-                .send(Err(CommandError::QueueBusy))
+                .send(Err(Error::QueueItemNotFound))
                 .unwrap();
         });
 
-        assert_eq!(
+        assert!(matches!(
             request(&sender, |reply| reply),
-            Err(CommandError::QueueBusy)
-        );
+            Err(Error::QueueItemNotFound)
+        ));
     }
 
     #[test]
-    fn request_is_task_failed_when_the_receiver_is_dropped() {
+    fn request_is_worker_stopped_when_the_receiver_is_dropped() {
         let (sender, receiver) = channel::<Reply<u8>>();
         drop(receiver);
 
-        assert_eq!(
+        assert!(matches!(
             request(&sender, |reply| reply),
-            Err(CommandError::TaskFailed)
-        );
+            Err(Error::WorkerStopped)
+        ));
     }
 
     #[test]
-    fn request_is_task_failed_when_the_worker_drops_the_reply() {
+    fn request_is_worker_stopped_when_the_worker_drops_the_reply() {
         let (sender, receiver) = channel::<Reply<u8>>();
         thread::spawn(move || drop(receiver.recv().unwrap()));
 
-        assert_eq!(
+        assert!(matches!(
             request(&sender, |reply| reply),
-            Err(CommandError::TaskFailed)
-        );
+            Err(Error::WorkerStopped)
+        ));
     }
 
     #[test]

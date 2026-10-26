@@ -6,18 +6,19 @@ describe("LibraryErrors.statusMessage", () => {
     expect(LibraryErrors.statusMessage({ status: "ready" })).toBeNull();
   });
 
-  it("maps unavailable reasons", () => {
-    expect(
-      LibraryErrors.statusMessage({ status: "unavailable", reason: "databaseOpenFailed" }),
-    ).toBe("The library storage is unavailable.");
+  it("says the library storage is unavailable", () => {
+    expect(LibraryErrors.statusMessage({ status: "unavailable" })).toBe(
+      "The library storage is unavailable.",
+    );
   });
 });
 
 describe("LibraryErrors.scanFailureMessage", () => {
   it("never exposes a raw failure code", () => {
-    expect(LibraryErrors.scanFailureMessage("directoryTraversalFailed")).toBe(
+    expect(LibraryErrors.scanFailureMessage("directoryUnreadable")).toBe(
       "A library directory could not be read.",
     );
+    expect(LibraryErrors.scanFailureMessage("failed")).toBe("The scan stopped unexpectedly.");
     expect(LibraryErrors.scanFailureMessage("unknownInternalCode")).toBe(
       "The scan stopped unexpectedly.",
     );

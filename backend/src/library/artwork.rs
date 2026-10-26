@@ -5,7 +5,8 @@
 //! `artwork/<shard>/<hash>.thumb.jpg`, where the shard is the first two hash digits. Both paths
 //! follow from the hash and the MIME type, so the database holds neither.
 
-use super::{StoreError, database::Database, sql_text_enum};
+use super::{database::Database, sql_text_enum};
+use crate::Result;
 use crate::ids::ArtworkHash;
 use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use rusqlite::{OptionalExtension, params};
@@ -158,19 +159,13 @@ pub(crate) struct StoredArtwork {
     pub has_thumbnail: bool,
 }
 
-#[derive(Debug, Clone, Copy, thiserror::Error)]
-pub(crate) enum ArtworkMaterializeError {
-    #[error("the artwork file could not be read or written")]
-    Io,
-}
-
 /// Stores an image and its thumbnail, at scan time. A thumbnail that cannot be made leaves
 /// `has_thumbnail` false: the original is then the thumbnail.
 pub(crate) fn store(
     directory: &Path,
     bytes: &[u8],
     mime_type: ArtworkMimeType,
-) -> Result<StoredArtwork, ArtworkMaterializeError> {
+) -> Result<StoredArtwork> {
     let hash = blake3::hash(bytes).to_hex().to_string();
     // A blake3 hex digest is 64 lowercase hex digits, which is what an artwork hash is.
     let hash = ArtworkHash::try_from(hash).expect("a blake3 hex digest is an artwork hash");
@@ -211,13 +206,11 @@ fn thumbnail(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Writes `bytes` to a temporary file beside `path`, then renames it over `path`, so a reader never
 /// sees half a file. The temporary file is removed when either step fails.
-fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), ArtworkMaterializeError> {
+fn write_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
-        return Err(ArtworkMaterializeError::Io);
+        return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput).into());
     };
-    fs::create_dir_all(parent)
-        .inspect_err(|cause| log::warn!("library.artwork.directory_failed cause={cause}"))
-        .map_err(|_| ArtworkMaterializeError::Io)?;
+    fs::create_dir_all(parent)?;
     let temp_path = parent.join(format!(
         "{}.tmp-{}-{}",
         name.to_string_lossy(),
@@ -231,9 +224,8 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), ArtworkMaterializeE
         .and_then(|mut file| file.write_all(bytes).and_then(|()| file.flush()))
         .and_then(|()| fs::rename(&temp_path, path));
     if let Err(cause) = written {
-        log::warn!("library.artwork.write_failed cause={cause}");
         remove_file_quietly(&temp_path);
-        return Err(ArtworkMaterializeError::Io);
+        return Err(cause.into());
     }
     Ok(())
 }
@@ -249,10 +241,7 @@ fn remove_file_quietly(path: &Path) {
 
 /// The accent color of stored artwork, computed on first request and cached in its row. Writes
 /// only the one cached value, in its own short transaction.
-pub(crate) fn artwork_accent(
-    database: &Database,
-    hash: &ArtworkHash,
-) -> Result<Option<String>, StoreError> {
+pub(crate) fn artwork_accent(database: &Database, hash: &ArtworkHash) -> Result<Option<String>> {
     let row: Option<(ArtworkMimeType, Option<String>)> = database
         .read()?
         .query_row(
@@ -318,7 +307,7 @@ fn weighted_average(pixels: &[[u8; 3]]) -> Option<String> {
 /// Collects the artwork store's garbage. An image whose file is gone or has another size is
 /// forgotten: its tracks keep no artwork and are marked `storeFailed`, so the next scan of their
 /// files stores it again. An image no track uses is deleted, and so is every file no row owns.
-pub(crate) fn collect(database: &Database) -> Result<(), StoreError> {
+pub(crate) fn collect(database: &Database) -> Result<()> {
     let data_dir = database.data_dir();
     let mut connection = database.write()?;
     let transaction = connection.transaction()?;
@@ -360,7 +349,7 @@ pub(crate) fn collect(database: &Database) -> Result<(), StoreError> {
 
 fn stored_rows(
     connection: &rusqlite::Connection,
-) -> Result<Vec<(ArtworkHash, ArtworkMimeType, bool)>, StoreError> {
+) -> Result<Vec<(ArtworkHash, ArtworkMimeType, bool)>> {
     let mut statement = connection.prepare("SELECT hash, mime, has_thumbnail FROM artwork")?;
     let rows = statement
         .query_map([], |row| {

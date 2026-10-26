@@ -1,85 +1,82 @@
 import { Channel } from "@tauri-apps/api/core";
 import { commands, type BackendMessage, type CommandError, type MeterFrame } from "./bindings";
-import { IpcError, NativeError, type NativeArea } from "./errors";
+import { CommandFailed } from "./errors";
 
-/** The `CommandError` a rejected command carries, or null when the rejection has none. */
-function codedError(reason: unknown): CommandError | null {
-  if (typeof reason !== "object" || reason === null || !("code" in reason)) return null;
-  return typeof reason.code === "string" ? (reason as CommandError) : null;
+/** The code a rejected command carries. A rejection without one, such as a lost IPC, is `internal`. */
+function codeOf(reason: unknown): CommandError["code"] {
+  if (typeof reason !== "object" || reason === null || !("code" in reason)) return "internal";
+  return typeof reason.code === "string" ? (reason.code as CommandError["code"]) : "internal";
 }
 
 /**
- * Runs one generated binding call. The Backend's rejection becomes NativeError; a rejection
- * without a code, such as a lost IPC, becomes IpcError. Every area command goes through here.
+ * Runs one generated binding call. The Backend's rejection becomes a CommandFailed with its code.
+ * Every command goes through here.
  */
-export async function command<T>(area: NativeArea, run: () => Promise<T>): Promise<T> {
+export async function command<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (reason) {
-    const error = codedError(reason);
-    if (error === null) throw new IpcError();
-    throw new NativeError(area, error);
+    throw new CommandFailed(codeOf(reason));
   }
 }
 
-/** One area method: the generated command with the same parameters and result, run through `command`. */
-function areaCommand<Args extends unknown[], Result>(
-  name: NativeArea,
+/** One command: the generated binding with the same parameters and result, run through `command`. */
+function call<Args extends unknown[], Result>(
   run: (...args: Args) => Promise<Result>,
 ): (...args: Args) => Promise<Result> {
-  return (...args) => command(name, () => run(...args));
+  return (...args) => command(() => run(...args));
 }
 
 /** The Playback commands, and the queue they share. */
 export const player = {
-  play: areaCommand("player", commands.playerPlay),
-  pause: areaCommand("player", commands.playerPause),
-  resume: areaCommand("player", commands.playerResume),
-  previous: areaCommand("player", commands.playerPrevious),
-  next: areaCommand("player", commands.playerNext),
-  seek: areaCommand("player", commands.playerSeek),
-  setVolume: areaCommand("player", commands.playerSetVolume),
-  setMuted: areaCommand("player", commands.playerSetMuted),
-  setOutputSelection: areaCommand("player", commands.playerSetOutputSelection),
-  listOutputDevices: areaCommand("player", commands.playerListOutputDevices),
-  setRepeatMode: areaCommand("player", commands.playerSetRepeatMode),
-  setShuffle: areaCommand("player", commands.playerSetShuffle),
-  removeQueueItem: areaCommand("player", commands.playerRemoveQueueItem),
-  moveQueueItem: areaCommand("player", commands.playerMoveQueueItem),
-  playQueueItem: areaCommand("player", commands.playerPlayQueueItem),
-  enqueueTrack: areaCommand("player", commands.playerEnqueueTrack),
-  clearQueue: areaCommand("player", commands.playerClearQueue),
-  restorePreviousQueue: areaCommand("player", commands.playerRestorePreviousQueue),
-  queueWindow: areaCommand("player", commands.playerQueueWindow),
+  play: call(commands.playerPlay),
+  pause: call(commands.playerPause),
+  resume: call(commands.playerResume),
+  previous: call(commands.playerPrevious),
+  next: call(commands.playerNext),
+  seek: call(commands.playerSeek),
+  setVolume: call(commands.playerSetVolume),
+  setMuted: call(commands.playerSetMuted),
+  setOutputSelection: call(commands.playerSetOutputSelection),
+  listOutputDevices: call(commands.playerListOutputDevices),
+  setRepeatMode: call(commands.playerSetRepeatMode),
+  setShuffle: call(commands.playerSetShuffle),
+  removeQueueItem: call(commands.playerRemoveQueueItem),
+  moveQueueItem: call(commands.playerMoveQueueItem),
+  playQueueItem: call(commands.playerPlayQueueItem),
+  enqueueTrack: call(commands.playerEnqueueTrack),
+  clearQueue: call(commands.playerClearQueue),
+  restorePreviousQueue: call(commands.playerRestorePreviousQueue),
+  queueWindow: call(commands.playerQueueWindow),
 };
 
 /** The Library commands: the directories, the scan, the catalog lists and their indexes. */
 export const library = {
-  reset: areaCommand("library", commands.libraryReset),
-  addDirectory: areaCommand("library", commands.libraryAddDirectory),
-  setDirectoryEnabled: areaCommand("library", commands.librarySetDirectoryEnabled),
-  removeDirectory: areaCommand("library", commands.libraryRemoveDirectory),
-  deleteMissingTracks: areaCommand("library", commands.libraryDeleteMissingTracks),
-  startScan: areaCommand("library", commands.libraryStartScan),
-  cancelScan: areaCommand("library", commands.libraryCancelScan),
-  listTracks: areaCommand("library", commands.libraryListTracks),
-  listAlbums: areaCommand("library", commands.libraryListAlbums),
-  listArtists: areaCommand("library", commands.libraryListArtists),
-  trackIndex: areaCommand("library", commands.libraryTrackIndex),
-  albumIndex: areaCommand("library", commands.libraryAlbumIndex),
-  artistIndex: areaCommand("library", commands.libraryArtistIndex),
-  artist: areaCommand("library", commands.libraryArtist),
-  listArtistAlbums: areaCommand("library", commands.libraryListArtistAlbums),
-  album: areaCommand("library", commands.libraryAlbum),
-  listAlbumTracks: areaCommand("library", commands.libraryListAlbumTracks),
-  trackProperties: areaCommand("library", commands.libraryTrackProperties),
-  revealTrack: areaCommand("library", commands.libraryRevealTrack),
-  artworkAccent: areaCommand("library", commands.libraryArtworkAccent),
+  reset: call(commands.libraryReset),
+  addDirectory: call(commands.libraryAddDirectory),
+  setDirectoryEnabled: call(commands.librarySetDirectoryEnabled),
+  removeDirectory: call(commands.libraryRemoveDirectory),
+  deleteMissingTracks: call(commands.libraryDeleteMissingTracks),
+  startScan: call(commands.libraryStartScan),
+  cancelScan: call(commands.libraryCancelScan),
+  listTracks: call(commands.libraryListTracks),
+  listAlbums: call(commands.libraryListAlbums),
+  listArtists: call(commands.libraryListArtists),
+  trackIndex: call(commands.libraryTrackIndex),
+  albumIndex: call(commands.libraryAlbumIndex),
+  artistIndex: call(commands.libraryArtistIndex),
+  artist: call(commands.libraryArtist),
+  listArtistAlbums: call(commands.libraryListArtistAlbums),
+  album: call(commands.libraryAlbum),
+  listAlbumTracks: call(commands.libraryListAlbumTracks),
+  trackProperties: call(commands.libraryTrackProperties),
+  revealTrack: call(commands.libraryRevealTrack),
+  artworkAccent: call(commands.libraryArtworkAccent),
 };
 
 /** The lyrics of a track, read from the Backend. */
 export const lyrics = {
-  track: areaCommand("lyrics", commands.lyricsTrack),
+  track: call(commands.lyricsTrack),
 };
 
 /**
@@ -89,19 +86,19 @@ export const lyrics = {
  */
 export const meter = {
   start: (onFrame: (frame: MeterFrame) => void): Promise<void> =>
-    command("meter", () => commands.meterStart(new Channel<MeterFrame>(onFrame))),
-  stop: (): Promise<void> => command("meter", () => commands.meterStop()),
+    command(() => commands.meterStart(new Channel<MeterFrame>(onFrame))),
+  stop: (): Promise<void> => command(() => commands.meterStop()),
 };
 
 /** The Appearance: the partial update that the Backend saves and returns. */
 export const appearance = {
-  update: areaCommand("appearance", commands.appearanceUpdate),
+  update: call(commands.appearanceUpdate),
 };
 
 /** The app-wide commands: the one channel to the Renderer, and the log directory. */
 export const app = {
   /** Registers `onMessage`; the latest value of every state arrives on it first. */
   connect: (onMessage: (message: BackendMessage) => void): Promise<void> =>
-    command("app", () => commands.appConnect(new Channel<BackendMessage>(onMessage))),
-  openLogDirectory: areaCommand("app", commands.appOpenLogDirectory),
+    command(() => commands.appConnect(new Channel<BackendMessage>(onMessage))),
+  openLogDirectory: call(commands.appOpenLogDirectory),
 };
