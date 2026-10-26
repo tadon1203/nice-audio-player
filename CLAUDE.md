@@ -18,6 +18,11 @@ Read a document only when its trigger applies. Do not read them all up front.
 
 - If a term that you need is missing from `CONTEXT.md`, say so.
 
+## Writing
+
+- Write code comments and documents (`*.md`, doc comments, commit messages) in Simplified Technical English (ASD-STE100): short sentences, one meaning for each word, active voice, and simple verb tenses.
+- Use the terms in `CONTEXT.md` for domain words. Do not use a synonym.
+
 ## Tool usage
 
 - MUST use the standard tools (`Read`, `Write`, `Edit`, `Glob`, `Grep`) to read, create, edit, and search files. NEVER use shell commands (`cat`, `sed`, `awk`, `echo >`, heredocs, `python` or `node` one-liners) for these tasks, unless you are certain that a shell command gives a clear benefit the standard tools cannot match. If you are not certain, use the standard tools. Use the shell only for git, pnpm, cargo, running programs, `mkdir`, and `rm` or `mv`.

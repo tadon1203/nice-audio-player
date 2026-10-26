@@ -165,12 +165,11 @@ enum LrcParse {
 }
 
 fn parse_lrc(input: &str) -> LrcParse {
-    // Some taggers store plain, unsynced lyrics under the same frame LRC uses
-    // (e.g. FLAC `LYRICS`). If nothing even looks like an LRC tag line, don't
-    // hand it to the LRC parser at all — that just fails with an internal
-    // "Eof" parse error and, worse, would otherwise be indistinguishable from
-    // genuinely malformed LRC. Reporting it as `Empty` lets the caller fall back
-    // to plain-text lyrics.
+    // Some taggers store plain, unsynced lyrics in the frame that LRC uses (for
+    // example, FLAC `LYRICS`). If no line starts with `[`, the input is not LRC.
+    // Do not pass it to the LRC parser. The parser fails with an internal "Eof"
+    // error, which looks the same as malformed LRC. Return `Empty` so that the
+    // caller falls back to plain-text lyrics.
     if !input.lines().any(|line| line.trim_start().starts_with('[')) {
         return LrcParse::Empty;
     }

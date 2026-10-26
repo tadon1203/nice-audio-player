@@ -1,18 +1,18 @@
 # Architecture
 
-This document is the map of the system and the rules that keep it in shape.
+This document is the map of the system. It also lists the rules that keep the system in shape.
 
 ## About this document
 
 This document changes rarely. Keep it stable.
 
-- The sections are fixed, as in the template below. Do not add, remove, or rename a section. Put new content in one of them.
+- Keep the sections fixed, as in the template below. Do not add, remove, or rename a section. Put new content in one of the existing sections.
 - Do not put information here that changes often.
 - Do not name a file in the Code map. Name a directory.
-- Do not describe an implementation detail. The code and its comments do that.
+- Do not describe an implementation detail. The code and its comments describe it.
 - Change this document only when the structure or a rule changes.
 
-The template of this document. Text in `<>` is a placeholder: replace it, and keep everything else.
+The template for this document. Replace each placeholder in `<>`. Keep all other text.
 
 ```markdown
 # Architecture
@@ -44,22 +44,22 @@ The template of this document. Text in `<>` is a placeholder: replace it, and ke
 
 ## Mental model
 
-Three layers, one direction of control. The terms are defined in [CONTEXT.md](./CONTEXT.md).
+The system has three layers. Control moves in one direction. The terms are defined in [CONTEXT.md](./CONTEXT.md).
 
-- **Renderer** (`src`): SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. It composes views and caches native state. It holds no second source of truth.
-- **Host** (`src-tauri`): Tauri 2. It runs the Windows WebView and connects the Backend to the window and the operating system. It holds no domain rules.
-- **Backend** (`backend`): a Rust crate. It owns the domain and the persistent state: the Library, Playback, and settings. It knows nothing about Tauri.
+- **Renderer** (`src`): SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. It composes views. It caches native state. It holds no second source of truth.
+- **Host** (`src-tauri`): Tauri 2. It runs the Windows WebView. It connects the Backend to the window and to the operating system. It holds no domain rules.
+- **Backend** (`backend`): a Rust crate. It owns the domain and the persistent state: the Library, Playback, and settings. It does not know about Tauri.
 
-Communication: requests get an answer, and the Backend pushes its state.
+Communication has two directions. A request gets an answer. The Backend pushes its state.
 
-- **Renderer → Backend:** a command or a query. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`), and the Host calls the Backend. A command answers only whether the Backend accepted it. A query answers data, such as a window of the queue.
-- **Backend → Renderer:** one channel, `BackendMessage` on the `app_connect` channel. It carries:
-  1. **State:** each state's whole value: the transport (`player`), the queue (`queue`, with its version), the Library (its availability, its version, its directories, and its scan), the waveform, and the appearance. The state's owner sends it when it changes. `BackendApp` sends the Unavailable Library state when the Library did not open, since there is no worker then.
-  2. **Position:** the playing position, once a second while a track plays and after a seek or a start.
+- **Renderer → Backend:** a command or a query. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`). The Host calls the Backend. A command answers only whether the Backend accepted it. A query answers with data, such as a window of the queue.
+- **Backend → Renderer:** one channel. It sends `BackendMessage` on the `app_connect` channel. The channel carries four kinds of message:
+  1. **State:** the whole value of each state. The states are the transport (`player`), the queue (`queue`, with its version), the Library (its availability, its version, its directories, and its scan), the waveform, and the appearance. The owner of a state sends it when the state changes. `BackendApp` sends the Unavailable Library state when the Library did not open. No worker runs in that case.
+  2. **Position:** the playing position. The Backend sends it once a second while a track plays. It also sends it after a seek or a start.
   3. **Backend event:** a fact that happened once, such as a skipped track.
-  4. **Measurement:** meter frames, as JSON, on the channel that `meter_start` takes. The Meter measures only while the Player runs.
+  4. **Measurement:** meter frames, as JSON. They travel on the channel that `meter_start` takes. The Meter measures only while the Player runs.
 
-On connect the Backend first sends the latest value of each state, so the Renderer has the current state before any change. The Renderer updates its caches and views from these.
+On connect, the Backend first sends the latest value of each state. So the Renderer has the current state before any change. The Renderer updates its caches and views from these values.
 
 ## Code map
 
@@ -76,7 +76,7 @@ On connect the Backend first sends the latest value of each state, so the Render
 | `src/lib/components`     | Product-specific compositions of Renderer domains, such as the Dock and Now Playing.                                                            |
 | `src/lib/ui`             | Shared controls, with the shadcn-svelte primitives.                                                                                             |
 | `src/lib/utils`          | Small helpers with no domain knowledge.                                                                                                         |
-| `backend/src/app`        | The composition root. It joins the services and holds the cross-domain use cases.                                                               |
+| `backend/src/app`        | The composition root. It joins the services and holds the use cases that span domains.                                                          |
 | `backend/src/player`     | Playback: the Player, its queue and worker, the Output stream, the Waveform, and the decode and processing stages.                              |
 | `backend/src/library`    | The Library: its database, the sync worker, the Scan, the albums, the media files it reads, and artwork.                                        |
 | `backend/src/lyrics`     | Lyrics parsing and service.                                                                                                                     |
@@ -88,21 +88,21 @@ On connect the Backend first sends the latest value of each state, so the Render
 
 ## Invariants
 
-- The IPC contract is defined once, in the Backend. The Renderer's bindings are generated from it. Nobody edits them by hand.
+- The IPC contract is defined once, in the Backend. The generated Renderer bindings come from it. Nobody edits the bindings by hand.
 - A Host command that blocks does not run on the main thread.
-- A Backend service knows nothing about the Host. The Player reads tracks from the Library and writes its preferences to the settings store. Each state value has one owner thread, which holds it and sends it whole when it changes; a position or a backend event is sent the same way, on the same channel.
-- A command never answers with Backend state. The state a command causes arrives as a push.
+- A Backend service does not know about the Host. The Player reads tracks from the Library. It writes its preferences to the settings store. Each state value has one owner thread. That thread holds the value and sends the whole value when it changes. A position or a backend event goes the same way, on the same channel.
+- A command never answers with Backend state. The state that a command causes arrives as a push.
 - The Host reaches the Backend only through `BackendApp` and its public modules.
-- Settings are read and written through the IPC of the area that owns them. Appearance is read from `app_connect` and written with `appearanceUpdate`; player preferences are read and written through the player commands.
-- A state is pushed whole, and each push replaces the value the Renderer holds.
-- A backend event is a fact. It builds no state in the Renderer.
-- `app_connect` registers the channel, and the latest value of each state arrives on it before any change.
+- The Renderer reads and writes settings through the IPC of the area that owns them. Appearance is read from `app_connect` and written with `appearanceUpdate`. Player preferences are read and written through the player commands.
+- The Backend pushes a state whole. Each push replaces the value that the Renderer holds.
+- A backend event is a fact. It does not build state in the Renderer.
+- `app_connect` registers the channel. The latest value of each state arrives on it before any change.
 - Every state that the Library stores is a closed set of values. The code and the database enforce the same set.
 - One place decides how the Library files a track (its Album Artist and album). Reads use the stored result.
-- An Album is identified by its `AlbumId`; no query, command, or route identifies one by its title, Album Artist, or directory. A URL carries IDs, never a name or a directory.
-- A value goes in page state only if it cannot be in the URL, Back must undo it, and it belongs to the app frame. A modal that Back closes uses shallow routing, which SvelteKit describes.
-- One place builds the path of a track's file, and it keeps the path inside its Library directory.
-- The Backend never returns display strings. An unnamed album or artist is empty, and the Renderer labels it.
+- An Album is identified by its `AlbumId`. No query, command, or route identifies an Album by its title, Album Artist, or directory. A URL carries IDs. It never carries a name or a directory.
+- A value goes in page state only if it cannot go in the URL, Back must undo it, and it belongs to the app frame. A modal that Back closes uses shallow routing. The SvelteKit documentation describes shallow routing.
+- One place builds the path of a track's file. That place keeps the path inside its Library directory.
+- The Backend never returns display strings. An unnamed album or artist returns empty. The Renderer adds the label.
 - Renderer dependencies flow one way: routes, then components, then the Renderer app, then the Renderer domains, then the shared layers (ui, utils, native). A Renderer domain does not import another Renderer domain.
 - Only the native adapter imports Tauri packages.
-- Shared controls give defaults only. Styling that belongs to one Renderer domain stays in that domain.
+- Shared controls set defaults only. Styling that belongs to one Renderer domain stays in that domain.

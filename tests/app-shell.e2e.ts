@@ -134,9 +134,9 @@ for (const width of [640, 767, 768, 1024, 1360, 1920]) {
       ).toBeLessThanOrEqual(12);
     }
 
-    // The Sleeve is a fixed, inset tile beside the title/artist — never edge-filling, and its
-    // size doesn't change with width. The signal path sits inside the dock, right-aligned under
-    // the volume row.
+    // The Sleeve is a fixed, inset tile beside the title and artist. It never fills the
+    // edge. Its size does not change with the width. The signal path sits inside the dock,
+    // right-aligned under the volume row.
     const signalPath = page.getByRole("group", { name: "Signal path" });
     expect(sleeveBox!.width).toBeCloseTo(64, 0);
     expect(sleeveBox!.height).toBeCloseTo(64, 0);
@@ -159,16 +159,15 @@ for (const width of [640, 767, 768, 1024, 1360, 1920]) {
       await expect(signalPath).toBeHidden();
     }
 
-    // Transport buttons and the lyrics/queue/volume icon row share one baseline (the primary
-    // row); the signal path sits on its own row below the icons, so it must not pull that
-    // shared baseline off-center the way one undivided, independently-centered column did.
+    // The transport buttons and the lyrics, queue, and volume icons share one baseline (the
+    // primary row). The signal path has its own row below the icons, so it does not move
+    // that baseline.
     const transportCenter = transportBox!.y + transportBox!.height / 2;
     const iconRowCenter = iconRowBox!.y + iconRowBox!.height / 2;
     expect(Math.abs(transportCenter - iconRowCenter)).toBeLessThanOrEqual(1);
 
-    // The transport grid's two side columns are equal width, so the transport controls land on
-    // the dock's true horizontal center regardless of how wide the identity block or volume
-    // controls are on either side — not just centered in the space left over after the Sleeve.
+    // The two side columns of the transport grid are equal width. So the transport controls
+    // center on the dock, whatever the width of the identity block or the volume controls.
     const transportHCenter = transportBox!.x + transportBox!.width / 2;
     const dockHCenter = dockBox!.x + dockBox!.width / 2;
     expect(Math.abs(transportHCenter - dockHCenter)).toBeLessThanOrEqual(2);

@@ -31,8 +31,8 @@ test("shows a plain progress line in the dock, never the waveform bars", async (
   await expect(seek.locator('[data-slot="waveform-baseline"]').first()).toBeVisible();
   await expect(seek.locator('[data-slot="waveform-bars"]')).toHaveCount(0);
 
-  // The dock never fetches or draws the waveform, even once one is available — only Now
-  // Playing does (see `PlaybackWaveformBand`'s `showWaveform` prop).
+  // The dock never fetches or draws the waveform, even when one is available. Only Now
+  // Playing does. See the `showWaveform` prop of `PlaybackWaveformBand`.
   await player.publishWaveform();
   await expect(seek).toHaveAttribute("data-ready", "false");
   await expect(seek.locator('[data-slot="waveform-bars"]')).toHaveCount(0);
