@@ -12,6 +12,7 @@ pub(crate) mod player;
 
 use std::sync::Arc;
 
+use anyhow::Context;
 use backend::{app::BackendApp, errors::CommandError};
 
 use crate::AppState;
@@ -20,60 +21,44 @@ use crate::AppState;
 /// the playback worker or the filesystem goes through here, so none runs on the main thread.
 pub(crate) async fn blocking<T: Send + 'static>(
     state: &tauri::State<'_, AppState>,
-    work: impl FnOnce(&BackendApp) -> backend::Result<T> + Send + 'static,
+    work: impl FnOnce(&BackendApp) -> anyhow::Result<T> + Send + 'static,
 ) -> Result<T, CommandError> {
     let backend = Arc::clone(&state.backend);
-    match tauri::async_runtime::spawn_blocking(move || work(&backend)).await {
-        Ok(result) => result.map_err(command_error),
-        Err(cause) => {
-            log::warn!("host.task.failed cause={cause}");
-            Err(CommandError::Internal)
+    let result = tauri::async_runtime::spawn_blocking(move || work(&backend))
+        .await
+        .context("the command task failed")
+        .and_then(|result| result);
+    respond(result)
+}
+
+/// The answer to the Renderer. The code is all that it gets. The failure is logged here, once,
+/// with its chain of causes: `warn` when it is internal, `debug` when the Renderer can act on it.
+pub(crate) fn respond<T>(result: anyhow::Result<T>) -> Result<T, CommandError> {
+    result.map_err(|error| {
+        let code = CommandError::of(&error);
+        if code == CommandError::Internal {
+            log::warn!("host.command.failed code={code:?} cause={error:#}");
+        } else {
+            log::debug!("host.command.failed code={code:?} cause={error:#}");
         }
-    }
-}
-
-/// The code a Backend failure answers the Renderer with. The failure is logged here, once, with
-/// its chain of causes: `warn` when it is internal, `debug` when the Renderer can act on it.
-fn command_error(error: backend::Error) -> CommandError {
-    let code = error.code();
-    let chain = cause_chain(&error);
-    if code == CommandError::Internal {
-        log::warn!("host.command.failed code={code:?} cause={chain}");
-    } else {
-        log::debug!("host.command.failed code={code:?} cause={chain}");
-    }
-    code
-}
-
-/// The error's text, then the text of each cause below it.
-fn cause_chain(error: &dyn std::error::Error) -> String {
-    let mut chain = error.to_string();
-    let mut cause = error.source();
-    while let Some(next) = cause {
-        chain.push_str(": ");
-        chain.push_str(&next.to_string());
-        cause = next.source();
-    }
-    chain
+        code
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::command_error;
-    use backend::{Error, errors::CommandError};
+    use super::respond;
+    use backend::errors::CommandError;
 
     #[test]
     fn an_io_failure_is_internal() {
-        let error = Error::Io(std::io::Error::other("disk"));
+        let error = anyhow::Error::from(std::io::Error::other("disk"));
 
-        assert_eq!(command_error(error), CommandError::Internal);
+        assert_eq!(respond::<()>(Err(error)), Err(CommandError::Internal));
     }
 
     #[test]
-    fn a_failure_the_renderer_can_act_on_keeps_its_code() {
-        assert_eq!(
-            command_error(Error::DuplicateDirectory),
-            CommandError::DuplicateDirectory
-        );
+    fn a_success_passes_through() {
+        assert_eq!(respond(Ok(7)), Ok(7));
     }
 }

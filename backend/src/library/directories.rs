@@ -2,9 +2,9 @@
 //! (the sync worker) is the only caller of `add`, `set_enabled`, `remove` and `delete_missing`.
 
 use super::{albums, database::Database, models::LibraryDirectory};
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::{DirectoryId, directory_id_column};
+use crate::library::errors::LibraryError;
+use crate::library::errors::Result;
 use rusqlite::{Connection, params};
 use std::path::Path;
 
@@ -35,31 +35,31 @@ pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryDirectory>> {
 /// already registered.
 pub(crate) fn add(database: &Database, input: &str) -> Result<LibraryDirectory> {
     if input.trim().is_empty() {
-        return Err(Error::InvalidDirectory(None));
+        return Err(LibraryError::InvalidDirectory(None));
     }
     let canonical =
-        dunce::canonicalize(input).map_err(|cause| Error::InvalidDirectory(Some(cause)))?;
+        dunce::canonicalize(input).map_err(|cause| LibraryError::InvalidDirectory(Some(cause)))?;
     if !canonical.is_dir() {
-        return Err(Error::InvalidDirectory(None));
+        return Err(LibraryError::InvalidDirectory(None));
     }
     let path = canonical
         .to_str()
-        .ok_or(Error::InvalidDirectory(None))?
+        .ok_or(LibraryError::InvalidDirectory(None))?
         .to_owned();
     // Compared canonically: the data directory may be reached through a link or a drive alias.
     let data_dir =
         dunce::canonicalize(database.data_dir()).unwrap_or_else(|_| database.data_dir().into());
     if data_dir.starts_with(&canonical) {
-        return Err(Error::DirectoryContainsDataDirectory);
+        return Err(LibraryError::DirectoryContainsDataDirectory);
     }
     let reader = database.read()?;
     for directory in list(&reader)? {
         let other = Path::new(&directory.path);
         if other == canonical {
-            return Err(Error::DuplicateDirectory);
+            return Err(LibraryError::DuplicateDirectory);
         }
         if canonical.starts_with(other) || other.starts_with(&canonical) {
-            return Err(Error::OverlappingDirectory);
+            return Err(LibraryError::OverlappingDirectory);
         }
     }
     let connection = database.write()?;

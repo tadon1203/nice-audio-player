@@ -17,6 +17,7 @@ specta = { workspace = true }
 specta-typescript = { workspace = true }
 lrc_rs = "1.0"
 rand = "0.9"
+anyhow = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }
 thiserror = { workspace = true }

@@ -12,9 +12,9 @@ use super::{
         TrackSortKey, TrackState, TrackSummary,
     },
 };
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, TrackId, album_id_column, track_id_column};
+use crate::library::errors::LibraryError;
+use crate::library::errors::Result;
 use crate::library::media::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::HashMap;
@@ -176,7 +176,7 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
 fn ensure_playable(state: TrackState) -> Result<()> {
     match state {
         TrackState::Playable => Ok(()),
-        TrackState::Missing | TrackState::Unsupported => Err(Error::TrackUnavailable),
+        TrackState::Missing | TrackState::Unsupported => Err(LibraryError::TrackUnavailable),
     }
 }
 
@@ -255,7 +255,7 @@ fn select_playable(
 ) -> Result<PlaybackSelection> {
     if let Some(requested) = start_track_id {
         let Some(row) = rows.iter().find(|row| row.track_id == requested) else {
-            return Err(Error::TrackNotFound);
+            return Err(LibraryError::TrackNotFound);
         };
         ensure_playable(row.state)?;
     }
@@ -268,7 +268,7 @@ fn select_playable(
         track_ids.push(row.track_id);
     }
     if track_ids.is_empty() {
-        return Err(Error::TrackUnavailable);
+        return Err(LibraryError::TrackUnavailable);
     }
     Ok(PlaybackSelection {
         track_ids,
@@ -307,7 +307,7 @@ pub(crate) fn location_of(database: &Database, id: TrackId) -> Result<TrackLocat
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?
-        .ok_or(Error::TrackNotFound)?;
+        .ok_or(LibraryError::TrackNotFound)?;
     Ok(TrackLocation::new(
         &directory,
         &relative,
@@ -370,7 +370,7 @@ impl Library {
                 },
             )
             .optional()?
-            .ok_or(Error::TrackNotFound)?;
+            .ok_or(LibraryError::TrackNotFound)?;
         Ok(properties)
     }
 
@@ -391,7 +391,7 @@ impl Library {
             params![album_id.to_hex()],
         )?;
         if rows.is_empty() {
-            return Err(Error::AlbumNotFound);
+            return Err(LibraryError::AlbumNotFound);
         }
         select_playable(&rows, start_track_id)
     }
@@ -406,10 +406,10 @@ impl Library {
             params![track_id.rowid()],
         )?;
         let Some(row) = rows.into_iter().next() else {
-            return Err(Error::TrackNotFound);
+            return Err(LibraryError::TrackNotFound);
         };
         let counts = album_counts(&connection, [row.album_id.to_hex()])?;
-        playable_track(row, &counts, true)?.ok_or(Error::TrackUnavailable)
+        playable_track(row, &counts, true)?.ok_or(LibraryError::TrackUnavailable)
     }
 
     /// The tracks with these ids, in the order given: `None` for an id that is unknown, not
@@ -500,7 +500,7 @@ fn collect_rows(
 ) -> Result<Vec<PlaybackRow>> {
     let mut statement = connection.prepare(sql)?;
     let rows = statement.query_map(params, playback_row)?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 fn collect_selection(
@@ -510,5 +510,5 @@ fn collect_selection(
 ) -> Result<Vec<SelectionRow>> {
     let mut statement = connection.prepare(sql)?;
     let rows = statement.query_map(params, selection_row)?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }

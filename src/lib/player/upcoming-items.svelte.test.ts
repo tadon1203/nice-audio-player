@@ -1,6 +1,7 @@
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type QueueItem, UPCOMING_WINDOW } from "#lib/native/bindings";
+import type { Result } from "#lib/native/result";
 import type { Player } from "./player.svelte";
 import { UpcomingItems } from "./upcoming-items.svelte";
 
@@ -69,7 +70,7 @@ function mount(playback: Player, start: number, end: number): UpcomingItems {
 
 describe("UpcomingItems", () => {
   it("reads the chunk on screen and returns its items", async () => {
-    const fetch = vi.fn(async (offset: number) => windowAt(offset));
+    const fetch = vi.fn(async (offset: number) => ({ ok: true as const, value: windowAt(offset) }));
     const upcoming = mount(fakePlayback(250, fetch), UPCOMING_WINDOW, UPCOMING_WINDOW);
 
     await vi.advanceTimersByTimeAsync(0);
@@ -80,9 +81,9 @@ describe("UpcomingItems", () => {
 
   it("retries a failed chunk after a delay until it arrives", async () => {
     const fetch = vi
-      .fn<(offset: number, limit: number) => Promise<ReturnType<typeof windowAt>>>()
-      .mockRejectedValueOnce(new Error("unavailable"))
-      .mockImplementation(async (offset) => windowAt(offset));
+      .fn<(offset: number, limit: number) => Promise<Result<ReturnType<typeof windowAt>>>>()
+      .mockResolvedValueOnce({ ok: false, error: { code: "internal" } })
+      .mockImplementation(async (offset) => ({ ok: true, value: windowAt(offset) }));
     const upcoming = mount(fakePlayback(250, fetch), UPCOMING_WINDOW, UPCOMING_WINDOW);
 
     await vi.advanceTimersByTimeAsync(0);
@@ -95,9 +96,10 @@ describe("UpcomingItems", () => {
   });
 
   it("stops retrying after the last attempt and leaves the rows empty", async () => {
-    const fetch = vi.fn(async (): Promise<ReturnType<typeof windowAt>> => {
-      throw new Error("unavailable");
-    });
+    const fetch = vi.fn(async (): Promise<Result<ReturnType<typeof windowAt>>> => ({
+      ok: false,
+      error: { code: "internal" },
+    }));
     const upcoming = mount(fakePlayback(250, fetch), UPCOMING_WINDOW, UPCOMING_WINDOW);
 
     await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS * 10);
@@ -107,7 +109,7 @@ describe("UpcomingItems", () => {
   });
 
   it("reads the window again when the queue version changes", async () => {
-    const fetch = vi.fn(async (offset: number) => windowAt(offset));
+    const fetch = vi.fn(async (offset: number) => ({ ok: true as const, value: windowAt(offset) }));
     const { playback, bumpVersion } = versionedPlayback(250, fetch);
     mount(playback, UPCOMING_WINDOW, UPCOMING_WINDOW);
     await vi.advanceTimersByTimeAsync(0);

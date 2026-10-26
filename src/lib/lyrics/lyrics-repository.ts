@@ -2,6 +2,7 @@ import { queryOptions, skipToken, type QueryClient } from "@tanstack/svelte-quer
 import type { lyrics } from "#lib/native/commands";
 import { type TrackId } from "#lib/native/bindings";
 import { type Lyrics } from "#lib/native/bindings";
+import type { Result } from "#lib/native/result";
 import type {
   CreateQueryOptions,
   InitialDataFunction,
@@ -21,16 +22,17 @@ export class LyricsRepository {
   }
 
   public trackOptions(trackId: TrackId | null): CreateQueryOptions<
-    Lyrics,
+    Result<Lyrics>,
     Error,
-    Lyrics,
+    Result<Lyrics>,
     (number | "lyrics" | null)[]
   > & {
-    initialData?: Lyrics | InitialDataFunction<Lyrics> | undefined;
-  } & QueryKeyWithDataTag<(number | "lyrics" | null)[], Lyrics, Error> {
+    initialData?: Result<Lyrics> | InitialDataFunction<Result<Lyrics>> | undefined;
+  } & QueryKeyWithDataTag<(number | "lyrics" | null)[], Result<Lyrics>, Error> {
     return queryOptions({
       queryKey: [...LyricsRepository.#all, trackId],
-      queryFn: trackId === null ? skipToken : (): Promise<Lyrics> => this.#lyrics.track(trackId),
+      queryFn:
+        trackId === null ? skipToken : (): Promise<Result<Lyrics>> => this.#lyrics.track(trackId),
       // Stay fresh until a library scan finishes (`refresh`), which is when an added or edited .lrc
       // file can be noticed.
       staleTime: Infinity,

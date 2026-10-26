@@ -48,6 +48,7 @@ beforeEach(() => {
   mocks.connect.mockReset();
   mocks.connect.mockImplementation(async (onMessage: (message: BackendMessage) => void) => {
     for (const message of initial) onMessage(message);
+    return { ok: true, value: undefined };
   });
 });
 

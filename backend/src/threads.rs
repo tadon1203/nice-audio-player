@@ -2,7 +2,6 @@
 //! request that waits for that answer, the handle that joins a worker thread, and the priority
 //! that keeps analysis out of playback's way.
 
-use crate::errors::Error;
 use log::error;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -25,23 +24,26 @@ impl Cancellation {
 }
 
 /// Where a worker answers one command. The answer is sent once, by the worker.
-pub type Reply<T> = SyncSender<crate::Result<T>>;
+pub type Reply<T, E> = SyncSender<Result<T, E>>;
 
-/// Answers a command, if its caller is still waiting. A caller that has gone away is logged, not
-/// an error.
-pub fn answer<T>(reply: &Reply<T>, result: crate::Result<T>) {
+/// Answers a command, if its caller is still waiting. A caller that has gone away is not an error.
+pub fn answer<T, E>(reply: &Reply<T, E>, result: Result<T, E>) {
     let _ = reply.send(result);
 }
 
 /// Sends a command with its reply and waits for the answer. A worker that has stopped, before or
-/// while it answers, is `Error::WorkerStopped`.
-pub fn request<C, T>(sender: &Sender<C>, command: impl FnOnce(Reply<T>) -> C) -> crate::Result<T> {
+/// while it answers, is an internal error of the domain.
+pub fn request<C, T, E: From<anyhow::Error>>(
+    sender: &Sender<C>,
+    command: impl FnOnce(Reply<T, E>) -> C,
+) -> Result<T, E> {
     let (reply, answer) = sync_channel(1);
-    sender
-        .send(command(reply))
-        .ok()
-        .ok_or(Error::WorkerStopped)?;
-    answer.recv().ok().ok_or(Error::WorkerStopped)?
+    sender.send(command(reply)).map_err(|_| worker_stopped())?;
+    answer.recv().map_err(|_| worker_stopped())?
+}
+
+fn worker_stopped<E: From<anyhow::Error>>() -> E {
+    anyhow::anyhow!("a worker has stopped").into()
 }
 
 /// A named thread that its owner joins: once in `join`, and again when the handle is dropped.
@@ -100,7 +102,7 @@ pub fn run_in_background() {}
 #[cfg(test)]
 mod tests {
     use super::{Reply, WorkerThread, request};
-    use crate::errors::Error;
+    use crate::player::errors::PlayerError;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc::channel;
@@ -108,7 +110,7 @@ mod tests {
 
     #[test]
     fn request_returns_the_answer_the_worker_sends() {
-        let (sender, receiver) = channel::<Reply<u8>>();
+        let (sender, receiver) = channel::<Reply<u8, PlayerError>>();
         thread::spawn(move || receiver.recv().unwrap().send(Ok(7)).unwrap());
 
         assert_eq!(request(&sender, |reply| reply).ok(), Some(7));
@@ -116,40 +118,40 @@ mod tests {
 
     #[test]
     fn request_passes_on_the_error_the_worker_answers_with() {
-        let (sender, receiver) = channel::<Reply<u8>>();
+        let (sender, receiver) = channel::<Reply<u8, PlayerError>>();
         thread::spawn(move || {
             receiver
                 .recv()
                 .unwrap()
-                .send(Err(Error::QueueItemNotFound))
+                .send(Err(PlayerError::QueueItemNotFound))
                 .unwrap();
         });
 
         assert!(matches!(
             request(&sender, |reply| reply),
-            Err(Error::QueueItemNotFound)
+            Err(PlayerError::QueueItemNotFound)
         ));
     }
 
     #[test]
-    fn request_is_worker_stopped_when_the_receiver_is_dropped() {
-        let (sender, receiver) = channel::<Reply<u8>>();
+    fn request_is_internal_when_the_receiver_is_dropped() {
+        let (sender, receiver) = channel::<Reply<u8, PlayerError>>();
         drop(receiver);
 
         assert!(matches!(
             request(&sender, |reply| reply),
-            Err(Error::WorkerStopped)
+            Err(PlayerError::Internal(_))
         ));
     }
 
     #[test]
-    fn request_is_worker_stopped_when_the_worker_drops_the_reply() {
-        let (sender, receiver) = channel::<Reply<u8>>();
+    fn request_is_internal_when_the_worker_drops_the_reply() {
+        let (sender, receiver) = channel::<Reply<u8, PlayerError>>();
         thread::spawn(move || drop(receiver.recv().unwrap()));
 
         assert!(matches!(
             request(&sender, |reply| reply),
-            Err(Error::WorkerStopped)
+            Err(PlayerError::Internal(_))
         ));
     }
 

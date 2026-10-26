@@ -1,4 +1,5 @@
 import type { Player } from "#lib/player/player.svelte";
+import type { Result } from "#lib/native/result";
 import type { NoticeCenter } from "./notice-center.svelte";
 
 /** Clears the upcoming queue and offers to undo it. */
@@ -11,7 +12,9 @@ export class ClearUpcoming {
     this.#notices = notices;
   }
 
-  public async run(): Promise<void> {
-    if (await this.#playback.playerClearQueue()) this.#notices.offerUndo("Upcoming cleared");
+  public async run(): Promise<Result<boolean>> {
+    const outcome = await this.#playback.playerClearQueue();
+    if (outcome.ok && outcome.value) this.#notices.offerUndo("Upcoming cleared");
+    return outcome;
   }
 }

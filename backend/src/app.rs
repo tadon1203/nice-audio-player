@@ -24,9 +24,8 @@ pub use crate::player::{
 };
 pub use crate::settings::{Appearance, AppearancePatch};
 
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
+use crate::library::errors::LibraryError;
 use crate::library::{
     Library,
     artwork::{self},
@@ -35,6 +34,7 @@ use crate::lyrics;
 use crate::messages::BackendMessage;
 use crate::player::{Player, waveform::Waveforms};
 use crate::settings::{self, SettingsStore};
+use anyhow::Result;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, mpsc::Sender},
@@ -110,45 +110,45 @@ impl BackendApp {
     /// caller restarts the app, and the next start rescans the directories.
     pub fn reset_library(&self) -> Result<()> {
         self.library.shutdown();
-        crate::library::database::reset(&self.data_dir)
+        Ok(crate::library::database::reset(&self.data_dir)?)
     }
 
     /// Adds a directory. A path that is not valid Unicode is refused by the Library, not changed.
     pub fn add_directory(&self, path: PathBuf) -> Result<()> {
-        self.library.add_directory(path)
+        Ok(self.library.add_directory(path)?)
     }
 
     pub fn set_directory_enabled(&self, id: DirectoryId, enabled: bool) -> Result<()> {
-        self.library.set_directory_enabled(id, enabled)
+        Ok(self.library.set_directory_enabled(id, enabled)?)
     }
 
     pub fn remove_directory(&self, id: DirectoryId) -> Result<()> {
-        self.library.remove_directory(id)
+        Ok(self.library.remove_directory(id)?)
     }
 
     /// Deletes the Missing tracks from the Library. Never touches a source file.
     pub fn delete_missing_tracks(&self) -> Result<()> {
-        self.library.delete_missing_tracks()
+        Ok(self.library.delete_missing_tracks()?)
     }
 
     pub fn start_scan(&self) -> Result<()> {
-        self.library.start_scan()
+        Ok(self.library.start_scan()?)
     }
 
     pub fn cancel_scan(&self) -> Result<()> {
-        self.library.cancel_scan()
+        Ok(self.library.cancel_scan()?)
     }
 
     pub fn list_tracks(&self, request: &ListRequest<TrackSortKey>) -> Result<Page<TrackRow>> {
-        self.library.list_tracks(request)
+        Ok(self.library.list_tracks(request)?)
     }
 
     pub fn list_albums(&self, request: &ListRequest<AlbumSortKey>) -> Result<Page<AlbumRow>> {
-        self.library.list_albums(request)
+        Ok(self.library.list_albums(request)?)
     }
 
     pub fn list_artists(&self, request: &ListRequest<ArtistSortKey>) -> Result<Page<ArtistRow>> {
-        self.library.list_artists(request)
+        Ok(self.library.list_artists(request)?)
     }
 
     /// The letter index of the Tracks list: how many names start under each label, in list order.
@@ -156,33 +156,33 @@ impl BackendApp {
         &self,
         request: &ListRequest<TrackSortKey>,
     ) -> Result<Vec<LetterIndexEntry>> {
-        self.library.track_index(request)
+        Ok(self.library.track_index(request)?)
     }
 
     pub fn album_index(
         &self,
         request: &ListRequest<AlbumSortKey>,
     ) -> Result<Vec<LetterIndexEntry>> {
-        self.library.album_index(request)
+        Ok(self.library.album_index(request)?)
     }
 
     pub fn artist_index(
         &self,
         request: &ListRequest<ArtistSortKey>,
     ) -> Result<Vec<LetterIndexEntry>> {
-        self.library.artist_index(request)
+        Ok(self.library.artist_index(request)?)
     }
 
     pub fn album_by_id(&self, album_id: AlbumId) -> Result<AlbumDetails> {
-        self.library.album(album_id)
+        Ok(self.library.album(album_id)?)
     }
 
     pub fn album_tracks(&self, album_id: AlbumId) -> Result<Vec<AlbumTrackRow>> {
-        self.library.list_album_tracks(album_id)
+        Ok(self.library.list_album_tracks(album_id)?)
     }
 
     pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistRow> {
-        self.library.artist(artist_id)
+        Ok(self.library.artist(artist_id)?)
     }
 
     pub fn artist_albums(
@@ -190,11 +190,11 @@ impl BackendApp {
         artist_id: ArtistId,
         request: &ListRequest<ArtistAlbumSortKey>,
     ) -> Result<Page<AlbumRow>> {
-        self.library.list_artist_albums(artist_id, request)
+        Ok(self.library.list_artist_albums(artist_id, request)?)
     }
 
     pub fn track_properties(&self, track_id: TrackId) -> Result<TrackProperties> {
-        self.library.track_properties(track_id)
+        Ok(self.library.track_properties(track_id)?)
     }
 
     /// The track's file, for the Host to show in Explorer.
@@ -205,7 +205,7 @@ impl BackendApp {
 
     /// The accent color of the stored image at `path`, computed on first request and cached.
     pub fn artwork_accent(&self, path: &str) -> Result<Option<String>> {
-        self.library.artwork_accent(path)
+        Ok(self.library.artwork_accent(path)?)
     }
 
     // ---- lyrics ----
@@ -217,7 +217,7 @@ impl BackendApp {
             .playable_tracks(&[track_id])?
             .pop()
             .flatten()
-            .ok_or(Error::TrackUnavailable)?;
+            .ok_or(LibraryError::TrackUnavailable)?;
         Ok(lyrics::load(&track))
     }
 
@@ -249,66 +249,67 @@ impl BackendApp {
         if let Some(requested) = start_track_id {
             library.playback_for_track(requested)?;
         }
-        self.player
-            .play_queue(selection.track_ids, selection.start_index)
+        Ok(self
+            .player
+            .play_queue(selection.track_ids, selection.start_index)?)
     }
 
     pub fn pause(&self) -> Result<()> {
-        self.player.pause()
+        Ok(self.player.pause()?)
     }
 
     pub fn resume(&self) -> Result<()> {
-        self.player.resume()
+        Ok(self.player.resume()?)
     }
 
     pub fn previous(&self) -> Result<()> {
-        self.player.previous()
+        Ok(self.player.previous()?)
     }
 
     pub fn next(&self) -> Result<()> {
-        self.player.next()
+        Ok(self.player.next()?)
     }
 
     pub fn seek(&self, position_ms: u64) -> Result<()> {
-        self.player.seek(position_ms)
+        Ok(self.player.seek(position_ms)?)
     }
 
     pub fn set_volume(&self, volume: NormalizedVolume) -> Result<()> {
-        self.player.set_volume(volume)
+        Ok(self.player.set_volume(volume)?)
     }
 
     pub fn set_muted(&self, muted: bool) -> Result<()> {
-        self.player.set_muted(muted)
+        Ok(self.player.set_muted(muted)?)
     }
 
     pub fn set_output_selection(&self, selection: AudioOutputSelection) -> Result<()> {
-        self.player.set_output_selection(selection)
+        Ok(self.player.set_output_selection(selection)?)
     }
 
     /// The output devices the system has. Blocking: the device query waits on the audio host.
     pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>> {
-        crate::player::output::list_output_devices()
+        Ok(crate::player::output::list_output_devices()?)
     }
 
     pub fn set_repeat_mode(&self, mode: RepeatMode) -> Result<()> {
-        self.player.set_repeat_mode(mode)
+        Ok(self.player.set_repeat_mode(mode)?)
     }
 
     pub fn set_shuffle(&self, enabled: bool) -> Result<()> {
-        self.player.set_shuffle(enabled)
+        Ok(self.player.set_shuffle(enabled)?)
     }
 
     pub fn remove_queue_item(&self, id: QueueItemId) -> Result<()> {
-        self.player.remove_queue_item(id)
+        Ok(self.player.remove_queue_item(id)?)
     }
 
     pub fn move_queue_item(&self, id: QueueItemId, to: usize) -> Result<()> {
-        self.player.move_queue_item(id, to)
+        Ok(self.player.move_queue_item(id, to)?)
     }
 
     /// Makes an upcoming queue item current and plays it.
     pub fn play_queue_item(&self, id: QueueItemId) -> Result<()> {
-        self.player.play_queue_item(id)
+        Ok(self.player.play_queue_item(id)?)
     }
 
     /// Adds a library track to the queue: right after the current one (`next`) or at the end.
@@ -316,21 +317,21 @@ impl BackendApp {
     pub fn enqueue_track(&self, track_id: TrackId, next: bool) -> Result<()> {
         let library = &self.library;
         let track = library.playback_for_track(track_id)?;
-        self.player.enqueue(track.id(), next)
+        Ok(self.player.enqueue(track.id(), next)?)
     }
 
     pub fn clear_queue(&self) -> Result<()> {
-        self.player.clear_queue()
+        Ok(self.player.clear_queue()?)
     }
 
     /// Puts back the queue the last replacement or Clear upcoming took away.
     pub fn restore_previous_queue(&self) -> Result<()> {
-        self.player.restore_previous_queue()
+        Ok(self.player.restore_previous_queue()?)
     }
 
     /// Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
     /// state does not carry.
     pub fn queue_window(&self, offset: u32, limit: u32) -> Result<QueueWindow> {
-        self.player.queue_window(offset, limit)
+        Ok(self.player.queue_window(offset, limit)?)
     }
 }

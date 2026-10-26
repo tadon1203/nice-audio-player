@@ -13,7 +13,7 @@ These rules cover code and documentation that lint cannot check. Do not write a 
 
 ## Principles
 
-- A Command changes state. It answers only whether it was accepted. A Query reads data. It changes nothing. Neither one answers with Backend state. The Backend pushes that state.
+- A Command changes state. It answers at once, with `Ok` or with an Error code. A Query reads data. It changes nothing. Neither one answers with Backend state. The Backend pushes that state. See [Invariants](../ARCHITECTURE.md#invariants).
 - Each Backend state has one owner thread. The owner holds the state. It sends the whole value when the value changes. No other thread reads the state back.
 - Remove a forwarding layer. A forwarding layer is a function, class, or module that only passes its arguments on.
 - Do not add a trait or interface that has one real implementation. A seam is real only when something varies across it.
@@ -77,15 +77,23 @@ Casing and conversion names follow the standards below. The Rust compiler lints 
 - Use plain indexing where an out-of-range index is a bug.
 - Do not add a type, a `Result` or `Option` return, an error variant, or a validation step that only expresses a failure that would be a bug.
 - Validate data once, where it enters the program. Input comes from other processes, files, databases, and the operating system. Pass the validated type inside the program. Trust it there.
-- In TypeScript, a failure is a typed exception. Do not write `null` returns, `?.` chains, or `??` defaults for a value that cannot be missing.
+- The Renderer throws no exception for a Backend failure. The native adapter returns a Result: `{ ok: true, value }` or `{ ok: false, error }`. A failed Command shows a notice. A failed Query shows the text of its Error code. An empty fallback is allowed only where an empty view is still correct. The Renderer chooses the user text from the Error code.
+- Do not write `null` returns, `?.` chains, or `??` defaults for a value that cannot be missing.
 
 ## Rust
 
 - Do not write `unreachable!`. Remove the impossible branch with the types. Split the enum, or carry a validated value.
-- The Backend has one error type, `backend::Error`, which derives `thiserror::Error`. Do not use `anyhow`.
-- A function that can fail returns `crate::Result<T>` and uses `?`. Keep the cause with `#[from]` or `#[source]`. Do not re-map an error on the way up.
-- A separate error enum stays only where its module matches on its variants. Each such enum converts into `Error` with `#[from]` where it leaves the module.
-- The Host command boundary converts a returned Backend error to a `CommandError` and logs it once, with its chain of causes. No other code logs a returned Backend error.
+- Each Backend domain has its own error type. It derives `thiserror::Error`. The domains are `LibraryError` and `PlayerError`. Do not write one error type that joins all domains.
+- A variant of a domain error exists only for a branch that a caller matches, such as a missing item or a duplicate Library directory. Every other failure goes into one variant, `Internal(#[from] anyhow::Error)`, in each domain error type.
+- Inside a domain, a failure that nobody matches uses `anyhow::Result` and `.context("...")`. A domain with no matched branch has no error type. It returns `anyhow::Result`.
+- `PlayerError` has the variant `Library(#[from] LibraryError)`.
+- An error enum that a module matches on for another reason, such as a decode, output, or pipeline error that maps to a playback failure code, stays an enum. It keeps its cause with `#[source]`.
+- The methods of `BackendApp` return `anyhow::Result<T>`.
+- `contain` turns a panic from a third-party parser into an `anyhow::Error`.
+- The message of an error (`#[error("...")]`, `.context(...)`) is English diagnostic text for the log. The Backend never builds a string for the user. No table maps errors to text.
+- Do not re-map an error on the way up. Keep its cause with `?`, `#[from]`, or `#[source]`.
+- All Host code (`src-tauri`) uses `anyhow::Result`. Do not use `expect` or `unwrap` for a failure that can happen. Do not write an `if let Err` that swallows an error. Return the error with `?` and `.context(..)` up to `main`, which exits the process.
+- One small wrapper at the Host command boundary converts an `anyhow::Error` into a `CommandError`, which holds only a code. It finds the code by downcasting to the domain error types. Every other failure has the code `internal`. The wrapper logs the failure once, in this form: `host.command.failed code=<code> cause=<error chain, with {:#}>`. It logs at `warn` for `internal` and at `debug` for other codes. No other code logs a returned error.
 - A failure that a worker handles is logged where the worker handles it. A `From` impl never logs.
 - Do not write `let _ = <Result>`. Log the error, or handle it. The exception is a send to a channel whose receiver may be gone: write `let _ = sender.send(..);` with no log.
 - A thread that the OS cannot start panics. Use `expect` and give the reason.

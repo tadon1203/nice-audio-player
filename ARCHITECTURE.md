@@ -52,7 +52,7 @@ The system has three layers. Control moves in one direction. The terms are defin
 
 Communication has two directions. A request gets an answer. The Backend pushes its state.
 
-- **Renderer → Backend:** a command or a query. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`). The Host calls the Backend. A command answers only whether the Backend accepted it. A query answers with data, such as a window of the queue.
+- **Renderer → Backend:** a command or a query. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`). The Host calls the Backend. A command answers only whether the Backend accepted it, or refused it with an Error code. A query answers with data, such as a window of the queue, or with an Error code.
 - **Backend → Renderer:** one channel. It sends `BackendMessage` on the `app_connect` channel. The channel carries four kinds of message:
   1. **State:** the whole value of each state. The states are the transport (`player`), the queue (`queue`, with its version), the Library (its availability, its version, its directories, and its scan), the waveform, and the appearance. The owner of a state sends it when the state changes. The Library sends the Unavailable state itself when its database did not open. It then runs no worker and answers each command with `LibraryUnavailable`.
   2. **Position:** the playing position. The Backend sends it once a second while a track plays. It also sends it after a seek or a start.
@@ -91,7 +91,11 @@ On connect, the Backend first sends the latest value of each state. So the Rende
 - The IPC contract is defined once, in the Backend. The generated Renderer bindings come from it. Nobody edits the bindings by hand.
 - A Host command that blocks does not run on the main thread.
 - A Backend service does not know about the Host. The Player reads tracks from the Library. It writes its preferences to the settings store. Each state value has one owner thread. That thread holds the value and sends the whole value when it changes. A position or a backend event goes the same way, on the same channel.
-- A command never answers with Backend state. The state that a command causes arrives as a push.
+- A command never answers with Backend state. It answers only with `Ok` or with an Error code. The state that a command causes arrives as a push.
+- A command answers at once. It answers `Ok` when the Backend accepted it. It answers with an Error code when the Backend refused it, such as for a bad input.
+- A failure after the Backend accepted a command arrives as state. It is not the answer to the command.
+- A query answers with its data or with an Error code. It never answers with Backend state.
+- The Backend sends no text for the user. The Renderer maps each Error code to text.
 - The Host reaches the Backend only through `BackendApp` and its public modules.
 - The Renderer reads and writes settings through the IPC of the area that owns them. Appearance is read from `app_connect` and written with `appearanceUpdate`. Player preferences are read and written through the player commands.
 - The Backend pushes a state whole. Each push replaces the value that the Renderer holds.

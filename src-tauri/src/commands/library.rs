@@ -195,11 +195,10 @@ pub(crate) async fn library_reveal_track(
     track_id: TrackId,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    let path = blocking(&state, move |backend| backend.track_file(track_id)).await?;
-    tauri::async_runtime::spawn_blocking(move || reveal_in_file_manager(&path))
-        .await
-        .inspect_err(|cause| log::warn!("host.library.reveal_task_failed cause={cause}"))
-        .map_err(|_| CommandError::Internal)?
+    blocking(&state, move |backend| {
+        reveal_in_file_manager(&backend.track_file(track_id)?)
+    })
+    .await
 }
 
 #[tauri::command]

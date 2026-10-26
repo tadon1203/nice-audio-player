@@ -1,4 +1,4 @@
-import { type LetterIndexEntry } from "#lib/native/bindings";
+import { type CommandError, type LetterIndexEntry } from "#lib/native/bindings";
 import type { LibraryViewState } from "./library-catalog.svelte";
 
 export interface LibraryPresentationMeta {
@@ -21,11 +21,11 @@ export interface WorkspaceCatalog<Item> {
   updating: boolean;
   items: readonly Item[];
   totalCount: number | null;
-  error: unknown;
+  error: CommandError | null;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
-  fetchNextPage: () => Promise<unknown>;
-  refetch: () => Promise<unknown>;
+  fetchNextPage: () => Promise<void>;
+  refetch: () => Promise<void>;
   /** The letter index of the list's order; empty when the sort has none. */
   index: readonly LetterIndexEntry[];
 }

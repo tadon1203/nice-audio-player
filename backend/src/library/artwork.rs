@@ -6,8 +6,8 @@
 //! follow from the hash and the MIME type, so the database holds neither.
 
 use super::{database::Database, sql_text_enum};
-use crate::Result;
 use crate::ids::ArtworkHash;
+use anyhow::{Context, Result};
 use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
@@ -173,7 +173,7 @@ pub(crate) fn store(
     let has_thumbnail = match thumbnail(bytes) {
         Ok(encoded) => write_atomically(&directory.join(thumbnail_path(&hash)), &encoded).is_ok(),
         Err(cause) => {
-            log::debug!("library.artwork.thumbnail_failed cause={cause}");
+            log::debug!("library.artwork.thumbnail_failed cause={cause:#}");
             false
         }
     };
@@ -186,12 +186,12 @@ pub(crate) fn store(
 }
 
 /// The 512-pixel JPEG of an image. An image smaller than that is not enlarged.
-fn thumbnail(bytes: &[u8]) -> Result<Vec<u8>, String> {
+fn thumbnail(bytes: &[u8]) -> Result<Vec<u8>> {
     let decoded = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
-        .map_err(|cause| cause.to_string())?
+        .context("the image format cannot be read")?
         .decode()
-        .map_err(|cause| cause.to_string())?;
+        .context("the image cannot be decoded")?;
     let decoded = if decoded.width() > THUMBNAIL_EDGE || decoded.height() > THUMBNAIL_EDGE {
         decoded.resize(THUMBNAIL_EDGE, THUMBNAIL_EDGE, FilterType::Lanczos3)
     } else {
@@ -200,7 +200,7 @@ fn thumbnail(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut encoded = Vec::new();
     JpegEncoder::new_with_quality(&mut encoded, THUMBNAIL_QUALITY)
         .encode_image(&decoded.to_rgb8())
-        .map_err(|cause| cause.to_string())?;
+        .context("the thumbnail cannot be encoded")?;
     Ok(encoded)
 }
 
@@ -359,7 +359,7 @@ fn stored_rows(
                 row.get::<_, bool>(2)?,
             ))
         })?
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     // A stored hash was validated when it was written, so one that fails here is skipped.
     Ok(rows
         .into_iter()

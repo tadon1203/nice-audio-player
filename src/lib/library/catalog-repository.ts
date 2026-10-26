@@ -17,6 +17,7 @@ import {
   type TrackId,
 } from "#lib/native/bindings";
 import type { library } from "#lib/native/commands";
+import type { Result } from "#lib/native/result";
 import { LibraryQueryKeys } from "./library-query-keys";
 import { type TrackProperties } from "#lib/native/bindings";
 import type {
@@ -88,32 +89,41 @@ export class CatalogRepository {
     request: LibraryCatalogRequest,
     enabled: boolean,
   ): CreateInfiniteQueryOptions<
-    CatalogPage,
+    Result<CatalogPage>,
     Error,
-    InfiniteData<CatalogPage, unknown>,
+    InfiniteData<Result<CatalogPage>, unknown>,
     readonly unknown[],
     number
   > & {
     initialData?:
-      | InfiniteData<CatalogPage, number>
-      | InitialDataFunction<InfiniteData<CatalogPage, number>>
+      | InfiniteData<Result<CatalogPage>, number>
+      | InitialDataFunction<InfiniteData<Result<CatalogPage>, number>>
       | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<CatalogPage, unknown>, Error> {
+  } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<Result<CatalogPage>, unknown>, Error> {
     return infiniteQueryOptions({
       queryKey: LibraryQueryKeys.catalog(request),
       initialPageParam: request.skip,
       queryFn: async ({ pageParam, queryKey }) => {
-        const page = await this.#listPage(request, pageParam);
+        const outcome = await this.#listPage(request, pageParam);
         const first =
-          this.#queryClient.getQueryData<InfiniteData<CatalogPage, number>>(queryKey)?.pages[0];
-        if (pageParam !== request.skip && first !== undefined && first.version !== page.version) {
+          this.#queryClient.getQueryData<InfiniteData<Result<CatalogPage>, number>>(queryKey)
+            ?.pages[0];
+        // A page read at another Library version means the list changed under the pages before it.
+        if (
+          outcome.ok &&
+          pageParam !== request.skip &&
+          first?.ok &&
+          first.value.version !== outcome.value.version
+        ) {
           void this.#queryClient.resetQueries({ queryKey, exact: true }).catch(() => undefined);
         }
-        return page;
+        return outcome;
       },
-      getNextPageParam: (last: CatalogPage, _pages, lastPageParam: number) => {
-        const next = lastPageParam + last.items.length;
-        return next < last.total ? next : undefined;
+      // A failed page has no next page to ask for: the list stops at it and shows its error.
+      getNextPageParam: (last: Result<CatalogPage>, _pages, lastPageParam: number) => {
+        if (!last.ok) return undefined;
+        const next = lastPageParam + last.value.items.length;
+        return next < last.value.total ? next : undefined;
       },
       enabled,
     });
@@ -122,9 +132,17 @@ export class CatalogRepository {
   public indexOptions(
     request: LibraryCatalogRequest,
     enabled: boolean,
-  ): CreateQueryOptions<LetterIndexEntry[], Error, LetterIndexEntry[], readonly unknown[]> & {
-    initialData?: LetterIndexEntry[] | InitialDataFunction<LetterIndexEntry[]> | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], LetterIndexEntry[], Error> {
+  ): CreateQueryOptions<
+    Result<LetterIndexEntry[]>,
+    Error,
+    Result<LetterIndexEntry[]>,
+    readonly unknown[]
+  > & {
+    initialData?:
+      | Result<LetterIndexEntry[]>
+      | InitialDataFunction<Result<LetterIndexEntry[]>>
+      | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], Result<LetterIndexEntry[]>, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.catalogIndex(request),
       queryFn: () => this.#listIndex(request),
@@ -133,35 +151,41 @@ export class CatalogRepository {
   }
 
   public trackPropertiesOptions(trackId: TrackId | null): CreateQueryOptions<
-    TrackProperties,
+    Result<TrackProperties>,
     Error,
-    TrackProperties,
+    Result<TrackProperties>,
     readonly unknown[]
   > & {
-    initialData?: TrackProperties | InitialDataFunction<TrackProperties> | null | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], TrackProperties, Error> {
+    initialData?:
+      | Result<TrackProperties>
+      | InitialDataFunction<Result<TrackProperties>>
+      | null
+      | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], Result<TrackProperties>, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.trackProperties(trackId),
       queryFn:
         trackId === null
           ? skipToken
-          : (): Promise<TrackProperties> => this.#library.trackProperties(trackId),
+          : (): Promise<Result<TrackProperties>> => this.#library.trackProperties(trackId),
     });
   }
 
   /** Representative artwork color as `#rrggbb`, for backgrounds only. */
   public accentOptions(path: string | null): CreateQueryOptions<
-    string | null,
+    Result<string | null>,
     Error,
-    string | null,
+    Result<string | null>,
     readonly unknown[]
   > & {
-    initialData?: string | InitialDataFunction<string | null> | null | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], string | null, Error> {
+    initialData?: Result<string | null> | InitialDataFunction<Result<string | null>> | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], Result<string | null>, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.accent(path),
       queryFn:
-        path === null ? skipToken : (): Promise<string | null> => this.#library.artworkAccent(path),
+        path === null
+          ? skipToken
+          : (): Promise<Result<string | null>> => this.#library.artworkAccent(path),
       staleTime: Infinity,
       gcTime: Infinity,
     });
@@ -185,7 +209,7 @@ export class CatalogRepository {
       .catch(() => undefined);
   }
 
-  #listPage(request: LibraryCatalogRequest, offset: number): Promise<CatalogPage> {
+  #listPage(request: LibraryCatalogRequest, offset: number): Promise<Result<CatalogPage>> {
     const search = request.filter === "" ? null : request.filter;
     const { direction } = request;
     const limit = PAGE_SIZE;
@@ -218,7 +242,7 @@ export class CatalogRepository {
   }
 
   /** A letter index reads no rows, so its request asks for none. */
-  #listIndex(request: LibraryCatalogRequest): Promise<LetterIndexEntry[]> {
+  #listIndex(request: LibraryCatalogRequest): Promise<Result<LetterIndexEntry[]>> {
     const search = request.filter === "" ? null : request.filter;
     const { direction } = request;
     const window = { offset: 0, limit: 0 };

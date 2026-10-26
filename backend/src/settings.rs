@@ -17,6 +17,7 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
 
@@ -183,11 +184,11 @@ impl Drop for SettingsStore {
     }
 }
 
-fn write(path: &Path, file: &SettingsFile) -> std::io::Result<()> {
+fn write(path: &Path, file: &SettingsFile) -> anyhow::Result<()> {
     let temporary = path.with_extension("json.tmp");
-    let text = serde_json::to_string_pretty(file).map_err(std::io::Error::other)?;
-    fs::write(&temporary, text)?;
-    fs::rename(&temporary, path)
+    let text = serde_json::to_string_pretty(file).context("the settings cannot be serialized")?;
+    fs::write(&temporary, text).context("the settings cannot be written")?;
+    fs::rename(&temporary, path).context("the settings file cannot be replaced")
 }
 
 /// Collapses bursts of changes (a volume drag) into one write of the latest settings.
@@ -215,7 +216,7 @@ fn flush(path: &Path, pending: &mut Option<SettingsFile>) {
     if let Some(file) = pending.take()
         && let Err(error) = write(path, &file)
     {
-        error!("settings.write_failed error={error}");
+        error!("settings.write_failed error={error:#}");
     }
 }
 

@@ -30,6 +30,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("#lib/native/commands", () => ({ player: mocks.player }));
 vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 
+/** The Result of a Backend call that succeeds with no value. */
+const RESULT_OK = { ok: true, value: null } as const;
+
 beforeEach(() => {
   vi.resetAllMocks();
 });
@@ -174,7 +177,7 @@ describe("commands", () => {
   it("are sent at once, without waiting for an earlier one to answer", async () => {
     const answer = deferred<null>();
     mocks.player.pause.mockReturnValue(answer.promise);
-    mocks.player.resume.mockResolvedValue(null);
+    mocks.player.resume.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     load(playback, playing(1, 0), queueOf());
 
@@ -188,7 +191,7 @@ describe("commands", () => {
   });
 
   it("start passes the context and the clicked track to the backend", async () => {
-    mocks.player.play.mockResolvedValue(null);
+    mocks.player.play.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     const context = {
       kind: "album",
@@ -200,17 +203,17 @@ describe("commands", () => {
     expect(mocks.player.play).toHaveBeenCalledWith(context, 3);
   });
 
-  it("rejects with the backend's error for a real failure", async () => {
-    mocks.player.play.mockRejectedValue({ code: "trackUnavailable" });
+  it("returns the backend's error for a real failure", async () => {
+    mocks.player.play.mockResolvedValue({ ok: false, error: { code: "trackUnavailable" } });
     const playback = new Player(player, quietClock());
 
     await expect(
       playback.start({ kind: "album", albumId: "0f0e0d0c0b0a09080706050403020100" } as const, 1),
-    ).rejects.toEqual({ code: "trackUnavailable" });
+    ).resolves.toEqual({ ok: false, error: { code: "trackUnavailable" } });
   });
 
   it("clearing the queue resolves true when upcoming items were removed, so the caller can offer an undo", async () => {
-    mocks.player.clearQueue.mockResolvedValue(null);
+    mocks.player.clearQueue.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     load(
       playback,
@@ -218,15 +221,15 @@ describe("commands", () => {
       queueOf({ current: queueItem(1), upcoming: [queueItem(2)], upcomingCount: 1 }),
     );
 
-    await expect(playback.playerClearQueue()).resolves.toBe(true);
+    await expect(playback.playerClearQueue()).resolves.toEqual({ ok: true, value: true });
   });
 
   it("clearing the queue resolves false when nothing was upcoming", async () => {
-    mocks.player.clearQueue.mockResolvedValue(null);
+    mocks.player.clearQueue.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     load(playback, stopped(null), queueOf());
 
-    await expect(playback.playerClearQueue()).resolves.toBe(false);
+    await expect(playback.playerClearQueue()).resolves.toEqual({ ok: true, value: false });
   });
 });
 
@@ -255,7 +258,7 @@ describe("loading", () => {
 
 describe("seeking", () => {
   it("rounds to whole milliseconds", async () => {
-    mocks.player.seek.mockResolvedValue(null);
+    mocks.player.seek.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(playing(1, 0));
 
@@ -265,7 +268,7 @@ describe("seeking", () => {
   });
 
   it("sends a position past the duration as it is, for the backend to clamp", async () => {
-    mocks.player.seek.mockResolvedValue(null);
+    mocks.player.seek.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(playing(1, 0));
     expect(playback.durationMs).toBe(60_000);
@@ -276,7 +279,7 @@ describe("seeking", () => {
   });
 
   it("never sends a negative position", async () => {
-    mocks.player.seek.mockResolvedValue(null);
+    mocks.player.seek.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(playing(1, 500));
 
@@ -286,7 +289,7 @@ describe("seeking", () => {
   });
 
   it("shows the requested position until a pushed state shows a later seek", async () => {
-    mocks.player.seek.mockResolvedValue(null);
+    mocks.player.seek.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(playing(1, 0));
 
@@ -301,7 +304,7 @@ describe("seeking", () => {
   });
 
   it("stops showing the requested position when another playback is shown", async () => {
-    mocks.player.seek.mockResolvedValue(null);
+    mocks.player.seek.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(playing(1, 0));
     await playback.seek(1_000);
@@ -311,12 +314,15 @@ describe("seeking", () => {
     expect(playback.pendingSeekMs()).toBeNull();
   });
 
-  it("drops the requested position and throws when the backend refuses the seek", async () => {
-    mocks.player.seek.mockRejectedValue({ code: "invalidPlaybackState" });
+  it("drops the requested position when the backend refuses the seek", async () => {
+    mocks.player.seek.mockResolvedValue({ ok: false, error: { code: "invalidPlaybackState" } });
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(stopped(null));
 
-    await expect(playback.seek(1_000)).rejects.toEqual({ code: "invalidPlaybackState" });
+    await expect(playback.seek(1_000)).resolves.toEqual({
+      ok: false,
+      error: { code: "invalidPlaybackState" },
+    });
     expect(playback.pendingSeekMs()).toBeNull();
   });
 });
@@ -331,7 +337,7 @@ describe("failures", () => {
   });
 
   it("exposes why playback stopped, and retries through resume", async () => {
-    mocks.player.resume.mockResolvedValue(null);
+    mocks.player.resume.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(failed(false));
 
@@ -362,9 +368,11 @@ describe("album shuffle", () => {
     const order: string[] = [];
     mocks.player.setShuffle.mockImplementation(async () => {
       order.push("shuffle");
+      return RESULT_OK;
     });
     mocks.player.play.mockImplementation(async () => {
       order.push("start");
+      return RESULT_OK;
     });
     const playback = new Player(player, quietClock());
 
@@ -373,11 +381,14 @@ describe("album shuffle", () => {
     expect(order).toEqual(["shuffle", "start"]);
   });
 
-  it("does not start when the shuffle cannot be turned on, and throws why", async () => {
-    mocks.player.setShuffle.mockRejectedValue({ code: "internal" });
+  it("does not start when the shuffle cannot be turned on, and returns why", async () => {
+    mocks.player.setShuffle.mockResolvedValue({ ok: false, error: { code: "internal" } });
     const playback = new Player(player, quietClock());
 
-    await expect(playback.shuffleAndStart(context)).rejects.toEqual({ code: "internal" });
+    await expect(playback.shuffleAndStart(context)).resolves.toEqual({
+      ok: false,
+      error: { code: "internal" },
+    });
     expect(mocks.player.play).not.toHaveBeenCalled();
   });
 });
@@ -540,7 +551,7 @@ describe("changing the volume", () => {
   });
 
   it("shows the requested volume at once, and clears it when the pushed volume arrives", async () => {
-    mocks.player.setVolume.mockResolvedValue(null);
+    mocks.player.setVolume.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(stopped(null));
 
@@ -554,18 +565,21 @@ describe("changing the volume", () => {
     expect(playback.volume).toBe(0.7);
   });
 
-  it("clears the requested volume and throws when the backend refuses it", async () => {
-    mocks.player.setVolume.mockRejectedValue({ code: "invalidVolume" });
+  it("clears the requested volume when the backend refuses it", async () => {
+    mocks.player.setVolume.mockResolvedValue({ ok: false, error: { code: "invalidVolume" } });
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(stopped(null));
 
-    await expect(playback.setVolume(0.4)).rejects.toEqual({ code: "invalidVolume" });
+    await expect(playback.setVolume(0.4)).resolves.toEqual({
+      ok: false,
+      error: { code: "invalidVolume" },
+    });
     expect(playback.volume).toBe(0.5);
   });
 
   it("unmutes when the volume changes while muted", async () => {
-    mocks.player.setVolume.mockResolvedValue(null);
-    mocks.player.setMuted.mockResolvedValue(null);
+    mocks.player.setVolume.mockResolvedValue(RESULT_OK);
+    mocks.player.setMuted.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(muted());
 
@@ -575,7 +589,7 @@ describe("changing the volume", () => {
   });
 
   it("leaves mute alone when not muted", async () => {
-    mocks.player.setVolume.mockResolvedValue(null);
+    mocks.player.setVolume.mockResolvedValue(RESULT_OK);
     const playback = new Player(player, quietClock());
     playback.acceptPlayback(stopped(null));
 

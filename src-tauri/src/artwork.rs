@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use backend::{app::BackendApp, app::ServedArtwork};
 use tauri::{
     Manager,
-    http::{Method, Response, StatusCode, header},
+    http::{HeaderValue, Method, Response, StatusCode, header},
 };
 
 /// The data directory the artwork store lives in, decided once at startup.
@@ -15,13 +15,19 @@ fn response(
     cache_control: &'static str,
     body: Vec<u8>,
 ) -> Response<Vec<u8>> {
-    Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, mime_type)
-        .header(header::CACHE_CONTROL, cache_control)
-        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
-        .body(body)
-        .expect("valid artwork response")
+    let mut response = Response::new(body);
+    *response.status_mut() = status;
+    let headers = response.headers_mut();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(mime_type));
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static(cache_control),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    response
 }
 
 fn not_found() -> Response<Vec<u8>> {

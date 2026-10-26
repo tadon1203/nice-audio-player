@@ -22,6 +22,7 @@ rust-version = "1.99"
 
 # `=` on the specta family: it is a prerelease, and its crates must move together.
 [workspace.dependencies]
+anyhow = "1"
 log = "0.4"
 parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }

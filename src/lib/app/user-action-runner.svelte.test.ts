@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { CommandFailed } from "#lib/native/errors";
 import { NoticeCenter } from "./notice-center.svelte";
 import { UserActionRunner } from "./user-action-runner.svelte";
 
@@ -10,13 +9,35 @@ describe("UserActionRunner", () => {
   it("shows one error notice at the place it was run for", async () => {
     const notices = new NoticeCenter();
     const runner = new UserActionRunner(notices);
-    runner.run(() => Promise.reject(new CommandFailed("duplicateDirectory")), "settings");
+    runner.run(
+      () => Promise.resolve({ ok: false, error: { code: "duplicateDirectory" } }),
+      "settings",
+    );
     await settled();
     expect(notices.at("settings")).toEqual({
       kind: "error",
       message: "That directory is already in the library.",
     });
     expect(notices.at("dock")).toBeNull();
+  });
+
+  it("shows nothing for a successful Result", async () => {
+    const notices = new NoticeCenter();
+    const runner = new UserActionRunner(notices);
+    runner.run(() => Promise.resolve({ ok: true, value: null }), "dock");
+    await settled();
+    expect(notices.at("dock")).toBeNull();
+  });
+
+  it("shows the general text for an action that throws, which is not a Backend failure", async () => {
+    const notices = new NoticeCenter();
+    const runner = new UserActionRunner(notices);
+    runner.run(() => Promise.reject(new Error("clipboard denied")), "dock");
+    await settled();
+    expect(notices.at("dock")).toEqual({
+      kind: "error",
+      message: "Something went wrong. Try again.",
+    });
   });
 
   it("reports a place as busy from the run until its action settles", async () => {

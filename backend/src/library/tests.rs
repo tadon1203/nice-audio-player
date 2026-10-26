@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 const DATABASE_FILE: &str = "library.sqlite3";
 
-fn open(directory: &Path) -> crate::Result<Library> {
+fn open(directory: &Path) -> crate::library::errors::Result<Library> {
     Library::open(directory, null_messages())
 }
 

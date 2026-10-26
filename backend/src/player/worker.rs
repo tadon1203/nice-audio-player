@@ -32,13 +32,14 @@ use super::state::{
     PlayerState, QueueItem, QueueState, QueueWindow, StartedBy,
 };
 use super::transport::{Output, Position, Track};
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
+use crate::library::errors::LibraryError;
 use crate::library::tracks::PlayableTrack;
 use crate::messages::{self, BackendMessage};
 use crate::meter::Meter;
+use crate::player::errors::PlayerError;
+use crate::player::errors::Result;
 use crate::player::output::{
     AudioOutputSelection, OutputError, OutputEvent, OutputStreamFactory, OutputStreamId,
     PcmConsumer, PipelineId, StreamCallbacks, StreamFailureKind, make_queue,
@@ -48,8 +49,10 @@ use crate::player::processing::PcmConverter;
 use crate::player::volume::{AtomicEffectiveGain, NormalizedVolume, VolumeState};
 use crate::player::waveform::Waveforms;
 use crate::settings::SettingsStore;
-use crate::threads::{Reply, answer};
+use crate::threads::answer;
 use log::{error, info};
+
+type Reply<T> = crate::threads::Reply<T, PlayerError>;
 
 /// How often a playing track is looked at when nothing else arrives.
 const TICK: Duration = Duration::from_millis(100);
@@ -886,7 +889,7 @@ impl PlayerWorker {
                 if skipping {
                     Ok(())
                 } else {
-                    Err(Error::TrackUnavailable)
+                    Err(LibraryError::TrackUnavailable.into())
                 }
             }
             Err(error) => {
@@ -1015,7 +1018,11 @@ impl PlayerWorker {
 
     /// A load reports its file. Only the load the transport is waiting for is used: a load that was
     /// replaced or cancelled reports nothing the worker needs.
-    fn source_ready(&mut self, id: SourceLoadId, result: Result<PreparedSource, PipelineError>) {
+    fn source_ready(
+        &mut self,
+        id: SourceLoadId,
+        result: std::result::Result<PreparedSource, PipelineError>,
+    ) {
         match &self.transport {
             Transport::Loading(start) if start.load.id == id => self.start_ready(result),
             Transport::Loaded {
@@ -1031,7 +1038,7 @@ impl PlayerWorker {
     }
 
     /// The file of a start is read: it opens its stream, or fails the start.
-    fn start_ready(&mut self, result: Result<PreparedSource, PipelineError>) {
+    fn start_ready(&mut self, result: std::result::Result<PreparedSource, PipelineError>) {
         let Transport::Loading(StartLoad { request, .. }) = self.take_transport() else {
             return;
         };
@@ -1308,7 +1315,7 @@ impl PlayerWorker {
 
     /// The file of the next track is read: it is decoded into a queue that the stream plays right
     /// after the playing track.
-    fn next_ready(&mut self, result: Result<PreparedSource, PipelineError>) {
+    fn next_ready(&mut self, result: std::result::Result<PreparedSource, PipelineError>) {
         let Transport::Loaded { next, .. } = &mut self.transport else {
             return;
         };
@@ -1329,10 +1336,10 @@ impl PlayerWorker {
     /// A failure gives the entry's id, so that the entry is not prefetched again.
     fn chain_next(
         &mut self,
-        result: Result<PreparedSource, PipelineError>,
+        result: std::result::Result<PreparedSource, PipelineError>,
         entry: QueueEntry,
         playable: PlayableTrack,
-    ) -> Result<Track, QueueItemId> {
+    ) -> std::result::Result<Track, QueueItemId> {
         let failed = entry.id;
         let pipeline_id = self.next_pipeline_id();
         let id = self.next_playback_id();
@@ -1448,7 +1455,7 @@ impl PlayerWorker {
 
     /// The seek's file is read: start decoding the new position. A seek that cannot start is logged,
     /// and the playing track keeps playing.
-    fn seek_ready(&mut self, result: Result<PreparedSource, PipelineError>) {
+    fn seek_ready(&mut self, result: std::result::Result<PreparedSource, PipelineError>) {
         let Transport::Loaded { seek, .. } = &mut self.transport else {
             return;
         };
@@ -1465,9 +1472,9 @@ impl PlayerWorker {
     /// The new pipeline of a seek: the stream output of it, and the position it starts from.
     fn pending_seek(
         &mut self,
-        result: Result<PreparedSource, PipelineError>,
+        result: std::result::Result<PreparedSource, PipelineError>,
         duration_ms: u64,
-    ) -> Result<PendingSeek, PipelineError> {
+    ) -> std::result::Result<PendingSeek, PipelineError> {
         let prepared = result?;
         let pipeline_id = self.next_pipeline_id();
         let plan = self

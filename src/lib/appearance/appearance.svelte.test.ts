@@ -10,7 +10,7 @@ const saved: AppearanceState = { artworkBackdrop: true, calmMotion: false };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.update.mockResolvedValue(null);
+  mocks.update.mockResolvedValue({ ok: true, value: undefined });
 });
 
 describe("Appearance", () => {
@@ -43,13 +43,16 @@ describe("Appearance", () => {
     expect(store.calmMotion).toBe(true);
   });
 
-  it("throws the failure when the backend refuses the update", async () => {
-    const failure = { code: "internal" };
-    mocks.update.mockRejectedValue(failure);
+  it("returns the failure when the backend refuses the update, and keeps the held value", async () => {
+    const error = { code: "internal" } as const;
+    mocks.update.mockResolvedValue({ ok: false, error });
     const store = new Appearance(appearanceCommands);
     store.accept(saved);
 
-    await expect(store.update({ artworkBackdrop: false, calmMotion: null })).rejects.toBe(failure);
+    await expect(store.update({ artworkBackdrop: false, calmMotion: null })).resolves.toEqual({
+      ok: false,
+      error,
+    });
     expect(store.artworkBackdrop).toBe(true);
   });
 });

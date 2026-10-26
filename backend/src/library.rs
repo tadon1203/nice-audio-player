@@ -9,6 +9,7 @@ pub(crate) mod albums;
 pub(crate) mod artwork;
 pub(crate) mod database;
 pub(crate) mod directories;
+pub(crate) mod errors;
 pub(crate) mod lists;
 pub(crate) mod media;
 pub(crate) mod models;
@@ -22,9 +23,9 @@ pub(crate) mod text;
 pub(crate) mod tracks;
 pub(crate) mod version;
 
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::DirectoryId;
+use crate::library::errors::LibraryError;
+use crate::library::errors::Result;
 use crate::messages::{self, BackendMessage};
 use database::{Database, ReadConnection};
 use log::error;
@@ -169,7 +170,7 @@ impl TrackLocation {
             .components()
             .all(|component| matches!(component, Component::Normal(_)));
         if !descends || self.relative.as_os_str().is_empty() {
-            return Err(Error::TrackUnavailable);
+            return Err(LibraryError::TrackUnavailable);
         }
         Ok(self.directory.join(&self.relative))
     }
@@ -178,17 +179,17 @@ impl TrackLocation {
     /// inside its directory. A path that cannot be resolved is a file that is not there.
     pub(crate) fn existing(&self) -> Result<ExistingFile> {
         if !self.available {
-            return Err(Error::TrackUnavailable);
+            return Err(LibraryError::TrackUnavailable);
         }
         let path = self.path()?;
         let Ok(directory) = dunce::canonicalize(&self.directory) else {
-            return Err(Error::TrackUnavailable);
+            return Err(LibraryError::TrackUnavailable);
         };
         let Ok(path) = dunce::canonicalize(path) else {
-            return Err(Error::TrackUnavailable);
+            return Err(LibraryError::TrackUnavailable);
         };
         if !path.starts_with(&directory) || !path.is_file() {
-            return Err(Error::TrackUnavailable);
+            return Err(LibraryError::TrackUnavailable);
         }
         Ok(ExistingFile { directory, path })
     }
@@ -255,7 +256,7 @@ impl Library {
     /// than changed.
     pub(crate) fn add_directory(&self, path: PathBuf) -> Result<()> {
         let Ok(path) = path.into_os_string().into_string() else {
-            return Err(Error::InvalidDirectory(None));
+            return Err(LibraryError::InvalidDirectory(None));
         };
         self.sync.add_directory(path)
     }
@@ -287,7 +288,7 @@ impl Library {
         let Some(hash) = artwork::hash_of_original(path) else {
             return Ok(None);
         };
-        artwork::artwork_accent(&self.database, &hash)
+        Ok(artwork::artwork_accent(&self.database, &hash)?)
     }
 
     /// Stops the watchers and any scan in progress, waits for them, and drops the idle read

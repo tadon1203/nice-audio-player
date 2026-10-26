@@ -1,5 +1,6 @@
 use std::sync::{Arc, mpsc};
 
+use anyhow::Context;
 use backend::app::{BackendApp, CpalOutput};
 use delivery::Delivery;
 use tauri::{Manager, Runtime};
@@ -35,19 +36,23 @@ impl std::fmt::Debug for AppState {
 fn configure_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                if let Err(cause) = window.unminimize() {
-                    log::debug!("host.window.unminimize_failed cause={cause}");
-                }
-                if let Err(cause) = window.show() {
-                    log::debug!("host.window.show_failed cause={cause}");
-                }
-                if let Err(cause) = window.set_focus() {
-                    log::debug!("host.window.focus_failed cause={cause}");
-                }
+            if let Some(window) = app.get_webview_window("main")
+                && let Err(cause) = focus(&window)
+            {
+                log::debug!("host.window.focus_failed cause={cause:#}");
             }
         }))
         .plugin(logging::plugin())
+}
+
+/// Brings the window back from the taskbar and to the front.
+#[cfg(not(feature = "wdio"))]
+fn focus<R: Runtime>(window: &tauri::WebviewWindow<R>) -> anyhow::Result<()> {
+    window
+        .unminimize()
+        .context("could not restore the window")?;
+    window.show().context("could not show the window")?;
+    window.set_focus().context("could not focus the window")
 }
 
 #[cfg(feature = "wdio")]
@@ -57,7 +62,7 @@ fn configure_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
         .plugin(tauri_plugin_wdio_webdriver::init())
 }
 
-pub fn run() {
+pub fn run() -> anyhow::Result<()> {
     let app = configure_plugins(tauri::Builder::default())
         .register_asynchronous_uri_scheme_protocol("nice-artwork", |context, request, responder| {
             artwork::serve_artwork(context.app_handle(), &request, responder);
@@ -86,16 +91,17 @@ pub fn run() {
                 backend: Arc::clone(&backend),
                 delivery: Arc::clone(&delivery),
             });
-            delivery::start_dispatcher(delivery, messages);
+            delivery::start_dispatcher(delivery, messages)?;
             Ok(())
         })
         .invoke_handler(bindings::builder().invoke_handler())
         .build(tauri::generate_context!())
-        .expect("failed to build Tauri application");
+        .context("could not build the Tauri application")?;
 
     app.run(|handle, event| {
         if let tauri::RunEvent::Exit = event {
             handle.state::<AppState>().backend.shutdown();
         }
     });
+    Ok(())
 }

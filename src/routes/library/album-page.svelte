@@ -74,7 +74,7 @@
     <BackLink href={resolve("/library/albums")}>Albums</BackLink>
   {/if}
 
-  {#if details.isError}
+  {#if details.error !== null}
     <ErrorAlert
       message={errorMessage(details.error)}
       onRetry={() => actions.run(() => details.refetch(), "library")}
@@ -82,7 +82,7 @@
   {:else if details.data === undefined || tracks.isPending}
     <MediaDetailsHeader {title} {artist} artwork={summary?.artwork ?? null} sharedKey={albumId} />
     <LoadingStatus>Reading album…</LoadingStatus>
-  {:else if tracks.isError}
+  {:else if tracks.error !== null}
     <ErrorAlert
       message={errorMessage(tracks.error)}
       onRetry={() => actions.run(() => tracks.refetch(), "library")}

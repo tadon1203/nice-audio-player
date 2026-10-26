@@ -57,12 +57,18 @@ export class UpcomingItems {
     this.#inFlight.add(key);
     void this.#playback
       .fetchQueueWindow(chunk * UPCOMING_WINDOW, UPCOMING_WINDOW)
-      .then((result) => {
+      .then((outcome) => {
+        if (!outcome.ok) {
+          this.#retryLater(chunk, version, key);
+          return;
+        }
+        const window = outcome.value;
         this.#attempts.delete(key);
-        const chunks = new Map(this.#loaded.version === result.version ? this.#loaded.chunks : []);
-        chunks.set(Math.floor(result.offset / UPCOMING_WINDOW), result.items);
-        this.#loaded = { version: result.version, chunks };
+        const chunks = new Map(this.#loaded.version === window.version ? this.#loaded.chunks : []);
+        chunks.set(Math.floor(window.offset / UPCOMING_WINDOW), window.items);
+        this.#loaded = { version: window.version, chunks };
       })
+      // The adapter never rejects. A rejection is retried like a failed read, to be safe.
       .catch(() => this.#retryLater(chunk, version, key))
       .finally(() => this.#inFlight.delete(key));
   }

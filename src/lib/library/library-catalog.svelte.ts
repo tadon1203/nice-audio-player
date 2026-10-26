@@ -1,5 +1,6 @@
 import type { CreateInfiniteQueryOptions, InfiniteData } from "@tanstack/svelte-query";
-import { type LetterIndexEntry, type LibraryState } from "#lib/native/bindings";
+import { type CommandError, type LetterIndexEntry, type LibraryState } from "#lib/native/bindings";
+import type { Result } from "#lib/native/result";
 import {
   type CatalogRepository,
   type LibraryCatalogItem,
@@ -66,7 +67,7 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
       ? "unavailable"
       : this.#library.snapshot === null || this.#pages.isPending
         ? "loading"
-        : this.#pages.isError
+        : this.#pages.error !== null
           ? "catalogError"
           : this.#pages.items.length === 0
             ? "empty"
@@ -95,8 +96,9 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     // keeps the entries it was made from.
     this.#index = new QueryResult(() => ({
       ...catalog.indexOptions(this.#queryRequest, this.#ready),
-      placeholderData: (previous: LetterIndexEntry[] | undefined): LetterIndexEntry[] | undefined =>
-        previous,
+      placeholderData: (
+        previous: Result<LetterIndexEntry[]> | undefined,
+      ): Result<LetterIndexEntry[]> | undefined => previous,
     }));
 
     $effect(() => {
@@ -150,7 +152,8 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     return this.#index.data ?? [];
   }
 
-  public get error(): Error | null {
+  /** The reason the list failed to load, or null. */
+  public get error(): CommandError | null {
     return this.#pages.error;
   }
 
@@ -174,9 +177,9 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
   #pageOptions(
     catalog: CatalogRepository,
   ): CreateInfiniteQueryOptions<
-    Page<LibraryCatalogItem<TRequest["presentation"]>>,
+    Result<Page<LibraryCatalogItem<TRequest["presentation"]>>>,
     Error,
-    InfiniteData<Page<LibraryCatalogItem<TRequest["presentation"]>>>
+    InfiniteData<Result<Page<LibraryCatalogItem<TRequest["presentation"]>>>>
   > {
     const presentation = this.#queryRequest.presentation;
     const keepWithinPresentation = <Data>(
@@ -191,9 +194,9 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
       ...catalog.pageOptions(this.#queryRequest, this.#ready),
       placeholderData: keepWithinPresentation,
     } as unknown as CreateInfiniteQueryOptions<
-      Page<LibraryCatalogItem<TRequest["presentation"]>>,
+      Result<Page<LibraryCatalogItem<TRequest["presentation"]>>>,
       Error,
-      InfiniteData<Page<LibraryCatalogItem<TRequest["presentation"]>>>
+      InfiniteData<Result<Page<LibraryCatalogItem<TRequest["presentation"]>>>>
     >;
   }
 }

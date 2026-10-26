@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { type BackendMessage, type PlaybackPosition } from "#lib/native/bindings";
 import { app } from "#lib/native/commands";
+import type { Result } from "#lib/native/result";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
 
 const mocks = vi.hoisted(() => ({ connect: vi.fn() }));
@@ -9,8 +10,7 @@ vi.mock("#lib/native/commands", () => ({ app: { connect: mocks.connect } }));
 /** One `connect` call the test drives by hand: its message handler, and its reply. */
 interface Attempt {
   onMessage: (message: BackendMessage) => void;
-  resolve: () => void;
-  reject: (error: unknown) => void;
+  resolve: (outcome: Result<void>) => void;
 }
 
 let attempts: Attempt[];
@@ -20,8 +20,8 @@ beforeEach(() => {
   mocks.connect.mockReset();
   mocks.connect.mockImplementation(
     (onMessage: (message: BackendMessage) => void) =>
-      new Promise<void>((resolve, reject) => {
-        attempts.push({ onMessage, resolve, reject });
+      new Promise<Result<void>>((resolve) => {
+        attempts.push({ onMessage, resolve });
       }),
   );
 });
@@ -132,7 +132,7 @@ describe("NativeSession", () => {
     const session = new NativeSession(app, targets);
     session.connect();
 
-    attempts[0].reject({ code: "internal" });
+    attempts[0].resolve({ ok: false, error: { code: "internal" } });
 
     await vi.waitFor(() => expect(session.connection).toBe("failed"));
     expect(session.startupError).toEqual({ code: "internal" });

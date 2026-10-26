@@ -1,5 +1,6 @@
 import type { library } from "#lib/native/commands";
 import { type TrackId } from "#lib/native/bindings";
+import type { Result } from "#lib/native/result";
 
 /** The commands on one Library track that do not change the catalog. */
 export class LibraryTrackCommands {
@@ -9,7 +10,7 @@ export class LibraryTrackCommands {
     this.#library = libraryCommands;
   }
 
-  public async reveal(trackId: TrackId): Promise<void> {
-    await this.#library.revealTrack(trackId);
+  public reveal(trackId: TrackId): Promise<Result<null>> {
+    return this.#library.revealTrack(trackId);
   }
 }

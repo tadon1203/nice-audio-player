@@ -5,21 +5,30 @@ import {
   type InfiniteData,
   type QueryKey,
 } from "@tanstack/svelte-query";
+import type { CommandError } from "#lib/native/bindings";
+import type { Result } from "#lib/native/result";
 import type { Page } from "./catalog-repository";
 
 /**
- * The loaded pages of an infinite query as one list, with its paging state. Reads go through
- * getters, so a reader only depends on what it touches. Construct during component initialization.
+ * The loaded pages of an infinite query as one list, with its paging state. Each page is a Result:
+ * a failed page is held as the error of the list and adds no rows. Reads go through getters, so a
+ * reader only depends on what it touches. Construct during component initialization.
  */
 export class PagedCollection<
   TPage extends Page<unknown>,
   TKey extends QueryKey = QueryKey,
   TPageParam = unknown,
 > {
-  readonly #query: CreateInfiniteQueryResult<InfiniteData<TPage>, Error>;
+  readonly #query: CreateInfiniteQueryResult<InfiniteData<Result<TPage>>, Error>;
 
   public constructor(
-    options: () => CreateInfiniteQueryOptions<TPage, Error, InfiniteData<TPage>, TKey, TPageParam>,
+    options: () => CreateInfiniteQueryOptions<
+      Result<TPage>,
+      Error,
+      InfiniteData<Result<TPage>>,
+      TKey,
+      TPageParam
+    >,
   ) {
     this.#query = createInfiniteQuery(options);
   }
@@ -32,12 +41,16 @@ export class PagedCollection<
     await this.#query.refetch();
   };
 
+  /** The rows of every page that loaded. A failed page adds none. */
   public get items(): readonly TPage["items"][number][] {
-    return this.#query.data?.pages.flatMap((page) => page.items) ?? [];
+    return (
+      this.#query.data?.pages.flatMap((outcome) => (outcome.ok ? outcome.value.items : [])) ?? []
+    );
   }
 
   public get totalCount(): number | null {
-    return this.#query.data?.pages[0]?.total ?? null;
+    const first = this.#query.data?.pages[0];
+    return first?.ok ? first.value.total : null;
   }
 
   public get isPending(): boolean {
@@ -52,12 +65,10 @@ export class PagedCollection<
     return this.#query.isPlaceholderData;
   }
 
-  public get isError(): boolean {
-    return this.#query.isError;
-  }
-
-  public get error(): Error | null {
-    return this.#query.error;
+  /** The reason the first failed page failed, or null when no page has failed. */
+  public get error(): CommandError | null {
+    const failed = this.#query.data?.pages.find((outcome) => !outcome.ok);
+    return failed !== undefined && !failed.ok ? failed.error : null;
   }
 
   public get hasNextPage(): boolean {

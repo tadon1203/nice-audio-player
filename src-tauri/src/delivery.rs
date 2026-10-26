@@ -3,6 +3,7 @@
 //! that connects gets the current state before anything else. The Backend never waits on the
 //! webview: its messages queue until the dispatcher sends them.
 
+use anyhow::Context;
 use parking_lot::Mutex;
 use std::{
     sync::{Arc, mpsc::Receiver},
@@ -90,7 +91,10 @@ impl Delivery {
 }
 
 /// Starts the thread that takes the Backend's messages in batches and delivers each batch.
-pub(crate) fn start_dispatcher(delivery: Arc<Delivery>, messages: Receiver<BackendMessage>) {
+pub(crate) fn start_dispatcher(
+    delivery: Arc<Delivery>,
+    messages: Receiver<BackendMessage>,
+) -> anyhow::Result<()> {
     thread::Builder::new()
         .name("message-dispatcher".into())
         .spawn(move || {
@@ -100,7 +104,8 @@ pub(crate) fn start_dispatcher(delivery: Arc<Delivery>, messages: Receiver<Backe
                 delivery.deliver(batch);
             }
         })
-        .expect("the OS starts a thread unless it is out of resources");
+        .map(|_| ())
+        .context("could not start the message dispatcher thread")
 }
 
 /// The messages one batch sends, in order: its track skips as they arrived, then the newest message

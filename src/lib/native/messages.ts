@@ -1,5 +1,4 @@
 import type { CommandError, PlaybackFailureCode } from "./bindings";
-import { CommandFailed } from "./errors";
 
 /** Why playback stopped by itself, as the dock shows the listener. */
 export const outputFailureMessages = {
@@ -23,8 +22,7 @@ const messages = {
   internal: "Something went wrong. Try again.",
 } as const satisfies Record<CommandError["code"], string>;
 
-/** The user-facing text for any failure. Anything that is not a CommandFailed gets the internal text. */
-export function errorMessage(error: unknown): string {
-  if (!(error instanceof CommandFailed)) return messages.internal;
+/** The user-facing text for a failed Backend call. */
+export function errorMessage(error: CommandError): string {
   return messages[error.code];
 }

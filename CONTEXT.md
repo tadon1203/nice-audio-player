@@ -10,8 +10,9 @@ This is the language of Nice Audio Player. Use these terms in code, docs, and ti
 - **Area**: one part of the domain: the Player, the Library, lyrics, the Appearance, or the meters. The Backend and the Renderer have the same Areas. A Renderer Area holds the cached state and logic of its Area. It never depends on another Renderer Area.
 - **App**: the part of the Renderer that holds state across several Areas, such as Now Playing, the queue panel, and the workspace scroll. It sits between the product compositions and the Areas. _Avoid_: shell.
 - **Backend state**: a value that the Backend owns and the Renderer mirrors. Examples: the Player state, the Queue state, the Library state, the Waveform, and the Appearance. The Renderer always gets the whole value, and only by push. A command never answers with it.
-- **Command**: a request from the Renderer that changes Backend state. It answers only whether the Backend accepted it. Its result arrives as Backend state. _Avoid_: action.
-- **Query**: a request from the Renderer that reads data, such as a list page or lyrics. It answers with the data. It changes nothing.
+- **Command**: a request from the Renderer that changes Backend state. It answers at once, only whether the Backend accepted it or refused it with an Error code. A failure after the Backend accepted it arrives as Backend state. _Avoid_: action.
+- **Query**: a request from the Renderer that reads data, such as a list page or lyrics. It answers with the data or with an Error code. It changes nothing.
+- **Error code**: the name of one reason that the Backend refuses a Command or a Query, such as a missing item or a duplicate Library directory. It is a closed set. The Renderer chooses the text for the user from the Error code. The Backend sends no text. _Avoid_: error message.
 - **Backend event**: a fact about one moment. The Backend reports it once, such as a skipped track. The Renderer shows it. The Renderer does not build state from it. _Avoid_: occurrence.
 - **Measurement stream**: the frequent measurements that the Backend sends while audio plays: the playing position and the Meter frames. _Avoid_: Stream (an Output stream is a different thing).
 

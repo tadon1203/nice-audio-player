@@ -12,9 +12,9 @@ use std::sync::Arc;
 
 use rand::{Rng, seq::SliceRandom};
 
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::{QueueItemId, TrackId};
+use crate::player::errors::PlayerError;
+use crate::player::errors::Result;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -246,7 +246,7 @@ impl Queue {
             let predecessor = order.get(target.saturating_sub(1)).map(|entry| entry.id);
             (entry, predecessor)
         });
-        let predecessor = predecessor.ok_or(Error::QueueItemNotFound)?;
+        let predecessor = predecessor.ok_or(PlayerError::QueueItemNotFound)?;
         if self.shuffled.is_some() {
             edit_order(&mut self.arranged, |arranged| {
                 arranged.retain(|other| other.id != entry.id);
@@ -264,7 +264,7 @@ impl Queue {
     pub fn jump_to(&mut self, id: QueueItemId) -> Result<()> {
         let known = self.play_order().iter().any(|entry| entry.id == id);
         if !known || self.current == Some(id) {
-            return Err(Error::QueueItemNotFound);
+            return Err(PlayerError::QueueItemNotFound);
         }
         self.current = Some(id);
         Ok(())
@@ -313,7 +313,7 @@ impl Queue {
             .iter()
             .position(|entry| entry.id == id)
             .filter(|index| *index > self.position())
-            .ok_or(Error::QueueItemNotFound)
+            .ok_or(PlayerError::QueueItemNotFound)
     }
 
     pub fn set_repeat(&mut self, repeat: RepeatMode) -> bool {
@@ -653,7 +653,7 @@ mod tests {
         assert_eq!(queue.current().unwrap().id, current_id);
         assert!(matches!(
             queue.move_upcoming(current_id, 0),
-            Err(Error::QueueItemNotFound)
+            Err(PlayerError::QueueItemNotFound)
         ));
 
         assert_eq!(queue.move_upcoming(first_upcoming, 1).ok(), Some(true));
@@ -687,11 +687,11 @@ mod tests {
         let played = queue.history()[0].id;
         assert!(matches!(
             queue.remove_upcoming(played),
-            Err(Error::QueueItemNotFound)
+            Err(PlayerError::QueueItemNotFound)
         ));
         assert!(matches!(
             queue.remove_upcoming(unknown_item()),
-            Err(Error::QueueItemNotFound)
+            Err(PlayerError::QueueItemNotFound)
         ));
         let upcoming = queue.upcoming()[0].id;
         assert_eq!(queue.remove_upcoming(upcoming).ok(), Some(()));
@@ -858,10 +858,13 @@ mod tests {
         queue.jump_to(id).expect("played");
         assert_eq!(current(&queue), 1);
         assert_eq!(queue.upcoming().len(), 3);
-        assert!(matches!(queue.jump_to(id), Err(Error::QueueItemNotFound)));
+        assert!(matches!(
+            queue.jump_to(id),
+            Err(PlayerError::QueueItemNotFound)
+        ));
         assert!(matches!(
             queue.jump_to(unknown_item()),
-            Err(Error::QueueItemNotFound)
+            Err(PlayerError::QueueItemNotFound)
         ));
     }
 

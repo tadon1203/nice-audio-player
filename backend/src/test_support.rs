@@ -198,13 +198,13 @@ pub(crate) fn null_messages() -> Sender<BackendMessage> {
 }
 
 /// The code a failed Backend call gives the Renderer, for tests that check what the Renderer sees.
-pub(crate) trait CommandCode<T> {
+pub(crate) trait CommandCode {
     /// The code of the failure, or `None` when the call succeeded.
     fn code_of(self) -> Option<CommandError>;
 }
 
-impl<T> CommandCode<T> for crate::Result<T> {
+impl<T, E: Into<anyhow::Error>> CommandCode for Result<T, E> {
     fn code_of(self) -> Option<CommandError> {
-        self.err().map(|error| error.code())
+        self.err().map(|error| CommandError::of(&error.into()))
     }
 }

@@ -33,9 +33,9 @@ use super::{
     text::{SortTags, TrackKeys, album_edition_of},
     version::LibraryVersion,
 };
-use crate::Result;
-use crate::errors::{Error, contain};
+use crate::errors::contain;
 use crate::threads::{Cancellation, run_in_background};
+use anyhow::{Context, Result};
 
 /// Files inspected per transaction.
 const INSPECTIONS_PER_BATCH: usize = 100;
@@ -59,11 +59,11 @@ pub(crate) struct ScanJob {
 /// Why a scan stopped before finishing: the listener cancelled it, or a step failed.
 enum Stop {
     Cancelled,
-    Failed(Error),
+    Failed(anyhow::Error),
 }
 
-impl From<Error> for Stop {
-    fn from(cause: Error) -> Self {
+impl From<anyhow::Error> for Stop {
+    fn from(cause: anyhow::Error) -> Self {
         Self::Failed(cause)
     }
 }
@@ -91,7 +91,7 @@ pub(crate) fn run(
             Ok(complete) => traversal_failed |= !complete,
             Err(Stop::Cancelled) => return progress.finish(ScanStatus::Cancelled, None),
             Err(Stop::Failed(cause)) => {
-                error!("library.scan.step_failed cause={cause}");
+                error!("library.scan.step_failed cause={cause:#}");
                 return progress.finish(ScanStatus::Failed, Some(ScanFailure::Failed));
             }
         }
@@ -102,7 +102,7 @@ pub(crate) fn run(
     // Only once every directory has been seen in full is a Missing track known to be missing, and so
     // a file that arrived known to be that track moved.
     if let Err(cause) = relink_moved(database, version) {
-        error!("library.scan.relink_failed cause={cause}");
+        error!("library.scan.relink_failed cause={cause:#}");
         return progress.finish(ScanStatus::Failed, Some(ScanFailure::Failed));
     }
     if let Err(cause) = artwork::collect(database) {
@@ -115,7 +115,7 @@ pub(crate) fn run(
 /// It only sizes the progress bar, so a failed read counts as 0 rather than failing the scan.
 fn expected_files(database: &Database, jobs: &[ScanJob]) -> u64 {
     count_expected_files(database, jobs).unwrap_or_else(|cause| {
-        error!("library.scan.expected_count_failed cause={cause}");
+        error!("library.scan.expected_count_failed cause={cause:#}");
         0
     })
 }
@@ -141,11 +141,17 @@ fn scan_directory(
     cancel: &Cancellation,
     version: &LibraryVersion,
     progress: &mut Progress<'_>,
-) -> Result<bool, Stop> {
+) -> std::result::Result<bool, Stop> {
     let directory = &job.directory;
     let directory_id = directory.id.rowid();
-    let reader = database.read()?;
-    let mut writer = LibraryWriter::new(database.write()?);
+    let reader = database
+        .read()
+        .context("the scan cannot read the library")?;
+    let mut writer = LibraryWriter::new(
+        database
+            .write()
+            .context("the scan cannot write the library")?,
+    );
     let generation = writer.begin_scan(directory_id)?;
     let dirs = scope(Path::new(&directory.path), job.dirs.as_deref());
     // The prefixes the walk covers, to mark only those files Missing.
@@ -189,7 +195,7 @@ fn walk_directory(
     cancel: &Cancellation,
     version: &LibraryVersion,
     progress: &mut Progress<'_>,
-) -> Result<bool, Stop> {
+) -> std::result::Result<bool, Stop> {
     let directory_id = pass.directory.id.rowid();
     let mut walk = discover(&pass.directory.path, &pass.dirs);
     let mut complete = true;
@@ -504,7 +510,10 @@ struct InspectedFile {
 }
 
 /// Reads a file. One that cannot be decoded is kept in the library but is not playable.
-fn inspect(file: &DiscoveredFile, cover: &ArtworkOutcome) -> Result<InspectedFile, Undecodable> {
+fn inspect(
+    file: &DiscoveredFile,
+    cover: &ArtworkOutcome,
+) -> std::result::Result<InspectedFile, Undecodable> {
     let audio = inspect_audio_file(&file.path, &file.extension)?;
     let (tag_status, tags) = match read_source_metadata(&file.path) {
         Ok(Some(tags)) => (TagStatus::Loaded, tags),
@@ -625,7 +634,7 @@ fn inspect_all(
     files: &[DiscoveredFile],
     covers: &HashMap<PathBuf, ArtworkOutcome>,
     cancel: &Cancellation,
-) -> Vec<Option<Result<InspectedFile, Undecodable>>> {
+) -> Vec<Option<std::result::Result<InspectedFile, Undecodable>>> {
     parallel(files, cancel, |file| {
         let cover = covers.get(album_directory(file))?;
         // A file that panics a parser is a file that cannot be read, not a dead scan.
@@ -648,7 +657,7 @@ enum Outcome {
     Inspected {
         known: Option<(i64, i64)>,
         file: DiscoveredFile,
-        result: Box<Result<InspectedFile, Undecodable>>,
+        result: Box<std::result::Result<InspectedFile, Undecodable>>,
     },
 }
 
@@ -904,7 +913,7 @@ fn store_file(
     generation: i64,
     known: Option<(i64, i64)>,
     file: &DiscoveredFile,
-    result: &Result<InspectedFile, Undecodable>,
+    result: &std::result::Result<InspectedFile, Undecodable>,
 ) -> Result<()> {
     let status = match result {
         Ok(_) => InspectionStatus::Indexed,

@@ -1,5 +1,6 @@
 import { onDestroy } from "svelte";
 import { AppServices } from "#lib/app/app-services.svelte";
+import type { Result } from "#lib/native/result";
 
 /**
  * The seek drag of the waveform band. While the pointer drags, the playback clock holds the bar at
@@ -33,8 +34,8 @@ export class SeekDrag {
     this.#preview = null;
   };
 
-  /** Seeks to `ms`. The returned promise settles when the seek is reported. */
-  public readonly commit = (ms: number): Promise<void> => {
+  /** Seeks to `ms`. The returned promise settles, with the seek's Result, when the seek is reported. */
+  public readonly commit = (ms: number): Promise<Result<null>> => {
     this.#hold(ms);
     return this.#playback.seek(ms).finally(() => {
       this.#letGo();

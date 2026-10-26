@@ -16,6 +16,7 @@ import type {
   TrackId,
 } from "#lib/native/bindings";
 import type { player } from "#lib/native/commands";
+import type { Result } from "#lib/native/result";
 import type { PlaybackClock } from "./playback-clock.svelte";
 import { PlaybackSnapshots } from "./playback-snapshots";
 
@@ -221,39 +222,39 @@ export class Player {
   }
 
   /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
-  public async start(context: PlaybackContext, startTrackId: TrackId | null): Promise<void> {
-    await this.#player.play(context, startTrackId);
+  public start(context: PlaybackContext, startTrackId: TrackId | null): Promise<Result<null>> {
+    return this.#player.play(context, startTrackId);
   }
 
-  public async pause(): Promise<void> {
-    await this.#player.pause();
+  public pause(): Promise<Result<null>> {
+    return this.#player.pause();
   }
 
   /** Resumes a paused track; after a failure, retries the current item with the queue intact. */
-  public async resume(): Promise<void> {
-    await this.#player.resume();
+  public resume(): Promise<Result<null>> {
+    return this.#player.resume();
   }
 
   /** Plays the album from its first track if it is not loaded; otherwise pauses or resumes it. */
-  public togglePlayAlbum(albumId: AlbumId): Promise<void> {
+  public togglePlayAlbum(albumId: AlbumId): Promise<Result<null>> {
     return this.#toggleAlbum(this.isAlbumLoaded(albumId), { kind: "album", albumId });
   }
 
-  #toggleAlbum(loaded: boolean, context: PlaybackContext): Promise<void> {
+  #toggleAlbum(loaded: boolean, context: PlaybackContext): Promise<Result<null>> {
     if (!loaded) return this.start(context, null);
     return this.isPlaying ? this.pause() : this.resume();
   }
 
-  public async previous(): Promise<void> {
-    await this.#player.previous();
+  public previous(): Promise<Result<null>> {
+    return this.#player.previous();
   }
 
-  public async next(): Promise<void> {
-    await this.#player.next();
+  public next(): Promise<Result<null>> {
+    return this.#player.next();
   }
 
   /** Seeks to `positionMs`, which the backend clamps to the duration. The position shows at once. */
-  public async seek(positionMs: number): Promise<void> {
+  public async seek(positionMs: number): Promise<Result<null>> {
     // The one place every seek passes: the backend takes whole, non-negative milliseconds.
     const target = Math.max(Math.round(positionMs), 0);
     const session = this.#session();
@@ -262,89 +263,88 @@ export class Player {
       playbackId: session?.playbackId ?? null,
       seekCount: session?.seekCount ?? 0,
     };
-    try {
-      await this.#player.seek(target);
-    } catch (error) {
-      this.#pendingSeek = null;
-      throw error;
-    }
+    const result = await this.#player.seek(target);
+    // A refused seek never happens, so its position must not keep showing.
+    if (!result.ok) this.#pendingSeek = null;
+    return result;
   }
 
   /** Sets the volume, shown at once until the backend reports it. */
-  public async setVolume(value: number): Promise<void> {
+  public async setVolume(value: number): Promise<Result<null>> {
     const volume = Math.max(0, Math.min(1, value));
     this.#volumePreview = volume;
-    try {
-      await this.#player.setVolume(volume);
-    } catch (error) {
-      this.#volumePreview = null;
-      throw error;
-    }
+    const result = await this.#player.setVolume(volume);
+    // A refused volume is not set, so the preview must not keep showing it.
+    if (!result.ok) this.#volumePreview = null;
+    return result;
   }
 
   /** Sets the volume; changing it while muted unmutes, so the change is audible. */
-  public async changeVolume(value: number): Promise<void> {
+  public async changeVolume(value: number): Promise<Result<null>> {
     const pending = [this.setVolume(value)];
     if (this.muted) pending.push(this.toggleMute());
-    await Promise.all(pending);
+    const results = await Promise.all(pending);
+    return results.find((result) => !result.ok) ?? { ok: true, value: null };
   }
 
-  public async toggleMute(): Promise<void> {
-    await this.#player.setMuted(!this.muted);
+  public toggleMute(): Promise<Result<null>> {
+    return this.#player.setMuted(!this.muted);
   }
 
-  public async setShuffle(enabled: boolean): Promise<void> {
-    await this.#player.setShuffle(enabled);
+  public setShuffle(enabled: boolean): Promise<Result<null>> {
+    return this.#player.setShuffle(enabled);
   }
 
   /** Turns the global shuffle on, then replaces the queue with `context`. Nothing starts if the shuffle cannot be turned on. */
-  public async shuffleAndStart(context: PlaybackContext): Promise<void> {
-    await this.setShuffle(true);
-    await this.start(context, null);
+  public async shuffleAndStart(context: PlaybackContext): Promise<Result<null>> {
+    const shuffle = await this.setShuffle(true);
+    if (!shuffle.ok) return shuffle;
+    return this.start(context, null);
   }
 
-  public async setRepeatMode(mode: RepeatMode): Promise<void> {
-    await this.#player.setRepeatMode(mode);
+  public setRepeatMode(mode: RepeatMode): Promise<Result<null>> {
+    return this.#player.setRepeatMode(mode);
   }
 
-  public async playerRemoveQueueItem(id: QueueItemId): Promise<void> {
-    await this.#player.removeQueueItem(id);
+  public playerRemoveQueueItem(id: QueueItemId): Promise<Result<null>> {
+    return this.#player.removeQueueItem(id);
   }
 
   /** Moves an upcoming item to `to`, an index into the upcoming list (0 is next up). */
-  public async playerMoveQueueItem(id: QueueItemId, to: number): Promise<void> {
-    await this.#player.moveQueueItem(id, to);
+  public playerMoveQueueItem(id: QueueItemId, to: number): Promise<Result<null>> {
+    return this.#player.moveQueueItem(id, to);
   }
 
-  /** Resolves true when upcoming items were removed (the caller offers an undo). */
-  public async playerClearQueue(): Promise<boolean> {
+  /** The value is true when upcoming items were removed (the caller offers an undo). */
+  public async playerClearQueue(): Promise<Result<boolean>> {
     const hadUpcoming = (this.queue?.upcomingCount ?? 0) > 0;
-    await this.#player.clearQueue();
-    return hadUpcoming;
+    const result = await this.#player.clearQueue();
+    if (!result.ok) return result;
+    return { ok: true, value: hadUpcoming };
   }
 
   /** Puts back the queue the last replacement or "Clear upcoming" took away. */
-  public async undoQueueChange(): Promise<void> {
-    await this.#player.restorePreviousQueue();
+  public undoQueueChange(): Promise<Result<null>> {
+    return this.#player.restorePreviousQueue();
   }
 
   /** Jumps to an upcoming item and plays it. */
-  public async playerPlayQueueItem(id: QueueItemId): Promise<void> {
-    await this.#player.playQueueItem(id);
+  public playerPlayQueueItem(id: QueueItemId): Promise<Result<null>> {
+    return this.#player.playQueueItem(id);
   }
 
   /** Adds a library track right after the current one (`next`) or at the end. */
-  public async playerEnqueueTrack(trackId: TrackId, next: boolean): Promise<void> {
-    await this.#player.enqueueTrack(trackId, next);
+  public playerEnqueueTrack(trackId: TrackId, next: boolean): Promise<Result<null>> {
+    return this.#player.enqueueTrack(trackId, next);
   }
 
   /** A loaded track restarts on the new device at the same position. */
-  public async setOutputSelection(selection: AudioOutputSelection): Promise<void> {
-    await this.#player.setOutputSelection(selection);
+  public setOutputSelection(selection: AudioOutputSelection): Promise<Result<null>> {
+    return this.#player.setOutputSelection(selection);
   }
 
   /** A slice of the upcoming list beyond what the queue state carries. */
-  public fetchQueueWindow(offset: number, limit: number): Promise<QueueWindow> {
+  public fetchQueueWindow(offset: number, limit: number): Promise<Result<QueueWindow>> {
     return this.#player.queueWindow(offset, limit);
   }
 

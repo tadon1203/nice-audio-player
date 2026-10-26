@@ -3,8 +3,8 @@
 //! change Symphonia playability.
 
 use super::artwork::ArtworkMimeType;
-use crate::Result;
-use crate::errors::Error;
+use crate::library::errors::LibraryError;
+use crate::library::errors::Result;
 use lofty::{
     config::ParseOptions,
     file::TaggedFileExt,
@@ -59,13 +59,13 @@ pub(crate) fn is_supported_extension(extension: &str) -> bool {
 /// that cannot be played.
 pub(crate) fn validate_audio_file(path: &Path) -> Result<ValidatedAudioFile> {
     if is_blank(path) {
-        return Err(Error::TrackUnavailable);
+        return Err(LibraryError::TrackUnavailable);
     }
     let Ok(metadata) = std::fs::metadata(path) else {
-        return Err(Error::TrackUnavailable);
+        return Err(LibraryError::TrackUnavailable);
     };
     if !metadata.is_file() {
-        return Err(Error::TrackUnavailable);
+        return Err(LibraryError::TrackUnavailable);
     }
     describe_audio_file(path)
 }
@@ -74,20 +74,20 @@ pub(crate) fn validate_audio_file(path: &Path) -> Result<ValidatedAudioFile> {
 /// thousands of library files at once; a file that vanished fails when it is loaded instead.
 pub(crate) fn describe_audio_file(path: &Path) -> Result<ValidatedAudioFile> {
     if is_blank(path) {
-        return Err(Error::TrackUnavailable);
+        return Err(LibraryError::TrackUnavailable);
     }
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.is_empty())
-        .ok_or(Error::TrackUnavailable)?;
+        .ok_or(LibraryError::TrackUnavailable)?;
     let extension = path
         .extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_ascii_lowercase);
     let extension = match extension {
         Some(extension) if SUPPORTED_EXTENSIONS.contains(&extension.as_str()) => extension,
-        _ => return Err(Error::TrackUnavailable),
+        _ => return Err(LibraryError::TrackUnavailable),
     };
     Ok(ValidatedAudioFile {
         path: path.to_path_buf(),
@@ -137,7 +137,7 @@ pub(crate) struct InspectedAudioFile {
 pub(crate) fn inspect_audio_file(
     path: &Path,
     extension: &str,
-) -> Result<InspectedAudioFile, Undecodable> {
+) -> std::result::Result<InspectedAudioFile, Undecodable> {
     let source = File::open(path)
         .inspect_err(|cause| log::warn!("media.inspection.open_failed cause={cause}"))
         .ok()
@@ -271,7 +271,7 @@ pub(crate) enum ArtworkRead {
         mime_type: ArtworkMimeType,
     },
 }
-pub(crate) fn read_source_metadata(path: &Path) -> Result<Option<SourceMetadata>> {
+pub(crate) fn read_source_metadata(path: &Path) -> anyhow::Result<Option<SourceMetadata>> {
     let tagged = Probe::open(path)?
         .options(ParseOptions::new().read_properties(false))
         .read()?;

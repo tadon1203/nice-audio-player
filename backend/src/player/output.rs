@@ -29,8 +29,8 @@ use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::processing::OutputProcessingPlan;
 use super::state::PlaybackFailureCode;
 use super::volume::{AtomicEffectiveGain, process_sample};
-use crate::Result;
 use crate::meter::{Meter, MeterTap};
+use crate::player::errors::PlayerError;
 
 /// Identifies one output stream, which lives as long as a session.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -921,7 +921,7 @@ pub(crate) struct ResolvedAudioOutputDevice {
     pub(crate) identity: AudioOutputDeviceIdentity,
 }
 
-pub(crate) fn list_output_devices() -> Result<Vec<AudioOutputDevice>> {
+pub(crate) fn list_output_devices() -> Result<Vec<AudioOutputDevice>, PlayerError> {
     let devices = cpal::default_host().output_devices()?;
     let mut output_devices = devices
         .filter_map(|device| {

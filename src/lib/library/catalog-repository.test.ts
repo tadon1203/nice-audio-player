@@ -184,7 +184,7 @@ describe("CatalogRepository page versions", () => {
       true,
     );
     queryClient.setQueryData(options.queryKey, {
-      pages: [{ items: [], total: 200, version: 1 }],
+      pages: [{ ok: true, value: { items: [], total: 200, version: 1 } }],
       pageParams: [0],
     });
     commands.libraryListTracks.mockResolvedValue({ items: [], total: 200, version: 2 });
@@ -209,7 +209,7 @@ describe("CatalogRepository page versions", () => {
       true,
     );
     queryClient.setQueryData(options.queryKey, {
-      pages: [{ items: [], total: 200, version: 1 }],
+      pages: [{ ok: true, value: { items: [], total: 200, version: 1 } }],
       pageParams: [0],
     });
     commands.libraryListTracks.mockResolvedValue({ items: [], total: 200, version: 1 });

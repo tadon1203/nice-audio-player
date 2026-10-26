@@ -27,9 +27,10 @@
     nowPlaying,
   } = AppServices.current();
   // A failed startup shows its reason here, since there is no playback state to report on.
+  const startupError = $derived(session.connection === "failed" ? session.startupError : null);
   const notice = $derived(
-    session.connection === "failed"
-      ? { kind: "error" as const, message: errorMessage(session.startupError) }
+    startupError !== null
+      ? { kind: "error" as const, message: errorMessage(startupError) }
       : notices.at("dock"),
   );
   const item = $derived(playback.item);

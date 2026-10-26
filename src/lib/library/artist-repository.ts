@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/svelte-query";
 import { type AlbumRow, type ArtistId, type ArtistRow } from "#lib/native/bindings";
 import type { library } from "#lib/native/commands";
+import type { Result } from "#lib/native/result";
 import { LibraryQueryKeys, type ArtistAlbumsArguments } from "./library-query-keys";
 import { PAGE_SIZE, type Page } from "./catalog-repository";
 import type {
@@ -20,36 +21,40 @@ export class ArtistRepository {
   }
 
   public detailsOptions(artistId: ArtistId): CreateQueryOptions<
-    ArtistRow,
+    Result<ArtistRow>,
     Error,
-    ArtistRow,
+    Result<ArtistRow>,
     readonly unknown[]
   > & {
-    initialData?: ArtistRow | InitialDataFunction<ArtistRow> | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], ArtistRow, Error> {
+    initialData?: Result<ArtistRow> | InitialDataFunction<Result<ArtistRow>> | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], Result<ArtistRow>, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.artist(artistId),
-      queryFn: (): Promise<ArtistRow> => this.#library.artist(artistId),
+      queryFn: (): Promise<Result<ArtistRow>> => this.#library.artist(artistId),
       gcTime: Infinity,
     });
   }
 
   public albumsOptions(request: ArtistAlbumsArguments): CreateInfiniteQueryOptions<
-    Page<AlbumRow>,
+    Result<Page<AlbumRow>>,
     Error,
-    InfiniteData<Page<AlbumRow>, unknown>,
+    InfiniteData<Result<Page<AlbumRow>>, unknown>,
     readonly unknown[],
     number
   > & {
     initialData?:
-      | InfiniteData<Page<AlbumRow>, number>
-      | InitialDataFunction<InfiniteData<Page<AlbumRow>, number>>
+      | InfiniteData<Result<Page<AlbumRow>>, number>
+      | InitialDataFunction<InfiniteData<Result<Page<AlbumRow>>, number>>
       | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<Page<AlbumRow>, unknown>, Error> {
+  } & QueryKeyWithDataTag<
+      readonly unknown[],
+      InfiniteData<Result<Page<AlbumRow>>, unknown>,
+      Error
+    > {
     return infiniteQueryOptions({
       queryKey: LibraryQueryKeys.artistAlbums(request),
       initialPageParam: 0,
-      queryFn: ({ pageParam }): Promise<Page<AlbumRow>> =>
+      queryFn: ({ pageParam }): Promise<Result<Page<AlbumRow>>> =>
         this.#library.listArtistAlbums(request.artistId, {
           search: null,
           sort: request.sortKey,
@@ -57,9 +62,11 @@ export class ArtistRepository {
           offset: pageParam,
           limit: PAGE_SIZE,
         }),
-      getNextPageParam: (last: Page<AlbumRow>, _pages, lastPageParam: number) => {
-        const next = lastPageParam + last.items.length;
-        return next < last.total ? next : undefined;
+      // A failed page has no next page to ask for: the list stops at it and shows its error.
+      getNextPageParam: (last: Result<Page<AlbumRow>>, _pages, lastPageParam: number) => {
+        if (!last.ok) return undefined;
+        const next = lastPageParam + last.value.items.length;
+        return next < last.value.total ? next : undefined;
       },
       gcTime: Infinity,
     });

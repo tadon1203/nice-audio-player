@@ -20,6 +20,7 @@ export class MeterFeed {
       this.#pending = [];
       let ended = false;
 
+      // A failed start sends no frames, so the meter stays at the floor. That empty view is correct.
       meterCommands
         .start((frame) => {
           if (ended) return;
@@ -35,12 +36,14 @@ export class MeterFeed {
           if (this.#pending.length > MAX_PENDING) this.#pending.shift();
           onFrame?.();
         })
-        .catch(() => {});
+        // The Result is not read: a failed start sends no frames, so the meter stays at the floor.
+        .catch(() => undefined);
 
       return (): void => {
         ended = true;
         this.#pending = [];
-        meterCommands.stop().catch(() => {});
+        // A failed stop leaves frames that `ended` already drops. Nothing shows the failure.
+        meterCommands.stop().catch(() => undefined);
       };
     });
   }

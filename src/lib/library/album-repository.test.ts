@@ -2,6 +2,7 @@ import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it } from "vitest";
 import { type AlbumId, type AlbumRow } from "#lib/native/bindings";
 import { library } from "#lib/native/commands";
+import type { Result } from "#lib/native/result";
 import type { Page } from "./catalog-repository";
 import { AlbumRepository } from "./album-repository";
 import { LibraryQueryKeys } from "./library-query-keys";
@@ -17,10 +18,10 @@ const summary = (year: number): AlbumRow => ({
   year,
 });
 
-const page = (items: AlbumRow[]): Page<AlbumRow> => ({
-  items,
-  total: items.length,
-  version: 1,
+/** A page the query cache holds: the Result of a read that succeeded. */
+const page = (items: AlbumRow[]): Result<Page<AlbumRow>> => ({
+  ok: true,
+  value: { items, total: items.length, version: 1 },
 });
 
 describe("AlbumRepository.cachedSummary", () => {

@@ -92,7 +92,7 @@
         <LoadingStatus>Loading library…</LoadingStatus>
       {:else if catalog.viewState === "unavailable"}
         <ErrorAlert message={catalog.statusMessage ?? ""} />
-      {:else if catalog.viewState === "catalogError"}
+      {:else if catalog.error !== null}
         <ErrorAlert
           message={errorMessage(catalog.error)}
           onRetry={() => actions.run(() => catalog.refetch(), "library")}

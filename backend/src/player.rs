@@ -12,18 +12,19 @@ use std::sync::{
     mpsc::{self, Sender},
 };
 
-use crate::Result;
 use crate::ids::{QueueItemId, TrackId};
 use crate::library::Library;
 use crate::messages::BackendMessage;
 use crate::meter::Meter;
+use crate::player::errors::{PlayerError, Result};
 use crate::player::output::{AudioOutputSelection, OutputStreamFactory};
 use crate::player::volume::{DEFAULT_PLAYBACK_VOLUME, NormalizedVolume};
 use crate::player::waveform::Waveforms;
 use crate::settings::SettingsStore;
-use crate::threads::{Reply, WorkerThread, request};
+use crate::threads::{WorkerThread, request};
 
 pub(crate) mod decode;
+pub(crate) mod errors;
 #[cfg(test)]
 pub(crate) mod fake_output;
 pub(crate) mod output;
@@ -41,6 +42,8 @@ mod transport;
 mod worker;
 
 use worker::{PlayerCommand, PlayerWorker, WorkerInput};
+
+type Reply<T> = crate::threads::Reply<T, PlayerError>;
 
 pub use queue::RepeatMode;
 pub use state::{PlaybackPosition, PlayerState, QueueState, QueueWindow, UPCOMING_WINDOW};

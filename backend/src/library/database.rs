@@ -2,9 +2,9 @@
 //! is given the schema; anything else is replaced by an empty database. Every connection goes
 //! through `configure_common`, so the SQL functions are registered on each.
 
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::register_sql_functions;
+use crate::library::errors::LibraryError;
+use crate::library::errors::Result;
 use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags};
 use std::ops::Deref;
@@ -130,7 +130,7 @@ impl Database {
 
     fn open(&self, flags: OpenFlags) -> Result<Connection> {
         if !self.usable {
-            return Err(Error::LibraryUnavailable);
+            return Err(LibraryError::LibraryUnavailable);
         }
         let connection = Connection::open_with_flags(&self.path, flags)?;
         configure_common(&connection)?;

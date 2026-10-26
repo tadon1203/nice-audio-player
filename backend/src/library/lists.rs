@@ -16,9 +16,9 @@ use super::{
     Library, text,
     tracks::{artwork_ref, non_blank, playable_file_condition, track_album, track_state},
 };
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, artist_id_column, track_id_column};
+use crate::library::errors::LibraryError;
+use crate::library::errors::Result;
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter, types::Value};
 
 /// An album's tracks in playing order: by disc, then track, unnumbered ones last.
@@ -112,7 +112,7 @@ impl Listing {
             limit_at + 1
         ))?;
         let rows = statement.query_map(params_from_iter(&params), row)?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 }
 
@@ -487,7 +487,7 @@ fn album_details_of(connection: &Connection, album_id: AlbumId) -> Result<AlbumD
             album_row,
         )
         .optional()?
-        .ok_or(Error::AlbumNotFound)?;
+        .ok_or(LibraryError::AlbumNotFound)?;
     let in_album = "m.album_id = ?1";
     let playable_file = playable_file_condition();
     let (count, duration, year, date, playable): (
@@ -523,7 +523,7 @@ fn album_details_of(connection: &Connection, album_id: AlbumId) -> Result<AlbumD
         },
     )?;
     if count == 0 {
-        return Err(Error::AlbumNotFound);
+        return Err(LibraryError::AlbumNotFound);
     }
     Ok(AlbumDetails {
         summary: AlbumRow { year, ..summary },
@@ -583,7 +583,7 @@ impl Library {
         );
         let page = self.page(&listing, request.offset, request.limit, album_row)?;
         if page.total == 0 {
-            return Err(Error::ArtistNotFound);
+            return Err(LibraryError::ArtistNotFound);
         }
         Ok(page)
     }
@@ -594,7 +594,7 @@ impl Library {
         let connection = self.read()?;
         let rows = listing.rows(&connection, 0, u32::MAX, album_track_row)?;
         if rows.is_empty() {
-            return Err(Error::AlbumNotFound);
+            return Err(LibraryError::AlbumNotFound);
         }
         Ok(rows)
     }
@@ -648,7 +648,7 @@ impl Library {
                 read_artist,
             )
             .optional()?
-            .ok_or(Error::ArtistNotFound)
+            .ok_or(LibraryError::ArtistNotFound)
     }
 
     /// The details of an album by its ID.

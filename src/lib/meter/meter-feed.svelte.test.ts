@@ -24,9 +24,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.start.mockImplementation((onFrame: (frame: MeterFrame) => void) => {
     push = onFrame;
-    return Promise.resolve(undefined);
+    return Promise.resolve({ ok: true, value: undefined });
   });
-  mocks.stop.mockResolvedValue(undefined);
+  mocks.stop.mockResolvedValue({ ok: true, value: undefined });
 });
 
 let cleanup: () => void;

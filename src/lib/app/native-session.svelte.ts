@@ -1,6 +1,7 @@
 import {
   type Appearance as AppearanceValue,
   type BackendMessage,
+  type CommandError,
   type LibraryState,
   type PlaybackPosition,
   type PlaybackWaveform,
@@ -34,7 +35,7 @@ export class NativeSession {
   readonly #targets: SessionTargets;
   readonly #arrived = new Set<string>();
   #connection = $state.raw<ConnectionState>("connecting");
-  #startupError = $state.raw<unknown>(null);
+  #startupError = $state.raw<CommandError | null>(null);
 
   public constructor(appCommands: typeof app, targets: SessionTargets) {
     this.#app = appCommands;
@@ -46,7 +47,7 @@ export class NativeSession {
   }
 
   /** Why the connection failed, while `connection` is `failed`; the Renderer shows it. */
-  public get startupError(): unknown {
+  public get startupError(): CommandError | null {
     return this.#startupError;
   }
 
@@ -58,18 +59,22 @@ export class NativeSession {
   public connect(): () => void {
     let active = true;
 
-    const fail = (error: unknown): void => {
+    const fail = (error: CommandError): void => {
       if (!active) return;
       this.#startupError = error;
       this.#connection = "failed";
     };
 
     this.#connection = "connecting";
-    this.#app
+    void this.#app
       .connect((message) => {
         if (active) this.#route(message);
       })
-      .catch(fail);
+      .then((outcome) => {
+        if (!outcome.ok) fail(outcome.error);
+      })
+      // The adapter never rejects. A rejection is still a failed connect, so it shows as one.
+      .catch(() => fail({ code: "internal" }));
 
     return () => {
       active = false;

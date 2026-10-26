@@ -15,11 +15,11 @@ use super::{
     scan,
     version::LibraryVersion,
 };
-use crate::Result;
-use crate::errors::Error;
 use crate::ids::DirectoryId;
+use crate::library::errors::LibraryError;
+use crate::library::errors::Result;
 use crate::messages::{self, BackendMessage};
-use crate::threads::{Cancellation, Reply, WorkerThread, answer, request, run_in_background};
+use crate::threads::{Cancellation, WorkerThread, answer, request, run_in_background};
 use log::{debug, error, info, warn};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
@@ -32,6 +32,9 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
+
+/// Where a worker answers one command, with the Library's error.
+type Reply<T> = crate::threads::Reply<T, LibraryError>;
 
 /// How long a directory must be quiet after a change before it is scanned, so copying an album
 /// starts one scan and not one per file.
@@ -105,13 +108,13 @@ impl LibrarySync {
         Self::Running { messages, thread }
     }
 
-    /// Sends a command and waits for its answer. A worker that has stopped is `WorkerStopped`.
+    /// Sends a command and waits for its answer. A worker that has stopped is an internal error.
     fn call(&self, command: impl FnOnce(Reply<()>) -> SyncCommand) -> Result<()> {
         match self {
             Self::Running { messages, .. } => {
                 request(messages, |reply| SyncInput::Command(command(reply)))
             }
-            Self::Unavailable => Err(Error::LibraryUnavailable),
+            Self::Unavailable => Err(LibraryError::LibraryUnavailable),
         }
     }
 
@@ -303,7 +306,7 @@ impl LibraryWorker {
     /// Runs a change to the directories, unless a scan is running: directories cannot change under one.
     fn while_idle<T>(&mut self, change: impl FnOnce(&Database) -> Result<T>) -> Result<T> {
         if self.scan.is_some() {
-            return Err(Error::ScanRunning);
+            return Err(LibraryError::Internal(anyhow::anyhow!("a scan is running")));
         }
         change(&self.database)
     }

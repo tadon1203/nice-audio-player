@@ -44,7 +44,7 @@
 <WorkspaceScrollRegion viewportAttachment={scroll.attach} contentClass="py-8 pb-16">
   <BackLink href={resolve("/library/album-artists")}>Album Artists</BackLink>
 
-  {#if artistQuery.isError}
+  {#if artistQuery.error !== null}
     <ErrorAlert
       message={errorMessage(artistQuery.error)}
       onRetry={() => actions.run(() => artistQuery.refetch(), "library")}
@@ -54,7 +54,7 @@
       <PageTitle></PageTitle>
     </div>
     <LoadingStatus>Reading artist…</LoadingStatus>
-  {:else if albums.isError}
+  {:else if albums.error !== null}
     <ErrorAlert
       message={errorMessage(albums.error)}
       onRetry={() => actions.run(() => albums.refetch(), "library")}

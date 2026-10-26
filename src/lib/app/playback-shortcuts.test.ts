@@ -56,7 +56,7 @@ describe("global seek shortcut", () => {
       requestFrame: (): number => 0,
       cancelFrame: (): undefined => undefined,
     });
-    mocks.seek.mockResolvedValue(null);
+    mocks.seek.mockResolvedValue({ ok: true, value: null });
     const playback = new Player(player, clock);
     playback.acceptPlayback(playing(10_000));
     now = 1_000 + 250.37;

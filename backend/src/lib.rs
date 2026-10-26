@@ -2,8 +2,8 @@
 //!
 //! - `app`: `BackendApp`, the use cases the Host calls.
 //! - `messages`: `BackendMessage`, what the Backend sends the Host on the channel the Host gives it.
-//! - `errors`: `Error`, the failure of a Backend function, and `CommandError`, the code the Host
-//!   answers the Renderer with.
+//! - `errors`: `CommandError`, the code the Host answers the Renderer with, and `contain`. Each
+//!   domain has its own error type. A use case returns `anyhow::Result`.
 //! - `ids`: the id types the Host names.
 //! - `threads`: `Cancellation`, `request`, and `run_in_background`.
 
@@ -21,5 +21,3 @@ pub(crate) mod settings;
 
 #[cfg(test)]
 pub(crate) mod test_support;
-
-pub use errors::{Error, Result};

@@ -1,5 +1,6 @@
 import { type Appearance as AppearanceState, type AppearancePatch } from "#lib/native/bindings";
 import type { appearance } from "#lib/native/commands";
+import type { Result } from "#lib/native/result";
 
 /**
  * The Renderer's copy of the Appearance. The Backend pushes it whole when it changes, so a change
@@ -29,7 +30,7 @@ export class Appearance {
   }
 
   /** Sends `patch`; `null` fields stay as they are. The pushed Appearance shows the result. */
-  public async update(patch: AppearancePatch): Promise<void> {
-    await this.#appearance.update(patch);
+  public update(patch: AppearancePatch): Promise<Result<void>> {
+    return this.#appearance.update(patch);
   }
 }

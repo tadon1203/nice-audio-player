@@ -2705,6 +2705,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 name = "nice-audio-player"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "log",
  "nice-audio-player-backend",
  "parking_lot",
@@ -2727,6 +2728,7 @@ dependencies = [
 name = "nice-audio-player-backend"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "blake3",
  "chardetng",
  "cpal",
