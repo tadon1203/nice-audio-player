@@ -79,6 +79,40 @@ Source: [TypeScript Do's and Don'ts](https://www.typescriptlang.org/docs/handboo
 
 Sources: [Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html), [TSConfig `strict`](https://www.typescriptlang.org/tsconfig/strict.html).
 
+### Inference and assertions
+
+- Do not add a type annotation when TypeScript infers the same type.
+- Do not use `as T` to hide a real type mismatch. An assertion is not checked at runtime. Use `as const` for literal values.
+- Validate untrusted input at runtime. Types are erased at compile time.
+
+### Objects and interfaces
+
+- Use `interface` for object shapes. Use `type` for unions and aliases.
+- Use `readonly` to show intent. It does not make nested values immutable. Use `readonly T[]` for arrays that you do not change.
+- Use `interface ... extends` to add members to a type. Check an intersection (`A & B`) for properties that became `never`.
+- Do not bypass excess property checks by reflex. A misspelled key is usually a bug. Add an index signature only when extra keys are intended.
+- Use generics instead of `any`, `unknown`, or several near-identical types.
+
+### Functions and generics
+
+- Use the type parameter in the signature. Do not add a constraint that hides its type, such as `extends any[]`.
+- Remove a type parameter that appears only once in a signature.
+
+### Classes
+
+- Assign each field in the constructor body. Use `name!: string` only when another mechanism sets the field.
+- Use `readonly` for a field that you set once.
+- Use `#field` when you need runtime privacy. `private` is checked at compile time only.
+- Use `declare` to change the type of an inherited field without emitting code.
+- `implements` only checks compatibility. It does not add members.
+
+### Modules and derived types
+
+- Use `import type` for imports that are used only as types.
+- Derive a type from a value or another type with `typeof`, `keyof`, and indexed access types. Do not write the same shape twice.
+
+Sources: [Everyday Types](https://www.typescriptlang.org/docs/handbook/2/everyday-types.html), [Basic Types](https://www.typescriptlang.org/docs/handbook/2/basic-types.html), [Functions](https://www.typescriptlang.org/docs/handbook/2/functions.html), [Objects](https://www.typescriptlang.org/docs/handbook/2/objects.html), [Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html), [Modules](https://www.typescriptlang.org/docs/handbook/2/modules.html), [Creating Types from Types](https://www.typescriptlang.org/docs/handbook/2/types-from-types.html).
+
 ## Frontend (TypeScript & Svelte 5)
 
 - Favor plain objects and standard functions. Use classes primarily when encapsulating reactive state and behavior together.
