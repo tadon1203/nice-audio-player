@@ -1,4 +1,3 @@
-import { useQueryClient, type QueryClient } from "@tanstack/svelte-query";
 import { useApp } from "#lib/app/app.svelte";
 
 /**
@@ -7,19 +6,18 @@ import { useApp } from "#lib/app/app.svelte";
  * wait on the file. Construct it while a component initialises; it lives as long as that component.
  */
 export class LyricsPrefetchController {
-  readonly #queryClient: QueryClient = useQueryClient();
   readonly #app = useApp();
 
   public constructor() {
     // The playback and the queue are an external store, and each prefetch is a request, not state,
     // so this stays an effect.
     $effect(() => {
-      const { player: playback, lyrics } = this.#app;
+      const { player: playback, lyrics, queryClient } = this.#app;
       const currentId = playback.item?.id ?? null;
       const nextId = playback.queue?.upcoming[0]?.id ?? null;
       for (const trackId of [currentId, nextId]) {
         if (trackId !== null) {
-          void this.#queryClient.query(lyrics.getTrack(trackId)).catch(() => undefined);
+          void queryClient.query(lyrics.getTrack(trackId)).catch(() => undefined);
         }
       }
     });
