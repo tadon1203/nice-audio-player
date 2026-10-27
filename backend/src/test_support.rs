@@ -12,9 +12,10 @@ use parking_lot::Mutex;
 
 use crate::errors::CommandError;
 use crate::ids::TrackId;
-use crate::library::media::ValidatedAudioFile;
-use crate::library::models::{LibraryState, TrackCore, TrackSummary};
-use crate::library::tracks::PlayableTrack;
+use crate::library::read::playback::{PlayableTrack, TrackSummary};
+use crate::library::read::tracks::TrackCommonFields;
+use crate::library::sync::media::ValidatedAudioFile;
+use crate::library::sync::state::LibraryState;
 use crate::messages::BackendMessage;
 use crate::player::{PlayerState, QueueState};
 
@@ -22,7 +23,7 @@ use crate::player::{PlayerState, QueueState};
 pub(crate) fn bare_track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
     PlayableTrack {
         track: TrackSummary {
-            core: TrackCore {
+            core: TrackCommonFields {
                 id,
                 title: file.file_name.clone(),
                 artist: None,

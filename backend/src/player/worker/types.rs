@@ -2,7 +2,7 @@
 
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
-use crate::library::tracks::PlayableTrack;
+use crate::library::read::playback::PlayableTrack;
 use crate::messages::BackendMessage;
 use crate::player::errors::PlayerError;
 use crate::player::output::{AudioOutputSelection, OutputEvent, OutputStreamFactory};

@@ -378,7 +378,7 @@ fn map_decode_error(error: &SymphoniaError) -> DecodeError {
 #[cfg(test)]
 mod tests {
     use super::{DamagedPackets, DecodeStep, MAX_CONSECUTIVE_DAMAGED_PACKETS};
-    use crate::library::media::ValidatedAudioFile;
+    use crate::library::sync::media::ValidatedAudioFile;
     use crate::player::decode::CompressedAudioSource;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use crate::threads::Cancellation;

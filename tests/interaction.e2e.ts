@@ -3,7 +3,7 @@ import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
 import { playbackItemFor, playingSnapshot } from "./fixtures/data";
 import type { Locator } from "@playwright/test";
-import type { TrackRow } from "../src/lib/native/bindings";
+import type { TrackListItem } from "../src/lib/native/bindings";
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
@@ -130,8 +130,9 @@ test("Play next and Add to queue put a track where they say", async ({
 }) => {
   // What the queue should hold once each command has run: the test states it.
   const rest = library.tracks.filter((track) => track.state === "playable").slice(1);
-  const track = (title: string): TrackRow => library.tracks.find((entry) => entry.title === title)!;
-  const without = (tracks: typeof rest, ...removed: typeof rest): TrackRow[] =>
+  const track = (title: string): TrackListItem =>
+    library.tracks.find((entry) => entry.title === title)!;
+  const without = (tracks: typeof rest, ...removed: typeof rest): TrackListItem[] =>
     tracks.filter((entry) => !removed.some((gone) => gone.id === entry.id));
   const afterPlayNext = [track("Track 010"), ...without(rest, track("Track 010"))];
   native.respond("playerEnqueueTrack", ({ next }) =>

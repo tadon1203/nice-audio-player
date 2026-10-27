@@ -1,9 +1,9 @@
 //! End-to-end scans of real (tiny) audio files against a real database.
 
-use crate::library::database::Database;
-use crate::library::directories;
-use crate::library::models::{ScanFailure, ScanState, ScanStatus};
-use crate::library::version::LibraryVersion;
+use crate::library::storage::Database;
+use crate::library::storage::version::LibraryVersion;
+use crate::library::sync::directories;
+use crate::library::sync::state::{ScanFailure, ScanState, ScanStatus};
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use crate::threads::Cancellation;
 use std::{
@@ -24,8 +24,8 @@ pub(super) fn fixture() -> Fixture {
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
     let data = directory.file("data");
-    let database = Database::initialize(&data).expect("database");
-    directories::add(&database, &music.to_string_lossy()).expect("register directory");
+    let database = Database::open(&data).expect("database");
+    directories::add_directory(&database, &music.to_string_lossy()).expect("register directory");
     Fixture {
         _directory: directory,
         music,
@@ -47,20 +47,25 @@ fn run_scan_of(fixture: &Fixture, changed: &[PathBuf]) -> ScanState {
     run_jobs(fixture, false, Some(changed))
 }
 
-fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<&[PathBuf]>) -> ScanState {
-    published(fixture, cancelled, dirs)
+fn run_jobs(fixture: &Fixture, cancelled: bool, changed_paths: Option<&[PathBuf]>) -> ScanState {
+    published(fixture, cancelled, changed_paths)
         .pop()
         .expect("a scan publishes its final state")
 }
 
 /// Runs the scan and returns every state it published, in order.
-fn published(fixture: &Fixture, cancelled: bool, dirs: Option<&[PathBuf]>) -> Vec<ScanState> {
-    let directories = directories::list(&fixture.database.read().unwrap()).expect("directories");
+fn published(
+    fixture: &Fixture,
+    cancelled: bool,
+    changed_paths: Option<&[PathBuf]>,
+) -> Vec<ScanState> {
+    let directories =
+        directories::list_directories(&fixture.database.read().unwrap()).expect("directories");
     let jobs: Vec<_> = directories
         .into_iter()
-        .map(|directory| crate::library::scan::ScanJob {
+        .map(|directory| crate::library::sync::scan::ScanJob {
             directory,
-            dirs: dirs.map(<[PathBuf]>::to_vec),
+            changed_paths: changed_paths.map(<[PathBuf]>::to_vec),
         })
         .collect();
     let cancellation = Cancellation::default();
@@ -69,7 +74,7 @@ fn published(fixture: &Fixture, cancelled: bool, dirs: Option<&[PathBuf]>) -> Ve
     }
     let states = RefCell::new(Vec::new());
     let publish = |scan: ScanState| states.borrow_mut().push(scan);
-    crate::library::scan::run(
+    crate::library::sync::scan::run_scan(
         &fixture.database,
         &jobs,
         &publish,
@@ -145,7 +150,7 @@ fn indexes_supported_files_and_ignores_the_rest() {
     assert_eq!(
         count(
             &fixture,
-            "SELECT duration_ms FROM track_source_metadata m JOIN tracks t ON t.id=m.track_id JOIN library_files f ON f.id=t.file_id WHERE f.relative_path='b.wav'"
+            "SELECT duration_ms FROM track_source_metadata source_metadata JOIN tracks track ON track.id=source_metadata.track_id JOIN library_files file ON file.id=track.file_id WHERE file.relative_path='b.wav'"
         ),
         2_000
     );
@@ -406,7 +411,7 @@ fn a_directory_holding_the_data_directory_cannot_be_registered() {
     let fixture = fixture();
     let parent = fixture.music.parent().unwrap();
 
-    let refused = directories::add(&fixture.database, &parent.to_string_lossy());
+    let refused = directories::add_directory(&fixture.database, &parent.to_string_lossy());
 
     assert_eq!(
         refused.err().map(|error| error.code()),
@@ -417,7 +422,7 @@ fn a_directory_holding_the_data_directory_cannot_be_registered() {
 pub(super) fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {
     let c = fixture.database.read().unwrap();
     let mut statement = c
-        .prepare("SELECT f.relative_path, t.id FROM tracks t JOIN library_files f ON f.id = t.file_id ORDER BY f.relative_path")
+        .prepare("SELECT file.relative_path, track.id FROM tracks track JOIN library_files file ON file.id = track.file_id ORDER BY file.relative_path")
         .unwrap();
 
     statement
@@ -457,10 +462,11 @@ fn a_moved_directory_and_a_renamed_file_keep_their_tracks_and_leave_nothing_miss
     // A queue entry holds the track id: it now resolves to the file's new place.
     let queued =
         crate::ids::TrackId::try_from_rowid(id_of(&before, "Old/one.wav").unwrap()).unwrap();
-    let location = crate::library::tracks::location_of(&fixture.database, queued)
-        .unwrap()
-        .existing()
-        .unwrap();
+    let location =
+        crate::library::read::tracks::track_location(&fixture.database.read().unwrap(), queued)
+            .unwrap()
+            .existing()
+            .unwrap();
     assert!(
         location.path.ends_with("New/one.wav"),
         "{:?}",
@@ -500,16 +506,16 @@ fn a_deleted_file_stays_missing_until_the_listener_deletes_it() {
     run_scan(&fixture, false);
     run_scan(&fixture, false);
 
-    let directories = directories::list(&fixture.database.read().unwrap()).unwrap();
+    let directories = directories::list_directories(&fixture.database.read().unwrap()).unwrap();
     assert_eq!(
         (directories[0].track_count, directories[0].missing_count),
         (2, 1)
     );
     assert_eq!(files(&fixture)[0].1, "missing", "gone.wav sorts first");
 
-    directories::delete_missing(&fixture.database).unwrap();
+    crate::library::sync::missing::delete_missing_tracks(&fixture.database).unwrap();
 
-    let directories = directories::list(&fixture.database.read().unwrap()).unwrap();
+    let directories = directories::list_directories(&fixture.database.read().unwrap()).unwrap();
     assert_eq!(
         (directories[0].track_count, directories[0].missing_count),
         (2, 0)
@@ -594,7 +600,7 @@ fn a_removed_directory_is_found_through_its_nearest_existing_parent() {
 
     run_scan_of(&fixture, &[gone]);
 
-    let directories = directories::list(&fixture.database.read().unwrap()).unwrap();
+    let directories = directories::list_directories(&fixture.database.read().unwrap()).unwrap();
     assert_eq!(
         (directories[0].track_count, directories[0].missing_count),
         (1, 1)
@@ -714,7 +720,7 @@ fn tracks_of_one_directory_and_album_with_different_artists_are_a_compilation() 
     std::fs::remove_file(fixture.music.join("Hits").join("3.wav")).unwrap();
     std::fs::remove_file(fixture.music.join("Hits").join("2.wav")).unwrap();
     run_scan(&fixture, false);
-    directories::delete_missing(&fixture.database).unwrap();
+    crate::library::sync::missing::delete_missing_tracks(&fixture.database).unwrap();
     let after = albums(&fixture);
     assert_eq!(after[0], ("A".into(), "Hits".into(), "Hits".into(), 1));
 }

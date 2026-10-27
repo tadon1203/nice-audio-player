@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it } from "vitest";
-import { type AlbumId, type AlbumRow } from "#lib/native/bindings";
+import { type AlbumId, type AlbumListItem } from "#lib/native/bindings";
 import { library } from "#lib/native/commands";
 import type { Result } from "#lib/native/result";
 import type { Page } from "./catalog-repository";
@@ -10,7 +10,7 @@ import { LibraryQueryKeys } from "./library-query-keys";
 const albumId = "0f0e0d0c0b0a09080706050403020100" as AlbumId;
 const artistId = "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99";
 
-const summary = (year: number): AlbumRow => ({
+const summary = (year: number): AlbumListItem => ({
   id: albumId,
   title: "Abbey Road",
   albumArtist: { id: artistId, name: "The Beatles" },
@@ -19,7 +19,7 @@ const summary = (year: number): AlbumRow => ({
 });
 
 /** A page the query cache holds: the Result of a read that succeeded. */
-const page = (items: AlbumRow[]): Result<Page<AlbumRow>> => ({
+const page = (items: AlbumListItem[]): Result<Page<AlbumListItem>> => ({
   ok: true,
   value: { items, total: items.length, version: 1 },
 });

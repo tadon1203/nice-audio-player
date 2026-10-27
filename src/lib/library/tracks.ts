@@ -1,5 +1,5 @@
 import { resolve } from "$app/paths";
-import { type TrackRow } from "#lib/native/bindings";
+import { type TrackListItem } from "#lib/native/bindings";
 
 interface Link {
   text: string;
@@ -7,7 +7,7 @@ interface Link {
 }
 
 /** What a track needs to say where its artist and album live. */
-type TrackLinkSource = Partial<Pick<TrackRow, "artist" | "album">>;
+type TrackLinkSource = Partial<Pick<TrackListItem, "artist" | "album">>;
 
 /** Rules about a track as a row: its links and whether it can be used. */
 export class Tracks {
@@ -44,12 +44,12 @@ export class Tracks {
   }
 
   /** Whether the file is on disk (it can be shown in Explorer). */
-  public static isFilePresent(track: Pick<TrackRow, "state">): boolean {
+  public static isFilePresent(track: Pick<TrackListItem, "state">): boolean {
     return track.state !== "missing";
   }
 
   /** Whether the track can be played or queued now. */
-  public static isPlayable(track: Pick<TrackRow, "state">): boolean {
+  public static isPlayable(track: Pick<TrackListItem, "state">): boolean {
     return track.state === "playable";
   }
 }

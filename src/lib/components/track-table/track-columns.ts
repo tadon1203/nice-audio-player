@@ -1,14 +1,24 @@
-import { type AlbumTrackRow, type TrackSortKey, type TrackRow } from "#lib/native/bindings";
+import {
+  type AlbumTrackListItem,
+  type TrackSortKey,
+  type TrackListItem,
+} from "#lib/native/bindings";
 import { AudioFormatText } from "#lib/utils/audio-format-text";
 import { cn } from "#lib/utils/cn.js";
 import { DurationFormat } from "#lib/utils/duration-format";
 import { MISSING } from "#lib/utils/missing";
 
 /** A track row shared by the Library and Album layouts; both DTOs satisfy it directly. */
-export type TrackTableRow = Pick<TrackRow, "id" | "title" | "artist" | "durationMs" | "state"> &
+export type TrackTableRow = Pick<
+  TrackListItem,
+  "id" | "title" | "artist" | "durationMs" | "state"
+> &
   Partial<
-    Pick<TrackRow, "album"> &
-      Pick<AlbumTrackRow, "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate">
+    Pick<TrackListItem, "album"> &
+      Pick<
+        AlbumTrackListItem,
+        "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate"
+      >
   >;
 
 /** The Library lists tracks across albums; the Album layout is one album's tracks in order. */

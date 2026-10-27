@@ -1,6 +1,7 @@
 //! Queue behavior through `Player`: the queue by id, undo, windows, repeat and shuffle.
 
 use super::*;
+
 use crate::test_support::CommandCode;
 
 /// How many queue states have been sent.

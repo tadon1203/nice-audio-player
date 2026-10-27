@@ -1,6 +1,6 @@
 //! Identifiers that are validated where they enter the Backend, so no later code checks them again.
 
-use crate::library::text;
+use crate::library::storage::keys;
 use rusqlite::Row;
 use rusqlite::functions::{Context, FunctionFlags};
 use rusqlite::types::{Type, ValueRef};
@@ -223,14 +223,16 @@ fn hex_digit(byte: u8) -> Option<u8> {
     }
 }
 
-/// An `albums.id` read from a column. See [`track_id_column`].
-pub(crate) fn album_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<AlbumId> {
+/// An album ID read from a named column. See [`track_id_column`].
+pub(crate) fn album_id_column(row: &Row<'_>, column: &str) -> rusqlite::Result<AlbumId> {
+    let index = row.as_ref().column_index(column)?;
     let hex: String = row.get(index)?;
     AlbumId::from_hex(&hex).ok_or(rusqlite::Error::InvalidColumnType(index, hex, Type::Text))
 }
 
-/// An `albums.artist_id` read from a column. See [`track_id_column`].
-pub(crate) fn artist_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<ArtistId> {
+/// An Album Artist ID read from a named column. See [`track_id_column`].
+pub(crate) fn artist_id_column(row: &Row<'_>, column: &str) -> rusqlite::Result<ArtistId> {
+    let index = row.as_ref().column_index(column)?;
     let hex: String = row.get(index)?;
     ArtistId::from_hex(&hex).ok_or(rusqlite::Error::InvalidColumnType(index, hex, Type::Text))
 }
@@ -276,19 +278,21 @@ pub(crate) fn register_sql_functions(connection: &rusqlite::Connection) -> rusql
             .map(|index| context.get::<String>(index))
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
-        Ok(text::search_key(&names))
+        Ok(keys::search_key(&names))
     })
 }
 
 /// A `tracks` rowid read from a column. SQLite gives every rowid above zero, so a value that is
 /// not is a corrupt database.
-pub(crate) fn track_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<TrackId> {
+pub(crate) fn track_id_column(row: &Row<'_>, column: &str) -> rusqlite::Result<TrackId> {
+    let index = row.as_ref().column_index(column)?;
     let rowid: i64 = row.get(index)?;
     TrackId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
 }
 
-/// A `directories` rowid read from a column. See [`track_id_column`].
-pub(crate) fn directory_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<DirectoryId> {
+/// A `directories` rowid read from a named column. See [`track_id_column`].
+pub(crate) fn directory_id_column(row: &Row<'_>, column: &str) -> rusqlite::Result<DirectoryId> {
+    let index = row.as_ref().column_index(column)?;
     let rowid: i64 = row.get(index)?;
     DirectoryId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
 }
@@ -496,7 +500,7 @@ mod tests {
         let search: String = connection
             .query_row("SELECT search_key('ユズ', 'Band')", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(search, text::search_key(&["ユズ", "Band"]));
+        assert_eq!(search, keys::search_key(&["ユズ", "Band"]));
     }
 
     #[test]

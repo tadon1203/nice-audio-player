@@ -2,6 +2,10 @@
 //! is given the schema; anything else is replaced by an empty database. Every connection goes
 //! through `configure_common`, so the SQL functions are registered on each.
 
+pub(crate) mod columns;
+pub(crate) mod keys;
+pub(crate) mod version;
+
 use crate::ids::register_sql_functions;
 use crate::library::errors::LibraryError;
 use crate::library::errors::Result;
@@ -13,7 +17,7 @@ use std::sync::Arc;
 
 /// The schema this build reads and writes (`schema.sql`).
 const SCHEMA_VERSION: i32 = 2;
-const SCHEMA: &str = include_str!("schema.sql");
+const SCHEMA: &str = include_str!("storage/schema.sql");
 /// The tables a database of the current schema holds.
 const TABLES: [&str; 7] = [
     "directories",
@@ -72,7 +76,7 @@ impl Drop for ReadConnection {
 impl Database {
     /// Opens the database in `directory`, giving it the schema or replacing it as its contents
     /// call for (see the module docs).
-    pub(crate) fn initialize(directory: &Path) -> Result<Self> {
+    pub(crate) fn open(directory: &Path) -> Result<Self> {
         std::fs::create_dir_all(directory)?;
         let path = directory.join(DATABASE_FILE);
         // A file that cannot be read at all is replaced, as a file of another version is; the cause
@@ -84,7 +88,7 @@ impl Database {
         match inspection {
             Inspection::Current => {}
             Inspection::Empty => create(&path)?,
-            Inspection::Other => reset(directory)?,
+            Inspection::Other => reset_database_files(directory)?,
         }
         Ok(Self {
             path,
@@ -111,7 +115,7 @@ impl Database {
         let idle = self.readers.lock().pop();
         let connection = match idle {
             Some(connection) => connection,
-            None => self.open(OpenFlags::SQLITE_OPEN_READ_ONLY)?,
+            None => self.open_connection(OpenFlags::SQLITE_OPEN_READ_ONLY)?,
         };
         Ok(ReadConnection {
             connection: Some(connection),
@@ -120,7 +124,7 @@ impl Database {
     }
 
     pub(crate) fn write(&self) -> Result<Connection> {
-        self.open(OpenFlags::SQLITE_OPEN_READ_WRITE)
+        self.open_connection(OpenFlags::SQLITE_OPEN_READ_WRITE)
     }
 
     /// Drops the idle read connections, so the file can be deleted.
@@ -128,7 +132,7 @@ impl Database {
         self.readers.lock().clear();
     }
 
-    fn open(&self, flags: OpenFlags) -> Result<Connection> {
+    fn open_connection(&self, flags: OpenFlags) -> Result<Connection> {
         if !self.usable {
             return Err(LibraryError::LibraryUnavailable);
         }
@@ -191,7 +195,7 @@ fn create(path: &Path) -> Result<()> {
 
 /// Deletes the database with its WAL files, and the artwork store, then creates an empty database.
 /// The caller holds no connection to the database. Used at open and by a reset.
-pub(crate) fn reset(directory: &Path) -> Result<()> {
+pub(crate) fn reset_database_files(directory: &Path) -> Result<()> {
     std::fs::create_dir_all(directory)?;
     for suffix in ["", "-wal", "-shm"] {
         remove_if_present(

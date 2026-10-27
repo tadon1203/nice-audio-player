@@ -1,4 +1,4 @@
-import { type ArtworkRef, type AlbumRow } from "#lib/native/bindings";
+import { type ArtworkRef, type AlbumListItem } from "#lib/native/bindings";
 import { testAlbum, testLibrary } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 
@@ -26,7 +26,7 @@ const printings = [
   },
 ];
 
-const albums: AlbumRow[] = printings.map(({ id, artwork }) => ({
+const albums: AlbumListItem[] = printings.map(({ id, artwork }) => ({
   ...testAlbum,
   id,
   artwork,

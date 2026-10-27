@@ -1,7 +1,8 @@
 use super::{fixture, shown_waveform};
 use crate::app::{BackendApp, PlaybackContext};
 use crate::ids::TrackId;
-use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
+use crate::library::read::lists::{ListRequest, SortDirection};
+use crate::library::read::tracks::TrackSortKey;
 use crate::messages::BackendMessage;
 use crate::player::RepeatMode;
 use crate::player::fake_output::FakeOutput;

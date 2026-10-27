@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type ArtistId, type AlbumRow } from "#lib/native/bindings";
+  import { type ArtistId, type AlbumListItem } from "#lib/native/bindings";
   import { resolve } from "$app/paths";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
   import Artwork from "#lib/ui/artwork.svelte";
@@ -14,8 +14,8 @@
     showArtist = true,
     parentArtistId = null,
   }: {
-    album: AlbumRow;
-    onplay?: (album: AlbumRow) => void;
+    album: AlbumListItem;
+    onplay?: (album: AlbumListItem) => void;
     /** False where the artist is already the context (an artist's own albums). */
     showArtist?: boolean;
     /** Set on an Album Artist's page, so the album's Back link returns there. */

@@ -1,5 +1,5 @@
 -- The Library schema, version 2. There are no migrations: a database with another version is
--- replaced (library/database.rs).
+-- replaced (library/storage.rs).
 
 CREATE TABLE directories (
   id INTEGER PRIMARY KEY,

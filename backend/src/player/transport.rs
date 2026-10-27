@@ -8,7 +8,7 @@ use super::pipeline::Pipeline;
 use super::queue::QueueEntry;
 use super::state::StartedBy;
 use crate::ids::PlaybackId;
-use crate::library::tracks::PlayableTrack;
+use crate::library::read::playback::PlayableTrack;
 use crate::player::output::{OutputStream, OutputStreamId, PreparedOutputConfig};
 use crate::player::pcm::{frame_to_millis, millis_to_frame};
 

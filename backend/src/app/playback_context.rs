@@ -6,7 +6,8 @@
 use serde::Deserialize;
 
 use crate::ids::AlbumId;
-use crate::library::models::{SortDirection, TrackSortKey};
+use crate::library::read::lists::SortDirection;
+use crate::library::read::tracks::TrackSortKey;
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(

@@ -1,7 +1,7 @@
 import {
   type AudioOutputSelection,
   type PlayerState,
-  type TrackRow,
+  type TrackListItem,
   type QueueState,
   type QueueWindow,
   type StartedBy,
@@ -19,10 +19,10 @@ import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./
  */
 export function scriptPlayback(
   native: Native,
-  initialSequence: TrackRow[],
+  initialSequence: TrackListItem[],
 ): {
-  setSequence: (next: TrackRow[]) => void;
-  queue: (patch?: { upcoming?: TrackRow[] }) => Promise<void>;
+  setSequence: (next: TrackListItem[]) => void;
+  queue: (patch?: { upcoming?: TrackListItem[] }) => Promise<void>;
   finishTrack: () => Promise<void>;
   reportPosition: (to: number) => Promise<void>;
   startTicks: () => void;
@@ -39,14 +39,14 @@ export function scriptPlayback(
   let outputSelection: AudioOutputSelection = { kind: "systemDefault" };
   let repeatMode: QueueState["repeatMode"] = "off";
   let shuffleEnabled = false;
-  let upcoming: TrackRow[] = [];
+  let upcoming: TrackListItem[] = [];
   let queueVersion = 1;
   let startedBy: StartedBy = "jump";
   let ticker: ReturnType<typeof setInterval> | null = null;
 
-  const current = (): TrackRow => sequence[index]!;
+  const current = (): TrackListItem => sequence[index]!;
 
-  const queue = (patch: { upcoming?: TrackRow[] } = {}): QueueState => {
+  const queue = (patch: { upcoming?: TrackListItem[] } = {}): QueueState => {
     if (patch.upcoming !== undefined) upcoming = patch.upcoming;
     const played = sequence.slice(0, Math.max(index, 0));
     return {
@@ -77,7 +77,7 @@ export function scriptPlayback(
   /** A playback change: the backend pushes the whole transport state. */
   const commit = (): Promise<void> => native.publish("player", snapshot());
   /** A queue change: the backend pushes the whole queue, under its next version. */
-  const commitQueue = (patch?: { upcoming?: TrackRow[] }): Promise<void> => {
+  const commitQueue = (patch?: { upcoming?: TrackListItem[] }): Promise<void> => {
     queueVersion += 1;
     return native.publish("queue", queue(patch));
   };
@@ -157,7 +157,7 @@ export function scriptPlayback(
 
   const player = {
     /** Changes what the next `playerPlay` plays: what the test expects its context to hold. */
-    setSequence: (next: TrackRow[]): void => {
+    setSequence: (next: TrackListItem[]): void => {
       sequence = next;
     },
     /** The queue as it stands, with `upcoming` replaced when a test expects an edit. */

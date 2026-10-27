@@ -7,7 +7,7 @@ use std::path::Path;
 
 use lofty::{config::ParseOptions, file::TaggedFileExt, probe::Probe, tag::ItemKey};
 
-use crate::library::tracks::PlayableTrack;
+use crate::library::read::playback::PlayableTrack;
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

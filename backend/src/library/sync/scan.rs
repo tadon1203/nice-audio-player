@@ -6,8 +6,8 @@
 //!
 //! The cover art of an album directory is read and stored once per batch, and every file of that
 //! directory in the batch takes it. The albums are rebuilt every `REBUILD_EVERY_BATCHES` batches, when
-//! a directory's walk ends, and when the scan ends (see `albums.rs`). When a scan completes, the files
-//! that arrived are relinked to the Missing tracks they are, and the artwork no track uses is collected.
+//! a directory's walk ends, and when the scan ends (see `sync/rebuild.rs`). When a scan completes, the files
+//! that arrived are relinked to the Missing tracks they are, and the artwork no track uses is deleted.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -21,19 +21,20 @@ use log::{error, info};
 use parking_lot::Mutex;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
-use super::{
-    ArtworkStatus, Availability, InspectionStatus, TagStatus, albums,
-    artwork::{self, StoredArtwork},
-    database::Database,
-    media::{
-        ArtworkRead, InspectedAudioFile, SourceMetadata, Undecodable, inspect_audio_file,
-        is_supported_extension, read_source_metadata,
-    },
-    models::{LibraryDirectory, ScanFailure, ScanState, ScanStatus},
-    text::{SortTags, TrackKeys, album_edition_of},
-    version::LibraryVersion,
-};
 use crate::errors::contain;
+use crate::library::storage::Database;
+use crate::library::storage::columns::{
+    ArtworkStatus, Availability, InspectionStatus, TagStatus, now_ms,
+};
+use crate::library::storage::keys::{SortTags, TrackKeys};
+use crate::library::storage::version::LibraryVersion;
+use crate::library::sync::artwork::{StoredArtwork, delete_unreferenced_artwork, store_artwork};
+use crate::library::sync::media::{
+    ArtworkRead, InspectedAudioFile, SourceMetadata, Undecodable, inspect_audio_file,
+    is_supported_extension, read_source_metadata,
+};
+use crate::library::sync::rebuild::rebuild_albums_and_artists;
+use crate::library::sync::state::{LibraryDirectory, ScanFailure, ScanState, ScanStatus};
 use crate::threads::{Cancellation, run_in_background};
 use anyhow::{Context, Result};
 
@@ -53,7 +54,7 @@ const SAMPLE_BYTES: u64 = 64 * 1024;
 /// One directory to scan: all of it, or only the directories where something changed.
 pub(crate) struct ScanJob {
     pub directory: LibraryDirectory,
-    pub dirs: Option<Vec<PathBuf>>,
+    pub changed_paths: Option<Vec<PathBuf>>,
 }
 
 /// Why a scan stopped before finishing: the listener cancelled it, or a step failed.
@@ -70,7 +71,7 @@ impl From<anyhow::Error> for Stop {
 
 /// Scans `jobs` in order. `publish` receives the scan's state as it changes. Returns how the scan
 /// ended; the state it ended with has already been published.
-pub(crate) fn run(
+pub(crate) fn run_scan(
     database: &Database,
     jobs: &[ScanJob],
     publish: &dyn Fn(ScanState),
@@ -105,7 +106,7 @@ pub(crate) fn run(
         error!("library.scan.relink_failed cause={cause:#}");
         return progress.finish(ScanStatus::Failed, Some(ScanFailure::Failed));
     }
-    if let Err(cause) = artwork::collect(database) {
+    if let Err(cause) = delete_unreferenced_artwork(database) {
         error!("library.scan.collect_failed cause={cause:?}");
     }
     progress.finish(ScanStatus::Completed, None)
@@ -123,7 +124,7 @@ fn expected_files(database: &Database, jobs: &[ScanJob]) -> u64 {
 fn count_expected_files(database: &Database, jobs: &[ScanJob]) -> Result<u64> {
     let connection = database.read()?;
     let mut total = 0;
-    for job in jobs.iter().filter(|job| job.dirs.is_none()) {
+    for job in jobs.iter().filter(|job| job.changed_paths.is_none()) {
         let count = connection.query_row(
             "SELECT COUNT(*) FROM library_files WHERE directory_id=?1 AND availability='available'",
             [job.directory.id.rowid()],
@@ -153,11 +154,12 @@ fn scan_directory(
             .context("the scan cannot write the library")?,
     );
     let generation = writer.begin_scan(directory_id)?;
-    let dirs = scope(Path::new(&directory.path), job.dirs.as_deref());
+    let walk_roots = scope(Path::new(&directory.path), job.changed_paths.as_deref());
     // The prefixes the walk covers, to mark only those files Missing.
-    let within: Option<Vec<String>> = job.dirs.as_ref().map(|_| {
-        dirs.iter()
-            .map(|dir| match relative_dir(&directory.path, dir) {
+    let within: Option<Vec<String>> = job.changed_paths.as_ref().map(|_| {
+        walk_roots
+            .iter()
+            .map(|walk_root| match relative_dir(&directory.path, walk_root) {
                 relative if relative.is_empty() => relative,
                 relative => format!("{relative}/"),
             })
@@ -165,7 +167,7 @@ fn scan_directory(
     });
     let pass = Pass {
         directory,
-        dirs,
+        walk_roots,
         within,
         generation,
         data_dir: database.data_dir().to_path_buf(),
@@ -181,7 +183,7 @@ fn scan_directory(
 /// What one pass over a directory covers.
 struct Pass<'a> {
     directory: &'a LibraryDirectory,
-    dirs: Vec<PathBuf>,
+    walk_roots: Vec<PathBuf>,
     /// The prefixes the walk covers, when it does not cover the whole directory.
     within: Option<Vec<String>>,
     generation: i64,
@@ -197,7 +199,7 @@ fn walk_directory(
     progress: &mut Progress<'_>,
 ) -> std::result::Result<bool, Stop> {
     let directory_id = pass.directory.id.rowid();
-    let mut walk = discover(&pass.directory.path, &pass.dirs);
+    let mut walk = discover(&pass.directory.path, &pass.walk_roots);
     let mut complete = true;
     loop {
         let mut planned: Vec<Plan> = Vec::new();
@@ -291,41 +293,44 @@ fn scope(directory: &Path, changed: Option<&[PathBuf]>) -> Vec<PathBuf> {
     let Some(changed) = changed else {
         return vec![directory.to_path_buf()];
     };
-    let mut dirs: Vec<PathBuf> = Vec::new();
+    let mut walk_roots: Vec<PathBuf> = Vec::new();
     for path in changed {
-        let mut dir = path.as_path();
-        while !(dir.is_dir() && dir.starts_with(directory)) {
-            match dir.parent() {
-                Some(parent) if dir != directory => dir = parent,
+        let mut current = path.as_path();
+        while !(current.is_dir() && current.starts_with(directory)) {
+            match current.parent() {
+                Some(parent) if current != directory => current = parent,
                 _ => {
-                    dir = directory;
+                    current = directory;
                     break;
                 }
             }
         }
-        if !dirs.iter().any(|known| dir.starts_with(known)) {
-            dirs.retain(|known| !known.starts_with(dir));
-            dirs.push(dir.to_path_buf());
+        if !walk_roots.iter().any(|known| current.starts_with(known)) {
+            walk_roots.retain(|known| !known.starts_with(current));
+            walk_roots.push(current.to_path_buf());
         }
     }
-    if dirs.is_empty() {
-        dirs.push(directory.to_path_buf());
+    if walk_roots.is_empty() {
+        walk_roots.push(directory.to_path_buf());
     }
-    dirs
+    walk_roots
 }
 
 /// A directory below `directory` as `/`-separated relative text, `""` for the directory itself.
-fn relative_dir(directory: &str, dir: &Path) -> String {
-    dir.strip_prefix(directory)
+fn relative_dir(directory: &str, path: &Path) -> String {
+    path.strip_prefix(directory)
         .ok()
         .and_then(|relative| relative.to_str())
         .map(|relative| relative.replace('\\', "/"))
         .unwrap_or_default()
 }
 
-/// Walks `dirs` (see [`scope`]) and describes the supported audio files in them.
-fn discover<'a>(directory: &'a str, dirs: &[PathBuf]) -> impl Iterator<Item = Discovery> + 'a {
-    let starts = dirs.to_vec();
+/// Walks `walk_roots` (see [`scope`]) and describes the supported audio files in them.
+fn discover<'a>(
+    directory: &'a str,
+    walk_roots: &[PathBuf],
+) -> impl Iterator<Item = Discovery> + 'a {
+    let starts = walk_roots.to_vec();
     starts
         .into_iter()
         .flat_map(|start| walkdir::WalkDir::new(start).follow_links(false).into_iter())
@@ -397,12 +402,14 @@ enum Plan {
 }
 
 const SELECT_EXISTING_FILE: &str = "
-    SELECT f.id, f.source_revision, f.modification_key, f.byte_length, f.inspection_status,
-           m.artwork_status, f.availability
-    FROM library_files f
-    LEFT JOIN tracks t ON t.file_id = f.id
-    LEFT JOIN track_source_metadata m ON m.track_id = t.id AND m.source_revision = f.source_revision
-    WHERE f.directory_id = ?1 AND f.relative_path = ?2";
+    SELECT file.id, file.source_revision, file.modification_key, file.byte_length,
+           file.inspection_status, source_metadata.artwork_status, file.availability
+    FROM library_files file
+    LEFT JOIN tracks track ON track.file_id = file.id
+    LEFT JOIN track_source_metadata source_metadata
+           ON source_metadata.track_id = track.id
+          AND source_metadata.source_revision = file.source_revision
+    WHERE file.directory_id = ?1 AND file.relative_path = ?2";
 
 /// Compares a discovered file with the database. Read-only. A file is unchanged when its size
 /// and modification time both are.
@@ -474,7 +481,7 @@ impl ArtworkOutcome {
             ArtworkRead::Unavailable => (ArtworkStatus::Unavailable, None),
             ArtworkRead::Invalid => (ArtworkStatus::Invalid, None),
             ArtworkRead::Selected { bytes, mime_type } => {
-                match artwork::store(data_dir, bytes, *mime_type) {
+                match store_artwork(data_dir, bytes, *mime_type) {
                     Ok(stored) => (ArtworkStatus::Stored, Some(stored)),
                     Err(cause) => {
                         log::warn!("library.artwork.store_failed cause={cause}");
@@ -524,7 +531,7 @@ fn inspect(
         bitrate_kbps: average_bitrate_kbps(file.byte_length, audio.info.duration_ms)
             .map(|value| value as i64),
         artwork: cover.clone(),
-        content_hash: content_hash(&file.path).ok(),
+        content_hash: hash_file_content(&file.path).ok(),
         audio,
         tag_status,
         tags,
@@ -547,7 +554,7 @@ fn average_bitrate_kbps(byte_length: u64, duration_ms: Option<u64>) -> Option<u6
 /// The hash of a file's first and last `SAMPLE_BYTES` (all of it when it is shorter than two
 /// samples), together with its length. A file moved or renamed keeps it; any rewrite that
 /// changes either end, a retag included, does not.
-pub(crate) fn content_hash(path: &Path) -> std::io::Result<String> {
+pub(crate) fn hash_file_content(path: &Path) -> std::io::Result<String> {
     use std::io::{Read, Seek, SeekFrom};
     let mut file = std::fs::File::open(path)?;
     let length = file.metadata()?.len();
@@ -840,7 +847,7 @@ impl LibraryWriter {
         self.batches_since_rebuild += 1;
         let rebuilt = self.batches_since_rebuild >= REBUILD_EVERY_BATCHES;
         if rebuilt {
-            albums::rebuild(&transaction)?;
+            rebuild_albums_and_artists(&transaction)?;
         }
         transaction.commit()?;
         if rebuilt {
@@ -859,7 +866,7 @@ impl LibraryWriter {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        albums::rebuild(&transaction)?;
+        rebuild_albums_and_artists(&transaction)?;
         transaction.commit()?;
         self.albums_stale = false;
         self.batches_since_rebuild = 0;
@@ -889,7 +896,7 @@ impl LibraryWriter {
         if within.is_none() {
             self.connection.execute(
                 "UPDATE directories SET last_successful_scan_at_ms = ?2 WHERE id = ?1",
-                params![directory_id, crate::library::now_ms()],
+                params![directory_id, now_ms()],
             )?;
         }
         Ok(gone)
@@ -985,7 +992,7 @@ fn store_inspected(
         params![file_id],
         |row| row.get(0),
     )?;
-    let artwork_hash = store_artwork(transaction, &inspected.artwork)?;
+    let artwork_hash = record_artwork(transaction, &inspected.artwork)?;
     let tags = &inspected.tags;
     let info = &inspected.audio.info;
     let keys = TrackKeys::build(
@@ -1097,7 +1104,7 @@ fn apply_artwork(
         params![file_id],
         |row| row.get(0),
     )?;
-    let artwork_hash = store_artwork(transaction, artwork)?;
+    let artwork_hash = record_artwork(transaction, artwork)?;
     transaction.execute(
         "UPDATE track_source_metadata SET artwork_status = ?3, artwork_hash = ?4
          WHERE track_id = ?1 AND source_revision = ?2",
@@ -1107,7 +1114,7 @@ fn apply_artwork(
 }
 
 /// Records the stored artwork and returns its hash. Identical images share one row.
-fn store_artwork(
+fn record_artwork(
     transaction: &Transaction<'_>,
     artwork: &ArtworkOutcome,
 ) -> Result<Option<String>> {
@@ -1143,10 +1150,10 @@ struct Identity {
 fn identities(connection: &Connection, condition: &str) -> rusqlite::Result<Vec<Identity>> {
     connection
         .prepare(&format!(
-            "SELECT f.id, t.id, f.byte_length, f.content_hash
-             FROM library_files f
-             JOIN tracks t ON t.file_id = f.id
-             WHERE {condition} ORDER BY f.id"
+            "SELECT file.id, track.id, file.byte_length, file.content_hash
+             FROM library_files file
+             JOIN tracks track ON track.file_id = file.id
+             WHERE {condition} ORDER BY file.id"
         ))?
         .query_map([], |row| {
             Ok(Identity {
@@ -1196,12 +1203,12 @@ fn relink(connection: &mut Connection, version: &LibraryVersion) -> Result<usize
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let arrived = identities(
         &transaction,
-        "f.relink_pending = 1 AND f.availability = 'available'",
+        "file.relink_pending = 1 AND file.availability = 'available'",
     )?;
     let missing = if arrived.is_empty() {
         Vec::new()
     } else {
-        identities(&transaction, "f.availability = 'missing'")?
+        identities(&transaction, "file.availability = 'missing'")?
     };
     let pairs = pair_moves(&arrived, &missing);
     for &(new, old) in &pairs {
@@ -1230,7 +1237,7 @@ fn relink(connection: &mut Connection, version: &LibraryVersion) -> Result<usize
         [],
     )?;
     if !pairs.is_empty() {
-        albums::rebuild(&transaction)?;
+        rebuild_albums_and_artists(&transaction)?;
     }
     transaction.commit()?;
     if !pairs.is_empty() {
@@ -1341,6 +1348,45 @@ fn share(scan: &ScanState) -> Option<f32> {
     }
 }
 
+/// The printing of an album a file belongs to, as the path of its directory below the library
+/// directory: the directory of the file, or the directory above it when it is a disc directory
+/// ("CD1", "Disc 2"), so one album on several discs stays one album while the same title and artist
+/// in two directories (an original and a remaster) are two.
+pub(crate) fn album_edition_of(relative_path: &str) -> String {
+    let directory = relative_path
+        .rsplit_once('/')
+        .map_or("", |(directory, _)| directory);
+    let directory = match directory.rsplit_once('/') {
+        Some((parent, last)) if is_disc_directory(last) => parent,
+        None if is_disc_directory(directory) => "",
+        _ => directory,
+    };
+    directory.to_owned()
+}
+
+/// The absolute path of an album edition: the library directory's path, `/`, then the edition's
+/// path below it. `/` is written on every platform, so the text is the same in Rust and in SQL
+/// (`album_id()` joins them the same way).
+pub(crate) fn absolute_directory(directory_path: &str, relative_dir: &str) -> String {
+    format!("{directory_path}/{relative_dir}")
+}
+
+fn is_disc_directory(name: &str) -> bool {
+    let name = name.trim().to_lowercase();
+    let Some(rest) = ["disc", "disk", "cd"]
+        .iter()
+        .find_map(|prefix| name.strip_prefix(prefix))
+    else {
+        return false;
+    };
+    let rest = rest.trim_start_matches([' ', '_', '-', '.']);
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    (1..=2).contains(&digits)
+        && rest
+            .get(digits..)
+            .is_some_and(|tail| !tail.starts_with(char::is_alphanumeric))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1408,9 +1454,18 @@ mod tests {
         let head = directory.file("d.bin");
         std::fs::write(&head, &bytes).unwrap();
 
-        assert_eq!(content_hash(&a).unwrap(), content_hash(&renamed).unwrap());
-        assert_eq!(content_hash(&a).unwrap(), content_hash(&middle).unwrap());
-        assert_ne!(content_hash(&a).unwrap(), content_hash(&head).unwrap());
+        assert_eq!(
+            hash_file_content(&a).unwrap(),
+            hash_file_content(&renamed).unwrap()
+        );
+        assert_eq!(
+            hash_file_content(&a).unwrap(),
+            hash_file_content(&middle).unwrap()
+        );
+        assert_ne!(
+            hash_file_content(&a).unwrap(),
+            hash_file_content(&head).unwrap()
+        );
     }
 
     #[test]
@@ -1419,7 +1474,10 @@ mod tests {
         let (one, two) = (directory.file("1"), directory.file("2"));
         std::fs::write(&one, [1u8, 2, 3]).unwrap();
         std::fs::write(&two, [1u8, 2, 3, 4]).unwrap();
-        assert_ne!(content_hash(&one).unwrap(), content_hash(&two).unwrap());
+        assert_ne!(
+            hash_file_content(&one).unwrap(),
+            hash_file_content(&two).unwrap()
+        );
     }
 
     #[test]
@@ -1440,5 +1498,31 @@ mod tests {
         assert_eq!(share(&scan), Some(0.0));
         scan.inspected_count = 5;
         assert_eq!(share(&scan), None, "a first scan's share is unknown");
+    }
+
+    #[test]
+    fn an_album_edition_is_a_directory_and_a_disc_directory_belongs_to_its_parent() {
+        assert_eq!(album_edition_of("Artist/Album/01.flac"), "Artist/Album");
+        assert_eq!(album_edition_of("Artist/Album/CD1/01.flac"), "Artist/Album");
+        assert_eq!(
+            album_edition_of("Artist/Album/Disc 02/01.flac"),
+            "Artist/Album"
+        );
+        assert_eq!(album_edition_of("01.flac"), "");
+        assert_eq!(album_edition_of("CD1/01.flac"), "");
+        assert_eq!(
+            album_edition_of("Artist/Album (2011 Remaster)/01.flac"),
+            "Artist/Album (2011 Remaster)"
+        );
+        assert_eq!(
+            album_edition_of("Artist/CD Collection/01.flac"),
+            "Artist/CD Collection"
+        );
+    }
+
+    #[test]
+    fn a_disc_directory_with_a_multibyte_suffix_is_not_one_and_does_not_panic() {
+        assert!(!is_disc_directory("disc 1é"));
+        assert!(is_disc_directory("disc 1"));
     }
 }

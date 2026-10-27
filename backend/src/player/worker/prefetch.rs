@@ -3,7 +3,7 @@
 use super::state::{Next, NextLoad, Seek, WorkerState};
 use super::{PlayerWorker, queue_item};
 use crate::ids::QueueItemId;
-use crate::library::tracks::PlayableTrack;
+use crate::library::read::playback::PlayableTrack;
 use crate::player::output::make_queue;
 use crate::player::pipeline::{
     LoadPosition, PipelineError, PreparedSource, SourceLoad, start_decoding,

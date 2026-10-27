@@ -8,8 +8,9 @@
 //! `ids.rs`). Every rebuild replaces all of them, so a rebuild after a batch of changes and a rebuild
 //! of the whole Library give the same rows.
 
-use super::text;
 use crate::ids::AlbumId;
+use crate::library::storage::keys;
+use crate::library::sync::scan::absolute_directory;
 use rusqlite::{Transaction, params};
 use std::ffi::OsStr;
 
@@ -20,31 +21,39 @@ pub(crate) const VARIOUS_ARTISTS: &str = "Various Artists";
 const ALBUM_ROWS: &str = "INSERT INTO albums(id, artist_id, title, album_artist, directory_id,
                                   relative_dir, title_sort, album_artist_sort, search_text, year,
                                   track_count, cover_artwork_hash)
-     SELECT m.album_id, artist_id(m.album_artist), m.album, m.album_artist,
-            MIN(m.album_directory_id), MIN(m.album_relative_dir), MIN(m.album_sort),
-            MIN(m.album_artist_sort), search_key(m.album, m.album_artist), MIN(m.year), COUNT(*),
-            (SELECT c.artwork_hash FROM track_source_metadata c
-             WHERE c.album_id = m.album_id AND c.artwork_hash IS NOT NULL
-             ORDER BY COALESCE(c.disc_number, 2147483647), COALESCE(c.track_number, 2147483647),
-                      c.track_id
+     SELECT source_metadata.album_id, artist_id(source_metadata.album_artist),
+            source_metadata.album, source_metadata.album_artist,
+            MIN(source_metadata.album_directory_id), MIN(source_metadata.album_relative_dir),
+            MIN(source_metadata.album_sort), MIN(source_metadata.album_artist_sort),
+            search_key(source_metadata.album, source_metadata.album_artist),
+            MIN(source_metadata.year), COUNT(*),
+            (SELECT candidate.artwork_hash FROM track_source_metadata candidate
+             WHERE candidate.album_id = source_metadata.album_id
+               AND candidate.artwork_hash IS NOT NULL
+             ORDER BY COALESCE(candidate.disc_number, 2147483647),
+                      COALESCE(candidate.track_number, 2147483647),
+                      candidate.track_id
              LIMIT 1)
-     FROM track_source_metadata m
-     GROUP BY m.album_id";
+     FROM track_source_metadata source_metadata
+     GROUP BY source_metadata.album_id";
 
 /// The Album Artists of the albums, one row per `artist_id`.
 const ARTIST_ROWS: &str = "INSERT INTO artists(id, name, name_sort, search_text, album_count,
                                     track_count, cover_artwork_hash)
-     SELECT a.artist_id, a.album_artist, MIN(a.album_artist_sort), search_key(a.album_artist),
-            COUNT(*), SUM(a.track_count),
-            (SELECT b.cover_artwork_hash FROM albums b WHERE b.artist_id = a.artist_id
-             ORDER BY b.title = '', b.title_sort, b.title, b.id
+     SELECT album.artist_id, album.album_artist, MIN(album.album_artist_sort),
+            search_key(album.album_artist),
+            COUNT(*), SUM(album.track_count),
+            (SELECT same_artist_album.cover_artwork_hash FROM albums same_artist_album
+             WHERE same_artist_album.artist_id = album.artist_id
+             ORDER BY same_artist_album.title = '', same_artist_album.title_sort,
+                      same_artist_album.title, same_artist_album.id
              LIMIT 1)
-     FROM albums a
-     GROUP BY a.artist_id";
+     FROM albums album
+     GROUP BY album.artist_id";
 
 /// Replaces the Album and Album Artist rows with ones computed from the tracks, settling the
 /// compilations first. The caller bumps the Library version after it commits the transaction.
-pub(crate) fn rebuild(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
+pub(crate) fn rebuild_albums_and_artists(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     let groups: Vec<(i64, String, String)> = transaction
         .prepare(
             "SELECT DISTINCT album_directory_id, album_relative_dir, album
@@ -80,19 +89,22 @@ fn settle_compilation(
     }
     let rows: Vec<Row> = transaction
         .prepare_cached(
-            "SELECT m.track_id, m.title, m.artist, m.artist_sort, d.path
-             FROM track_source_metadata m
-             JOIN directories d ON d.id = m.album_directory_id
-             WHERE m.album_directory_id = ?1 AND m.album_relative_dir = ?2 AND m.album = ?3
-               AND trim(COALESCE(m.tag_album_artist, '')) = ''",
+            "SELECT source_metadata.track_id, source_metadata.title, source_metadata.artist,
+                    source_metadata.artist_sort, directory.path
+             FROM track_source_metadata source_metadata
+             JOIN directories directory ON directory.id = source_metadata.album_directory_id
+             WHERE source_metadata.album_directory_id = ?1
+               AND source_metadata.album_relative_dir = ?2
+               AND source_metadata.album = ?3
+               AND trim(COALESCE(source_metadata.tag_album_artist, '')) = ''",
         )?
         .query_map(params![directory_id, relative_dir, title], |row| {
             Ok(Row {
-                track_id: row.get(0)?,
-                track_title: row.get(1)?,
-                artist: row.get(2)?,
-                artist_sort: row.get(3)?,
-                directory_path: row.get(4)?,
+                track_id: row.get("track_id")?,
+                track_title: row.get("title")?,
+                artist: row.get("artist")?,
+                artist_sort: row.get("artist_sort")?,
+                directory_path: row.get("path")?,
             })
         })?
         .collect::<Result<_, _>>()?;
@@ -104,11 +116,11 @@ fn settle_compilation(
     let compilation = artists.len() > 1;
     for row in &rows {
         let (under, sort) = if compilation {
-            (VARIOUS_ARTISTS, text::sort_key(VARIOUS_ARTISTS, None))
+            (VARIOUS_ARTISTS, keys::sort_key(VARIOUS_ARTISTS, None))
         } else {
             (row.artist.as_str(), row.artist_sort.clone())
         };
-        let directory = text::absolute_directory(&row.directory_path, relative_dir);
+        let directory = absolute_directory(&row.directory_path, relative_dir);
         let album_id = AlbumId::of(under, title, OsStr::new(&directory)).to_hex();
         transaction
             .prepare_cached(
@@ -120,7 +132,7 @@ fn settle_compilation(
                 row.track_id,
                 under,
                 sort,
-                text::track_search_key(&row.track_title, &row.artist, title, under),
+                keys::track_search_key(&row.track_title, &row.artist, title, under),
                 album_id,
             ])?;
     }

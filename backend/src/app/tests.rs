@@ -1,10 +1,6 @@
 //! Tests of `BackendApp`'s public surface. They use the methods the Host uses and nothing inside
 //! the crate, so a test here cannot pass by reaching past the boundary.
 
-mod library;
-mod messages;
-mod playback;
-
 use crate::app::BackendApp;
 use crate::messages::BackendMessage;
 use crate::player::fake_output::FakeOutput;
@@ -42,3 +38,6 @@ fn shown_waveform(recorded: &MessageLog) -> Option<PlaybackWaveform> {
         })
         .flatten()
 }
+mod library;
+mod messages;
+mod playback;

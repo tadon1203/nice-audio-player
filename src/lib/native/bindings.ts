@@ -52,17 +52,17 @@ export const commands = {
 	appOpenLogDirectory: () => __TAURI_INVOKE<null>("app_open_log_directory"),
 	libraryStartScan: () => __TAURI_INVOKE<null>("library_start_scan"),
 	libraryCancelScan: () => __TAURI_INVOKE<null>("library_cancel_scan"),
-	libraryListTracks: (request: ListRequest<TrackSortKey>) => __TAURI_INVOKE<Page<TrackRow>>("library_list_tracks", { request }),
-	libraryListAlbums: (request: ListRequest<AlbumSortKey>) => __TAURI_INVOKE<Page<AlbumRow>>("library_list_albums", { request }),
-	libraryListArtists: (request: ListRequest<ArtistSortKey>) => __TAURI_INVOKE<Page<ArtistRow>>("library_list_artists", { request }),
+	libraryListTracks: (request: ListRequest<TrackSortKey>) => __TAURI_INVOKE<Page<TrackListItem>>("library_list_tracks", { request }),
+	libraryListAlbums: (request: ListRequest<AlbumSortKey>) => __TAURI_INVOKE<Page<AlbumListItem>>("library_list_albums", { request }),
+	libraryListArtists: (request: ListRequest<ArtistSortKey>) => __TAURI_INVOKE<Page<ArtistListItem>>("library_list_artists", { request }),
 	/**  The letter index of the Tracks list: how many names start under each label, in list order. */
 	libraryTrackIndex: (request: ListRequest<TrackSortKey>) => __TAURI_INVOKE<LetterIndexEntry[]>("library_track_index", { request }),
 	libraryAlbumIndex: (request: ListRequest<AlbumSortKey>) => __TAURI_INVOKE<LetterIndexEntry[]>("library_album_index", { request }),
 	libraryArtistIndex: (request: ListRequest<ArtistSortKey>) => __TAURI_INVOKE<LetterIndexEntry[]>("library_artist_index", { request }),
-	libraryArtist: (artistId: ArtistId) => __TAURI_INVOKE<ArtistRow>("library_artist", { artistId }),
-	libraryListArtistAlbums: (artistId: ArtistId, request: ListRequest<ArtistAlbumSortKey>) => __TAURI_INVOKE<Page<AlbumRow>>("library_list_artist_albums", { artistId, request }),
+	libraryArtist: (artistId: ArtistId) => __TAURI_INVOKE<ArtistListItem>("library_artist", { artistId }),
+	libraryListArtistAlbums: (artistId: ArtistId, request: ListRequest<ArtistAlbumSortKey>) => __TAURI_INVOKE<Page<AlbumListItem>>("library_list_artist_albums", { artistId, request }),
 	libraryAlbum: (albumId: AlbumId) => __TAURI_INVOKE<AlbumDetails>("library_album", { albumId }),
-	libraryListAlbumTracks: (albumId: AlbumId) => __TAURI_INVOKE<AlbumTrackRow[]>("library_list_album_tracks", { albumId }),
+	libraryListAlbumTracks: (albumId: AlbumId) => __TAURI_INVOKE<AlbumTrackListItem[]>("library_list_album_tracks", { albumId }),
 	libraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<TrackProperties>("library_track_properties", { trackId }),
 	/**  Shows the track's file in Explorer, selected. */
 	libraryRevealTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("library_reveal_track", { trackId }),
@@ -92,8 +92,13 @@ export const commands = {
 export const UPCOMING_WINDOW = 100 as const;
 
 /* Types */
+export type AlbumArtistReference = {
+	id: ArtistId,
+	name: string,
+};
+
 export type AlbumDetails = {
-	summary: AlbumRow,
+	summary: AlbumListItem,
 	date: string | null,
 	trackCount: number,
 	durationMs: number | null,
@@ -106,24 +111,24 @@ export type AlbumDetails = {
  */
 export type AlbumId = string;
 
-export type AlbumRow = {
+export type AlbumListItem = {
 	id: AlbumId,
 	title: string,
-	albumArtist: ArtistRef,
+	albumArtist: AlbumArtistReference,
 	artwork: ArtworkRef | null,
 	year: number | null,
 };
 
 export type AlbumSortKey = "title" | "artist" | "year";
 
-export type AlbumTrackRow = {
+export type AlbumTrackListItem = {
 	state: TrackState,
 	trackNumber: number | null,
 	discNumber: number | null,
 	fileFormat: string | null,
 	bitDepth: number | null,
 	sampleRate: number | null,
-} & TrackCore;
+} & TrackCommonFields;
 
 /**
  *  What the renderer reads and writes. Every field is always present, so the renderer declares
@@ -147,12 +152,7 @@ export type ArtistAlbumSortKey = "year" | "title";
 /**  An Album Artist: blake3 of the normalized name. */
 export type ArtistId = string;
 
-export type ArtistRef = {
-	id: ArtistId,
-	name: string,
-};
-
-export type ArtistRow = {
+export type ArtistListItem = {
 	id: ArtistId,
 	name: string,
 	artwork: ArtworkRef | null,
@@ -312,14 +312,6 @@ export type MeterFrame = {
 export type NormalizedVolume = number;
 
 /**
- *  The album of the loaded track: the album it is filed under and how many tracks the library
- *  holds for it.
- */
-export type NowPlayingAlbum = {
-	trackCount: number,
-} & TrackAlbum;
-
-/**
  *  One page of a list: which rows, how many the whole list has, and the Library version it was
  *  read at. A page whose version differs from the first one's means the list changed under it.
  */
@@ -464,11 +456,19 @@ export type StartedBy = "next" | "previous" |
 export type TrackAlbum = {
 	id: AlbumId,
 	title: string,
-	artist: ArtistRef,
+	artist: AlbumArtistReference,
 };
 
+/**
+ *  The album of the loaded track: the album it is filed under and how many tracks the library
+ *  holds for it.
+ */
+export type TrackAlbumWithTrackCount = {
+	trackCount: number,
+} & TrackAlbum;
+
 /**  What the track DTOs share: the identity and the metadata a row shows. */
-export type TrackCore = {
+export type TrackCommonFields = {
 	id: TrackId,
 	title: string,
 	artist: string | null,
@@ -478,6 +478,12 @@ export type TrackCore = {
 
 /**  A track: the `tracks` rowid. Above zero. On the IPC a number. */
 export type TrackId = number;
+
+export type TrackListItem = {
+	state: TrackState,
+	/**  `None` for a track with no album tag. */
+	album: TrackAlbum | null,
+} & TrackCommonFields;
 
 /**  The tags, audio format and location of one track, as the Properties view lists them. */
 export type TrackProperties = {
@@ -503,12 +509,6 @@ export type TrackProperties = {
 	bitrateKbps: number | null,
 };
 
-export type TrackRow = {
-	state: TrackState,
-	/**  `None` for a track with no album tag. */
-	album: TrackAlbum | null,
-} & TrackCore;
-
 export type TrackSortKey = "title" | "artist" | "album" | "duration";
 
 /**
@@ -522,9 +522,9 @@ export type TrackState = "playable" | "missing" | "unsupported";
  *  worker holds the file. It has no state: only a playable track is ever loaded or queued.
  */
 export type TrackSummary = {
-	album: NowPlayingAlbum | null,
+	album: TrackAlbumWithTrackCount | null,
 	trackNumber: number | null,
 	discNumber: number | null,
 	year: number | null,
-} & TrackCore;
+} & TrackCommonFields;
 

@@ -1,6 +1,7 @@
 //! Transport through `Player`: start, pause, navigation, position and the end of a track.
 
 use super::*;
+
 use crate::player::volume::NormalizedVolume;
 use crate::test_support::CommandCode;
 

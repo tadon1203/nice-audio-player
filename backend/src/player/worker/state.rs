@@ -3,7 +3,7 @@
 use super::PlayerWorker;
 use super::types::StartRequest;
 use crate::ids::QueueItemId;
-use crate::library::tracks::PlayableTrack;
+use crate::library::read::playback::PlayableTrack;
 use crate::player::output::PcmConsumer;
 use crate::player::pipeline::{Pipeline, SourceLoad};
 use crate::player::queue::QueueEntry;

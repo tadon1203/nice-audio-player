@@ -8,7 +8,7 @@ use std::thread;
 use super::state::PlaybackFailureCode;
 use super::worker::{WorkerInput, send};
 use crate::errors::contain;
-use crate::library::media::ValidatedAudioFile;
+use crate::library::sync::media::ValidatedAudioFile;
 use crate::player::decode::{CompressedAudioSource, DecodeError, DecodeStep, StreamingDecoder};
 use crate::player::output::{OutputError, PcmProducer, PcmWaker, PipelineId, WaitCancelled};
 use crate::player::pcm::{millis_to_frame, rescale_frame};
@@ -437,7 +437,7 @@ pub(super) mod gate {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::{Duration, Instant};
 
-    use crate::library::media::ValidatedAudioFile;
+    use crate::library::sync::media::ValidatedAudioFile;
 
     pub(in crate::player) static RELEASED: AtomicBool = AtomicBool::new(false);
 
@@ -458,7 +458,7 @@ mod tests {
         DecodeHandle, DecodeTask, LoadEvent, LoadPosition, SourceLoad, SourceLoadId, Stop,
         prebuffer_frames,
     };
-    use crate::library::media::ValidatedAudioFile;
+    use crate::library::sync::media::ValidatedAudioFile;
     use crate::player::decode::{CompressedAudioSource, DecodeStep};
     use crate::player::output::PipelineId;
     use crate::player::output::{PcmConsumer, bounded_pcm_queue};

@@ -63,28 +63,28 @@ On connect, the Backend first sends the latest value of each state. So the Rende
 
 ## Code map
 
-| Directory                | What it holds                                                                                                                                   |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/routes`             | SvelteKit routes and the app frame.                                                                                                             |
-| `src/lib/native`         | The only adapter to Tauri, with the generated bindings.                                                                                         |
-| `src/lib/player`         | Renderer side of Playback and the Queue.                                                                                                        |
-| `src/lib/library`        | Renderer side of the Library.                                                                                                                   |
-| `src/lib/lyrics`         | Renderer side of lyrics.                                                                                                                        |
-| `src/lib/meter`          | Renderer side of the Spectrum and the Level meter.                                                                                              |
-| `src/lib/appearance`     | Renderer side of the appearance settings.                                                                                                       |
-| `src/lib/app`            | The Renderer App: app state that spans Renderer domains.                                                                                        |
-| `src/lib/components`     | Product-specific compositions of Renderer domains, such as the Dock and Now Playing.                                                            |
-| `src/lib/ui`             | Shared controls, with the shadcn-svelte primitives.                                                                                             |
-| `src/lib/utils`          | Small helpers with no domain knowledge.                                                                                                         |
-| `backend/src/app`        | The composition root. It joins the services and holds the use cases that span domains.                                                          |
-| `backend/src/player`     | Playback: the Player, its queue and worker, the Output stream, the Waveform, and the decode and processing stages.                              |
-| `backend/src/library`    | The Library: its database, the sync worker, the Scan, the albums, the media files it reads, and artwork.                                        |
-| `backend/src/lyrics`     | Lyrics parsing and service.                                                                                                                     |
-| `backend/src`            | Also holds the small modules that serve many domains (settings, messages, errors, threads, ids), and the Level and Spectrum meter (`meter.rs`). |
-| `src-tauri/src/commands` | Host commands, grouped by domain.                                                                                                               |
-| `src-tauri/src`          | Also holds command registration, message delivery, and the artwork protocol.                                                                    |
-| `tests`                  | Renderer E2E tests (Playwright, with a scripted native API).                                                                                    |
-| `tests-app`              | App E2E tests (WebdriverIO, on the real app).                                                                                                   |
+| Directory                | What it holds                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/routes`             | SvelteKit routes and the app frame.                                                                                                                             |
+| `src/lib/native`         | The only adapter to Tauri, with the generated bindings.                                                                                                         |
+| `src/lib/player`         | Renderer side of Playback and the Queue.                                                                                                                        |
+| `src/lib/library`        | Renderer side of the Library.                                                                                                                                   |
+| `src/lib/lyrics`         | Renderer side of lyrics.                                                                                                                                        |
+| `src/lib/meter`          | Renderer side of the Spectrum and the Level meter.                                                                                                              |
+| `src/lib/appearance`     | Renderer side of the appearance settings.                                                                                                                       |
+| `src/lib/app`            | The Renderer App: app state that spans Renderer domains.                                                                                                        |
+| `src/lib/components`     | Product-specific compositions of Renderer domains, such as the Dock and Now Playing.                                                                            |
+| `src/lib/ui`             | Shared controls, with the shadcn-svelte primitives.                                                                                                             |
+| `src/lib/utils`          | Small helpers with no domain knowledge.                                                                                                                         |
+| `backend/src/app`        | The composition root. It joins the services and holds the use cases that span domains.                                                                          |
+| `backend/src/player`     | Playback: the Player, its queue and worker, the Output stream, the Waveform, and the decode and processing stages.                                              |
+| `backend/src/library`    | The Library: its storage (the database), its read side (lists, track lookups, Playback selections), and its sync side (directories, the Scan, albums, artwork). |
+| `backend/src/lyrics`     | Lyrics parsing and service.                                                                                                                                     |
+| `backend/src`            | Also holds the small modules that serve many domains (settings, messages, errors, threads, ids), and the Level and Spectrum meter (`meter.rs`).                 |
+| `src-tauri/src/commands` | Host commands, grouped by domain.                                                                                                                               |
+| `src-tauri/src`          | Also holds command registration, message delivery, and the artwork protocol.                                                                                    |
+| `tests`                  | Renderer E2E tests (Playwright, with a scripted native API).                                                                                                    |
+| `tests-app`              | App E2E tests (WebdriverIO, on the real app).                                                                                                                   |
 
 ## Invariants
 

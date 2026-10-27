@@ -6,7 +6,9 @@ use crate::player::fake_output::FakeOutput;
 use crate::test_support::CommandCode;
 
 use crate::library::LibraryStatus;
-use crate::library::models::{LibraryState, ListRequest, SortDirection, TrackSortKey};
+use crate::library::read::lists::{ListRequest, SortDirection};
+use crate::library::read::tracks::TrackSortKey;
+use crate::library::sync::state::LibraryState;
 use crate::messages::BackendMessage;
 
 use crate::test_support::{MessageLog, TestDirectory};

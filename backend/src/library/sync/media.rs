@@ -2,9 +2,9 @@
 //! reports about it, and what its tags say. Metadata is deliberately best-effort: it can never
 //! change Symphonia playability.
 
-use super::artwork::ArtworkMimeType;
 use crate::library::errors::LibraryError;
 use crate::library::errors::Result;
+use crate::library::read::artwork::ArtworkMimeType;
 use lofty::{
     config::ParseOptions,
     file::TaggedFileExt,
@@ -340,5 +340,42 @@ fn select_artwork(file: &lofty::file::TaggedFile, primary: &lofty::tag::Tag) -> 
         ArtworkRead::Invalid
     } else {
         ArtworkRead::NotPresent
+    }
+}
+
+/// The year of a tag date (`2019`, `2019-05`, `2019-05-03`): its first four characters, when they
+/// are digits from 1000 to 9999. Anything else, `0000` included, is no year.
+pub(crate) fn year_of(date: &str) -> Option<i32> {
+    let year = date.trim().get(..4)?;
+    if !year.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    year.parse()
+        .ok()
+        .filter(|year| (1000..=9999).contains(year))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_year_is_four_digits_from_1000_to_9999() {
+        assert_eq!(year_of("2019"), Some(2019));
+        assert_eq!(year_of(" 2019-05-03"), Some(2019));
+        assert_eq!(year_of("1000"), Some(1000));
+        assert_eq!(year_of("9999-12"), Some(9999));
+        for none in [
+            "0000",
+            "0999",
+            "19",
+            "n/a",
+            "+123",
+            "-123",
+            "日本語日本語",
+            "",
+        ] {
+            assert_eq!(year_of(none), None, "{none:?}");
+        }
     }
 }

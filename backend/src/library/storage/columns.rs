@@ -1,0 +1,98 @@
+//! The closed value sets that the Library stores as text, and the clock of its timestamps.
+
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Makes an enum a text column: `as_str`, `Display`, `ToSql` and `FromSql` from one table of
+/// names.
+macro_rules! sql_text_enum {
+    ($name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
+        impl $name {
+            pub(crate) fn as_str(self) -> &'static str {
+                match self { $(Self::$variant => $text),+ }
+            }
+        }
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+        impl rusqlite::ToSql for $name {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+                Ok(self.as_str().into())
+            }
+        }
+        impl rusqlite::types::FromSql for $name {
+            fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+                match value.as_str()? {
+                    $($text => Ok(Self::$variant),)+
+                    _ => Err(rusqlite::types::FromSqlError::InvalidType),
+                }
+            }
+        }
+    };
+}
+pub(crate) use sql_text_enum;
+
+/// Whether a file is on disk where the library last saw it. Only the library reads it: the track
+/// DTOs carry the `TrackState` that it and the inspection status decide together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Availability {
+    Available,
+    Missing,
+}
+
+sql_text_enum!(Availability {
+    Available => "available",
+    Missing => "missing",
+});
+
+/// Where a file stands once inspected: `Unsupported` when it cannot be decoded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InspectionStatus {
+    Indexed,
+    Unsupported,
+}
+
+sql_text_enum!(InspectionStatus {
+    Indexed => "indexed",
+    Unsupported => "unsupported",
+});
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TagStatus {
+    Loaded,
+    Absent,
+    Failed,
+}
+
+sql_text_enum!(TagStatus {
+    Loaded => "loaded",
+    Absent => "absent",
+    Failed => "failed",
+});
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ArtworkStatus {
+    NotPresent,
+    Unavailable,
+    Invalid,
+    Stored,
+    StoreFailed,
+}
+
+sql_text_enum!(ArtworkStatus {
+    NotPresent => "notPresent",
+    Unavailable => "unavailable",
+    Invalid => "invalid",
+    Stored => "stored",
+    StoreFailed => "storeFailed",
+});
+
+pub(crate) fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(i64::MAX)
+}

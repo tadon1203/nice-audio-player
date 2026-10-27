@@ -6,13 +6,13 @@ import {
   type QueryClient,
 } from "@tanstack/svelte-query";
 import {
-  type AlbumRow,
+  type AlbumListItem,
   type AlbumSortKey,
-  type ArtistRow,
+  type ArtistListItem,
   type ArtistSortKey,
   type LetterIndexEntry,
   type SortDirection,
-  type TrackRow,
+  type TrackListItem,
   type TrackSortKey,
   type TrackId,
 } from "#lib/native/bindings";
@@ -37,13 +37,13 @@ export interface Page<Item> {
   readonly version: number;
 }
 
-export type CatalogPage = Page<AlbumRow> | Page<ArtistRow> | Page<TrackRow>;
+export type CatalogPage = Page<AlbumListItem> | Page<ArtistListItem> | Page<TrackListItem>;
 
 /** The catalog item type for a presentation. */
 export type LibraryCatalogItem<Presentation extends LibraryCatalogRequest["presentation"]> = {
-  albums: AlbumRow;
-  albumArtists: ArtistRow;
-  tracks: TrackRow;
+  albums: AlbumListItem;
+  albumArtists: ArtistListItem;
+  tracks: TrackListItem;
 }[Presentation];
 
 export type LibraryCatalogRequest =

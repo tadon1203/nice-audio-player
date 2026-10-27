@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use backend::app::{
-    AlbumDetails, AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRow,
-    ArtistSortKey, BackendApp, LetterIndexEntry, ListRequest, Page, TrackProperties, TrackRow,
-    TrackSortKey,
+    AlbumDetails, AlbumListItem, AlbumSortKey, AlbumTrackListItem, ArtistAlbumSortKey,
+    ArtistListItem, ArtistSortKey, BackendApp, LetterIndexEntry, ListRequest, Page, TrackListItem,
+    TrackProperties, TrackSortKey,
 };
 use backend::errors::CommandError;
 use backend::ids::{AlbumId, ArtistId, DirectoryId, TrackId};
@@ -89,7 +89,7 @@ pub(crate) async fn library_cancel_scan(
 pub(crate) async fn library_list_tracks(
     request: ListRequest<TrackSortKey>,
     state: tauri::State<'_, AppState>,
-) -> Result<Page<TrackRow>, CommandError> {
+) -> Result<Page<TrackListItem>, CommandError> {
     blocking(&state, move |backend| backend.list_tracks(&request)).await
 }
 
@@ -98,7 +98,7 @@ pub(crate) async fn library_list_tracks(
 pub(crate) async fn library_list_albums(
     request: ListRequest<AlbumSortKey>,
     state: tauri::State<'_, AppState>,
-) -> Result<Page<AlbumRow>, CommandError> {
+) -> Result<Page<AlbumListItem>, CommandError> {
     blocking(&state, move |backend| backend.list_albums(&request)).await
 }
 
@@ -107,7 +107,7 @@ pub(crate) async fn library_list_albums(
 pub(crate) async fn library_list_artists(
     request: ListRequest<ArtistSortKey>,
     state: tauri::State<'_, AppState>,
-) -> Result<Page<ArtistRow>, CommandError> {
+) -> Result<Page<ArtistListItem>, CommandError> {
     blocking(&state, move |backend| backend.list_artists(&request)).await
 }
 
@@ -144,7 +144,7 @@ pub(crate) async fn library_artist_index(
 pub(crate) async fn library_artist(
     artist_id: ArtistId,
     state: tauri::State<'_, AppState>,
-) -> Result<ArtistRow, CommandError> {
+) -> Result<ArtistListItem, CommandError> {
     blocking(&state, move |backend| backend.artist(artist_id)).await
 }
 
@@ -154,7 +154,7 @@ pub(crate) async fn library_list_artist_albums(
     artist_id: ArtistId,
     request: ListRequest<ArtistAlbumSortKey>,
     state: tauri::State<'_, AppState>,
-) -> Result<Page<AlbumRow>, CommandError> {
+) -> Result<Page<AlbumListItem>, CommandError> {
     blocking(&state, move |backend| {
         backend.artist_albums(artist_id, &request)
     })
@@ -175,7 +175,7 @@ pub(crate) async fn library_album(
 pub(crate) async fn library_list_album_tracks(
     album_id: AlbumId,
     state: tauri::State<'_, AppState>,
-) -> Result<Vec<AlbumTrackRow>, CommandError> {
+) -> Result<Vec<AlbumTrackListItem>, CommandError> {
     blocking(&state, move |backend| backend.album_tracks(album_id)).await
 }
 

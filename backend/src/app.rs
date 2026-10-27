@@ -8,12 +8,14 @@ mod tests;
 pub use playback_context::PlaybackContext;
 // The types the Host names in commands and state. Each one is defined in the module that owns it.
 pub use crate::library::LibraryStatus;
-pub use crate::library::artwork::{ArtworkRef, ServedArtwork};
-pub use crate::library::models::{
-    AlbumDetails, AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRow,
-    ArtistSortKey, LetterIndexEntry, LibraryDirectory, ListRequest, Page, SortDirection,
-    TrackProperties, TrackRow, TrackSortKey,
+pub use crate::library::read::albums::{
+    AlbumDetails, AlbumListItem, AlbumSortKey, AlbumTrackListItem, ArtistAlbumSortKey,
 };
+pub use crate::library::read::artists::{ArtistListItem, ArtistSortKey};
+pub use crate::library::read::artwork::{ArtworkRef, ServedArtwork};
+pub use crate::library::read::lists::{LetterIndexEntry, ListRequest, Page, SortDirection};
+pub use crate::library::read::tracks::{TrackListItem, TrackProperties, TrackSortKey};
+pub use crate::library::sync::state::LibraryDirectory;
 pub use crate::lyrics::Lyrics;
 pub use crate::meter::{Meter, MeterFrame};
 pub use crate::player::output::{AudioOutputDevice, AudioOutputSelection};
@@ -25,11 +27,9 @@ pub use crate::player::{
 pub use crate::settings::{Appearance, AppearancePatch};
 
 use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
+use crate::library::Library;
 use crate::library::errors::LibraryError;
-use crate::library::{
-    Library,
-    artwork::{self},
-};
+use crate::library::read::artwork;
 use crate::lyrics;
 use crate::messages::BackendMessage;
 use crate::player::{Player, waveform::Waveforms};
@@ -101,7 +101,7 @@ impl BackendApp {
     /// The artwork file `relative` names inside the data directory `data_dir`, for the Host's
     /// artwork protocol. The artwork store is not a service of its own, so this needs no instance.
     pub fn serve_artwork(data_dir: &Path, relative: &str) -> Option<ServedArtwork> {
-        artwork::serve(data_dir, relative)
+        artwork::serve_artwork(data_dir, relative)
     }
 
     // ---- library ----
@@ -110,7 +110,9 @@ impl BackendApp {
     /// caller restarts the app, and the next start rescans the directories.
     pub fn reset_library(&self) -> Result<()> {
         self.library.shutdown();
-        Ok(crate::library::database::reset(&self.data_dir)?)
+        Ok(crate::library::storage::reset_database_files(
+            &self.data_dir,
+        )?)
     }
 
     /// Adds a directory. A path that is not valid Unicode is refused by the Library, not changed.
@@ -139,15 +141,18 @@ impl BackendApp {
         Ok(self.library.cancel_scan()?)
     }
 
-    pub fn list_tracks(&self, request: &ListRequest<TrackSortKey>) -> Result<Page<TrackRow>> {
+    pub fn list_tracks(&self, request: &ListRequest<TrackSortKey>) -> Result<Page<TrackListItem>> {
         Ok(self.library.list_tracks(request)?)
     }
 
-    pub fn list_albums(&self, request: &ListRequest<AlbumSortKey>) -> Result<Page<AlbumRow>> {
+    pub fn list_albums(&self, request: &ListRequest<AlbumSortKey>) -> Result<Page<AlbumListItem>> {
         Ok(self.library.list_albums(request)?)
     }
 
-    pub fn list_artists(&self, request: &ListRequest<ArtistSortKey>) -> Result<Page<ArtistRow>> {
+    pub fn list_artists(
+        &self,
+        request: &ListRequest<ArtistSortKey>,
+    ) -> Result<Page<ArtistListItem>> {
         Ok(self.library.list_artists(request)?)
     }
 
@@ -174,22 +179,22 @@ impl BackendApp {
     }
 
     pub fn album_by_id(&self, album_id: AlbumId) -> Result<AlbumDetails> {
-        Ok(self.library.album(album_id)?)
+        Ok(self.library.get_album(album_id)?)
     }
 
-    pub fn album_tracks(&self, album_id: AlbumId) -> Result<Vec<AlbumTrackRow>> {
+    pub fn album_tracks(&self, album_id: AlbumId) -> Result<Vec<AlbumTrackListItem>> {
         Ok(self.library.list_album_tracks(album_id)?)
     }
 
-    pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistRow> {
-        Ok(self.library.artist(artist_id)?)
+    pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistListItem> {
+        Ok(self.library.get_artist(artist_id)?)
     }
 
     pub fn artist_albums(
         &self,
         artist_id: ArtistId,
         request: &ListRequest<ArtistAlbumSortKey>,
-    ) -> Result<Page<AlbumRow>> {
+    ) -> Result<Page<AlbumListItem>> {
         Ok(self.library.list_artist_albums(artist_id, request)?)
     }
 
@@ -236,7 +241,7 @@ impl BackendApp {
         let library = &self.library;
         let selection = match context {
             PlaybackContext::Album { album_id } => {
-                library.playback_for_album_id(*album_id, start_track_id)
+                library.playback_for_album(*album_id, start_track_id)
             }
             PlaybackContext::Tracks {
                 search,

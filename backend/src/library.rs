@@ -1,131 +1,51 @@
-//! The Library: the indexed set of tracks from the registered music directories.
+//! The Library: the indexed set of tracks from the Library directories.
 //!
 //! `Library::start` always yields a Library. One that could not open its database is unavailable:
-//! it answers every command with `LibraryUnavailable`. A working Library has two sides that meet only in the database: the read side
-//! (`lists` and `tracks`: the lists, playback selections, track lookups) and the write side
-//! (`sync`: directories, watchers, and the scan), reached through the methods below.
+//! it answers every command with `LibraryUnavailable`. A working Library has two sides that meet
+//! only in the database: the read side (`read`: the lists, Playback selections, track location) and
+//! the write side (`sync`: the directories, their watchers, and the scan). `Library` is the one
+//! entry point to both. Its methods only delegate.
 
-pub(crate) mod albums;
-pub(crate) mod artwork;
-pub(crate) mod database;
-pub(crate) mod directories;
 pub(crate) mod errors;
-pub(crate) mod lists;
-pub(crate) mod media;
-pub(crate) mod models;
-pub(crate) mod scan;
-#[cfg(test)]
-mod store_tests;
+pub(crate) mod read;
+pub(crate) mod storage;
 pub(crate) mod sync;
-#[cfg(test)]
-mod tests;
-pub(crate) mod text;
-pub(crate) mod tracks;
-pub(crate) mod version;
 
-use crate::ids::DirectoryId;
+use crate::ids::{AlbumId, ArtistId, DirectoryId, TrackId};
 use crate::library::errors::LibraryError;
 use crate::library::errors::Result;
-use crate::messages::{self, BackendMessage};
-use database::{Database, ReadConnection};
-use log::error;
+use crate::library::read::albums::{
+    AlbumDetails, AlbumListItem, AlbumSortKey, AlbumTrackListItem, ArtistAlbumSortKey,
+    album_details, album_listing, album_row, album_track_listing, album_track_row,
+    artist_album_listing,
+};
+use crate::library::read::artists::{
+    ArtistListItem, ArtistSortKey, artist_by_id, artist_listing, artist_row,
+};
+use crate::library::read::artwork::{artwork_accent, hash_of_original};
+use crate::library::read::lists::{LetterIndexEntry, ListRequest, Listing, Page, SortDirection};
+use crate::library::read::playback::{
+    PlayableTrack, PlaybackSelection, playable_tracks, playback_for_album, playback_for_track,
+    playback_for_tracks,
+};
+use crate::library::read::tracks::{
+    TrackListItem, TrackLocation, TrackProperties, TrackSortKey, track_listing, track_location,
+    track_properties, track_row,
+};
+use crate::library::storage::version::LibraryVersion;
+use crate::library::storage::{Database, ReadConnection};
+use crate::library::sync::SyncHandle;
 #[cfg(test)]
-use models::LibraryDirectory;
-use models::LibraryState;
+use crate::library::sync::directories::list_directories;
+use crate::library::sync::state::LibraryState;
+use crate::messages::{self, BackendMessage};
+use log::error;
+use rusqlite::Row;
 use serde::Serialize;
 use std::{
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     sync::{Arc, mpsc::Sender},
-    time::{SystemTime, UNIX_EPOCH},
 };
-use sync::LibrarySync;
-use version::LibraryVersion;
-
-/// Makes an enum a text column: `as_str`, `Display`, `ToSql` and `FromSql` from one table of
-/// names.
-macro_rules! sql_text_enum {
-    ($name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
-        impl $name {
-            pub(crate) fn as_str(self) -> &'static str {
-                match self { $(Self::$variant => $text),+ }
-            }
-        }
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str(self.as_str())
-            }
-        }
-        impl rusqlite::ToSql for $name {
-            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-                Ok(self.as_str().into())
-            }
-        }
-        impl rusqlite::types::FromSql for $name {
-            fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-                match value.as_str()? {
-                    $($text => Ok(Self::$variant),)+
-                    _ => Err(rusqlite::types::FromSqlError::InvalidType),
-                }
-            }
-        }
-    };
-}
-pub(crate) use sql_text_enum;
-
-/// Whether a file is on disk where the library last saw it. Only the library reads it: the track
-/// DTOs carry the `TrackState` that it and the inspection status decide together.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Availability {
-    Available,
-    Missing,
-}
-
-sql_text_enum!(Availability {
-    Available => "available",
-    Missing => "missing",
-});
-
-/// Where a file stands once inspected: `Unsupported` when it cannot be decoded.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InspectionStatus {
-    Indexed,
-    Unsupported,
-}
-
-sql_text_enum!(InspectionStatus {
-    Indexed => "indexed",
-    Unsupported => "unsupported",
-});
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TagStatus {
-    Loaded,
-    Absent,
-    Failed,
-}
-
-sql_text_enum!(TagStatus {
-    Loaded => "loaded",
-    Absent => "absent",
-    Failed => "failed",
-});
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ArtworkStatus {
-    NotPresent,
-    Unavailable,
-    Invalid,
-    Stored,
-    StoreFailed,
-}
-
-sql_text_enum!(ArtworkStatus {
-    NotPresent => "notPresent",
-    Unavailable => "unavailable",
-    Invalid => "invalid",
-    Stored => "stored",
-    StoreFailed => "storeFailed",
-});
 
 /// Whether the Library is usable. It is unavailable only when its database cannot be opened: any
 /// other database is replaced at open.
@@ -136,69 +56,10 @@ pub enum LibraryStatus {
     Unavailable,
 }
 
-/// Where a track's file is: a directory and a path below it. Every consumer (playback, properties,
-/// Show in Explorer, lyrics) builds the file's path here, so none can skip the check that it stays
-/// inside its directory.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct TrackLocation {
-    directory: PathBuf,
-    relative: PathBuf,
-    available: bool,
-}
-
-/// A track's file as it is on disk right now. Both paths are canonical.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ExistingFile {
-    pub directory: PathBuf,
-    pub path: PathBuf,
-}
-
-impl TrackLocation {
-    pub(crate) fn new(directory: &str, relative: &str, available: bool) -> Self {
-        Self {
-            directory: PathBuf::from(directory),
-            relative: PathBuf::from(relative),
-            available,
-        }
-    }
-
-    /// The file's path, without touching the filesystem: the directory joined with a relative path that
-    /// only descends. Cheap enough to take for every track of a playback context.
-    pub(crate) fn path(&self) -> Result<PathBuf> {
-        let descends = self
-            .relative
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)));
-        if !descends || self.relative.as_os_str().is_empty() {
-            return Err(LibraryError::TrackUnavailable);
-        }
-        Ok(self.directory.join(&self.relative))
-    }
-
-    /// The file itself: still marked available, still there, and (symbolic links resolved) still
-    /// inside its directory. A path that cannot be resolved is a file that is not there.
-    pub(crate) fn existing(&self) -> Result<ExistingFile> {
-        if !self.available {
-            return Err(LibraryError::TrackUnavailable);
-        }
-        let path = self.path()?;
-        let Ok(directory) = dunce::canonicalize(&self.directory) else {
-            return Err(LibraryError::TrackUnavailable);
-        };
-        let Ok(path) = dunce::canonicalize(path) else {
-            return Err(LibraryError::TrackUnavailable);
-        };
-        if !path.starts_with(&directory) || !path.is_file() {
-            return Err(LibraryError::TrackUnavailable);
-        }
-        Ok(ExistingFile { directory, path })
-    }
-}
-
 #[derive(Clone)]
 pub(crate) struct Library {
     database: Database,
-    sync: Arc<LibrarySync>,
+    sync: Arc<SyncHandle>,
     /// See [`Library::version`]. Shared with the sync worker and the scan thread, which advance it
     /// after each commit that alters a list.
     version: Arc<LibraryVersion>,
@@ -218,18 +79,18 @@ impl Library {
             );
             Self {
                 database: Database::unavailable(),
-                sync: Arc::new(LibrarySync::Unavailable),
+                sync: Arc::new(SyncHandle::Unavailable),
                 version: Arc::new(LibraryVersion::default()),
             }
         })
     }
 
-    /// Opens the Library in `directory`: opens its database (see `Database::initialize`), then
+    /// Opens the Library in `directory`: opens its database (see `Database::open`), then
     /// starts watching and scanning the registered directories.
-    pub(crate) fn open(directory: &Path, host: Sender<BackendMessage>) -> Result<Self> {
-        let database = Database::initialize(directory)?;
+    fn open(directory: &Path, host: Sender<BackendMessage>) -> Result<Self> {
+        let database = Database::open(directory)?;
         let version = Arc::new(LibraryVersion::default());
-        let sync = LibrarySync::start(database.clone(), host, Arc::clone(&version));
+        let sync = SyncHandle::start(database.clone(), host, Arc::clone(&version));
         Ok(Self {
             database,
             sync: Arc::new(sync),
@@ -247,9 +108,9 @@ impl Library {
     }
 
     #[cfg(test)]
-    pub(crate) fn directories(&self) -> Result<Vec<LibraryDirectory>> {
+    pub(crate) fn directories(&self) -> Result<Vec<crate::library::sync::state::LibraryDirectory>> {
         let connection = self.read()?;
-        directories::list(&connection)
+        list_directories(&connection)
     }
 
     /// Adds a directory. A path that is not valid Unicode cannot be stored, so it is refused rather
@@ -285,10 +146,10 @@ impl Library {
     /// The accent color of the stored original image at `path` (the path the Renderer holds), computed
     /// on first request and cached. A path that names no stored image has no accent.
     pub(crate) fn artwork_accent(&self, path: &str) -> Result<Option<String>> {
-        let Some(hash) = artwork::hash_of_original(path) else {
+        let Some(hash) = hash_of_original(path) else {
             return Ok(None);
         };
-        Ok(artwork::artwork_accent(&self.database, &hash)?)
+        artwork_accent(&self.database, &hash)
     }
 
     /// Stops the watchers and any scan in progress, waits for them, and drops the idle read
@@ -297,13 +158,170 @@ impl Library {
         self.sync.shutdown();
         self.database.close();
     }
+
+    /// One page of a list, with the Library version it was read at.
+    fn page<T>(
+        &self,
+        listing: &Listing,
+        offset: u32,
+        limit: u32,
+        row: fn(&Row<'_>) -> rusqlite::Result<T>,
+    ) -> Result<Page<T>> {
+        // The version is read before the rows: a change that lands while the page is read makes the
+        // page look older than it is, so the Renderer restarts the list rather than miss it.
+        let version = self.version();
+        let connection = self.read()?;
+        Ok(Page {
+            items: listing.page_rows(&connection, offset, limit, row)?,
+            total: listing.total(&connection)?,
+            version,
+        })
+    }
+
+    pub(crate) fn list_tracks(
+        &self,
+        request: &ListRequest<TrackSortKey>,
+    ) -> Result<Page<TrackListItem>> {
+        let listing = track_listing(request.search.as_deref(), request.sort, request.direction);
+        self.page(&listing, request.offset, request.limit, track_row)
+    }
+
+    pub(crate) fn list_albums(
+        &self,
+        request: &ListRequest<AlbumSortKey>,
+    ) -> Result<Page<AlbumListItem>> {
+        let listing = album_listing(request.search.as_deref(), request.sort, request.direction);
+        self.page(&listing, request.offset, request.limit, album_row)
+    }
+
+    pub(crate) fn list_artists(
+        &self,
+        request: &ListRequest<ArtistSortKey>,
+    ) -> Result<Page<ArtistListItem>> {
+        let listing = artist_listing(request.search.as_deref(), request.sort, request.direction);
+        self.page(&listing, request.offset, request.limit, artist_row)
+    }
+
+    /// A page of one Album Artist's albums. An Album Artist with no albums is not found.
+    pub(crate) fn list_artist_albums(
+        &self,
+        artist: ArtistId,
+        request: &ListRequest<ArtistAlbumSortKey>,
+    ) -> Result<Page<AlbumListItem>> {
+        let listing = artist_album_listing(
+            artist,
+            request.search.as_deref(),
+            request.sort,
+            request.direction,
+        );
+        let page = self.page(&listing, request.offset, request.limit, album_row)?;
+        if page.total == 0 {
+            return Err(LibraryError::ArtistNotFound);
+        }
+        Ok(page)
+    }
+
+    /// Every track of one album, in playing order. An album with no tracks is not found.
+    pub(crate) fn list_album_tracks(&self, album: AlbumId) -> Result<Vec<AlbumTrackListItem>> {
+        let listing = album_track_listing(album);
+        let connection = self.read()?;
+        let rows = listing.page_rows(&connection, 0, u32::MAX, album_track_row)?;
+        if rows.is_empty() {
+            return Err(LibraryError::AlbumNotFound);
+        }
+        Ok(rows)
+    }
+
+    /// The letter index of the Tracks list. A list by duration has none.
+    pub(crate) fn track_index(
+        &self,
+        request: &ListRequest<TrackSortKey>,
+    ) -> Result<Vec<LetterIndexEntry>> {
+        let connection = self.read()?;
+        read::tracks::track_index(&connection, request)
+    }
+
+    /// The letter index of the Albums list: by name, or by year.
+    pub(crate) fn album_index(
+        &self,
+        request: &ListRequest<AlbumSortKey>,
+    ) -> Result<Vec<LetterIndexEntry>> {
+        let connection = self.read()?;
+        read::albums::album_index(&connection, request)
+    }
+
+    /// The letter index of the Album Artists list. Only a list by name has one.
+    pub(crate) fn artist_index(
+        &self,
+        request: &ListRequest<ArtistSortKey>,
+    ) -> Result<Vec<LetterIndexEntry>> {
+        let connection = self.read()?;
+        read::artists::artist_index(&connection, request)
+    }
+
+    /// One Album Artist's row, by its ID.
+    pub(crate) fn get_artist(&self, artist: ArtistId) -> Result<ArtistListItem> {
+        let connection = self.read()?;
+        artist_by_id(&connection, artist)
+    }
+
+    /// The details of an album by its ID.
+    pub(crate) fn get_album(&self, album_id: AlbumId) -> Result<AlbumDetails> {
+        let connection = self.read()?;
+        album_details(&connection, album_id)
+    }
+
+    /// Where the track's file is.
+    pub(crate) fn track_location(&self, id: TrackId) -> Result<TrackLocation> {
+        let connection = self.read()?;
+        track_location(&connection, id)
+    }
+
+    /// Tags, audio format and the file's path, or `TrackNotFound` for an unknown track.
+    pub(crate) fn track_properties(&self, id: TrackId) -> Result<TrackProperties> {
+        let connection = self.read()?;
+        track_properties(&connection, id)
+    }
+
+    /// The album in disc and track order, by its ID.
+    pub(crate) fn playback_for_album(
+        &self,
+        album_id: AlbumId,
+        start_track_id: Option<TrackId>,
+    ) -> Result<PlaybackSelection> {
+        let connection = self.read()?;
+        playback_for_album(&connection, album_id, start_track_id)
+    }
+
+    /// One track, for starting from it or adding it to a queue that is already playing. The
+    /// track must be playable: anything else is reported.
+    pub(crate) fn playback_for_track(&self, track_id: TrackId) -> Result<PlayableTrack> {
+        let connection = self.read()?;
+        playback_for_track(&connection, track_id)
+    }
+
+    /// The tracks with these ids, in the order given: `None` for an id that is unknown, not
+    /// indexed or no longer available.
+    pub(crate) fn playable_tracks(
+        &self,
+        track_ids: &[TrackId],
+    ) -> Result<Vec<Option<PlayableTrack>>> {
+        let connection = self.read()?;
+        playable_tracks(&connection, track_ids)
+    }
+
+    /// Every track the tracks list shows under `search`, in the list's sort order.
+    pub(crate) fn playback_for_tracks(
+        &self,
+        search: Option<&str>,
+        sort: TrackSortKey,
+        direction: SortDirection,
+        start_track_id: Option<TrackId>,
+    ) -> Result<PlaybackSelection> {
+        let connection = self.read()?;
+        playback_for_tracks(&connection, search, sort, direction, start_track_id)
+    }
 }
 
-pub(crate) fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .try_into()
-        .unwrap_or(i64::MAX)
-}
+#[cfg(test)]
+mod tests;

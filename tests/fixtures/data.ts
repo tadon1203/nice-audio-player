@@ -3,16 +3,16 @@ import {
   type AudioOutputSelection,
   type BackendMessage,
   type StartedBy,
-  type ArtistRow,
+  type ArtistListItem,
   type AlbumDetails,
-  type AlbumRow,
-  type AlbumTrackRow,
+  type AlbumListItem,
+  type AlbumTrackListItem,
   type Page,
   type LibraryDirectory,
   type LibraryState,
   type ScanState,
   type ScanStatus,
-  type TrackRow,
+  type TrackListItem,
   type QueueItem,
   type QueueState,
   type PlayerState,
@@ -22,11 +22,11 @@ import {
 /** Plain data the fake backend serves. No rule lives here: tests say what a page contains. */
 export interface LibraryData {
   directories: LibraryDirectory[];
-  tracks: TrackRow[];
-  albums: AlbumRow[];
-  artists: ArtistRow[];
+  tracks: TrackListItem[];
+  albums: AlbumListItem[];
+  artists: ArtistListItem[];
   albumDetails: AlbumDetails;
-  albumTracks: AlbumTrackRow[];
+  albumTracks: AlbumTrackListItem[];
 }
 
 export const testDirectory: LibraryDirectory = {
@@ -45,14 +45,14 @@ const extraArtistId = "3d2c1b0a9f8e7d6c5b4a39281706f5e4";
 const testAlbumId = "5a1b2c3d4e5f60718293a4b5c6d7e8f9";
 const secondAlbumId = "6b2c3d4e5f60718293a4b5c6d7e8f9a0";
 
-export const testAlbum: AlbumRow = {
+export const testAlbum: AlbumListItem = {
   id: testAlbumId,
   title: "Test album",
   albumArtist: { id: testArtistId, name: "Test artist" },
   artwork: null,
   year: 2020,
 };
-export const secondAlbum: AlbumRow = {
+export const secondAlbum: AlbumListItem = {
   id: secondAlbumId,
   title: "Second album",
   albumArtist: { id: testArtistId, name: "Test artist" },
@@ -68,8 +68,8 @@ export const ARTWORK = {
 } as const;
 
 /** Track 1 is "Test track", track 5 is missing on disk, the rest are "Track 00N". */
-export function makeTracks(count = 140, options: { artwork?: boolean } = {}): TrackRow[] {
-  return Array.from({ length: count }, (_, index): TrackRow => {
+export function makeTracks(count = 140, options: { artwork?: boolean } = {}): TrackListItem[] {
+  return Array.from({ length: count }, (_, index): TrackListItem => {
     const missing = index === 4;
     return {
       id: index + 1,
@@ -105,8 +105,8 @@ export function testLibrary(
 ): LibraryData {
   const tracks = makeTracks(options.trackCount ?? 140, { artwork: options.artwork });
   const artwork = options.artwork ? ARTWORK : null;
-  const albumOf = (album: AlbumRow): AlbumRow => ({ ...album, artwork });
-  const extra = Array.from({ length: options.extraAlbums ?? 0 }, (_, index): AlbumRow => ({
+  const albumOf = (album: AlbumListItem): AlbumListItem => ({ ...album, artwork });
+  const extra = Array.from({ length: options.extraAlbums ?? 0 }, (_, index): AlbumListItem => ({
     id: `e${String(index).padStart(31, "0")}`,
     title: `Extra album ${String(index).padStart(4, "0")}`,
     albumArtist: { id: extraArtistId, name: "Extra artist" },
@@ -152,20 +152,20 @@ export function testLibrary(
 /** Pages exactly as given: a search or sort the test cares about replaces the command. */
 export function libraryResponses(library: LibraryData = testLibrary()): Record<string, unknown> {
   return {
-    libraryListTracks: ({ request }: { request: { offset: number } }): Page<TrackRow> =>
+    libraryListTracks: ({ request }: { request: { offset: number } }): Page<TrackListItem> =>
       pageOf(library.tracks, request.offset),
-    libraryListAlbums: ({ request }: { request: { offset: number } }): Page<AlbumRow> =>
+    libraryListAlbums: ({ request }: { request: { offset: number } }): Page<AlbumListItem> =>
       pageOf(library.albums, request.offset, library.albums.length),
     libraryListArtists: ({
       request,
     }: {
       request: { offset: number; limit: number };
-    }): Page<ArtistRow> => pageOf(library.artists, request.offset, request.limit),
+    }): Page<ArtistListItem> => pageOf(library.artists, request.offset, request.limit),
     libraryTrackIndex: [],
     libraryAlbumIndex: [],
     libraryArtistIndex: [],
     libraryArtist: library.artists[0],
-    libraryListArtistAlbums: (): Page<AlbumRow> => pageOf(library.albums.slice(0, 2), 0),
+    libraryListArtistAlbums: (): Page<AlbumListItem> => pageOf(library.albums.slice(0, 2), 0),
     libraryAlbum: library.albumDetails,
     libraryListAlbumTracks: library.albumTracks,
     libraryTrackProperties: ({
@@ -349,7 +349,7 @@ export function idleResponses(): {
   };
 }
 
-export const queueItemFor = (track: TrackRow): QueueItem => ({
+export const queueItemFor = (track: TrackListItem): QueueItem => ({
   queueItemId: track.id,
   id: track.id,
   title: track.title,
@@ -362,7 +362,7 @@ export const queueItemFor = (track: TrackRow): QueueItem => ({
   year: null,
 });
 
-export function playbackItemFor(track: TrackRow): QueueItem {
+export function playbackItemFor(track: TrackListItem): QueueItem {
   return {
     ...queueItemFor(track),
     // A count of 0 is below every track number, so Now Playing shows "Track n" with no total.
@@ -424,7 +424,7 @@ export function playingSnapshot(fields: PlayingFields): PlayerState {
 }
 
 /** The playable tracks of the library's one album, in order: what Play album should start. */
-export function albumSequence(library: LibraryData): TrackRow[] {
+export function albumSequence(library: LibraryData): TrackListItem[] {
   return library.albumTracks.flatMap((item) =>
     library.tracks.filter((track) => track.id === item.id && track.state === "playable"),
   );

@@ -22,7 +22,7 @@ mod types;
 
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
-use crate::library::tracks::PlayableTrack;
+use crate::library::read::playback::PlayableTrack;
 use crate::messages;
 use crate::messages::BackendMessage;
 use crate::meter::Meter;

@@ -1,6 +1,7 @@
 //! Volume, mute and the saved preferences through `Player`.
 
 use super::*;
+
 use crate::player::volume::NormalizedVolume;
 
 #[test]

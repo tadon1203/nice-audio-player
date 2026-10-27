@@ -1,6 +1,7 @@
 //! Output devices through `Player`: choosing, switching and rejecting a device.
 
 use super::*;
+
 use crate::test_support::CommandCode;
 
 #[test]

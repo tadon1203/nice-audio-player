@@ -2,6 +2,7 @@
 //! shows its track as loading until the track plays.
 
 use super::*;
+
 use crate::player::pipeline::gate::RELEASED;
 use std::sync::atomic::Ordering;
 

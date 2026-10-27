@@ -26,6 +26,8 @@ This is the language of Nice Audio Player. Use these terms in code, docs, and ti
 - **Album**: the tracks that share an Album Artist, a title, and a directory. A disc directory counts as the directory above it. Two printings of one album in two directories are two albums.
 - **Compilation**: tracks that share a directory and an album title, but not an artist. They are one album, filed under Various Artists.
 - **Missing track**: a track whose file is gone. A new file with the same content is that track again. It is relinked and keeps the same `track_id`.
+- **Track location**: where the file of a track is: a Library directory, and a path below it.
+- **Playback selection**: the playable track ids of a Playback context, in playing order, and the position to start at.
 - **Letter index**: a list's names, grouped by first character, in the list's own order. It supports the big letter that shows during scrolling, and the jump to a letter.
 - **Library version**: a number that changes after each change that can alter a list. Examples: a directory is added, enabled, disabled, or removed; Missing tracks are deleted; an album rebuild runs. A directory scan ends with an album rebuild. A list page carries the version it was read at. A list starts over when its pages disagree. _Avoid_: revision.
 

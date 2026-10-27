@@ -3,8 +3,10 @@
 //! scan succeeds.
 
 use crate::library::Library;
-use crate::library::database::Database;
-use crate::library::models::{ListRequest, ScanStatus, SortDirection, TrackSortKey};
+use crate::library::read::lists::{ListRequest, SortDirection};
+use crate::library::read::tracks::TrackSortKey;
+use crate::library::storage::Database;
+use crate::library::sync::state::ScanStatus;
 use crate::test_support::CommandCode;
 use crate::test_support::{MessageLog, TestDirectory, wait_until, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
@@ -57,7 +59,7 @@ impl Harness {
 
     /// How many scans have covered the directory: each one bumps its generation in the database.
     fn scans_done(&self) -> i64 {
-        let database = Database::initialize(&self.directory.file("data")).expect("database");
+        let database = Database::open(&self.directory.file("data")).expect("database");
         let connection = database.read().unwrap();
         connection
             .query_row(

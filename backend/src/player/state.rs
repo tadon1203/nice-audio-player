@@ -4,7 +4,7 @@
 use super::queue::{Queue, QueueEntry, RepeatMode};
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
-use crate::library::models::TrackSummary;
+use crate::library::read::playback::TrackSummary;
 use crate::player::output::AudioOutputSelection;
 use crate::player::processing::{ChannelConversion, OutputProcessingPlan};
 use crate::player::volume::VolumeState;

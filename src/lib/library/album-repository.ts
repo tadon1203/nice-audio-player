@@ -7,8 +7,8 @@ import {
 import {
   type AlbumId,
   type AlbumDetails,
-  type AlbumRow,
-  type AlbumTrackRow,
+  type AlbumListItem,
+  type AlbumTrackListItem,
 } from "#lib/native/bindings";
 import type { library } from "#lib/native/commands";
 import type { Result } from "#lib/native/result";
@@ -22,7 +22,7 @@ import type {
 } from "@tanstack/svelte-query";
 
 /** An album's tracks: the Backend answers the whole album at once, so it is one page. */
-export type AlbumTracksPage = Page<AlbumTrackRow>;
+export type AlbumTracksPage = Page<AlbumTrackListItem>;
 
 /** The album detail, track, and summary queries. */
 export class AlbumRepository {
@@ -84,16 +84,16 @@ export class AlbumRepository {
    * because a partial value must not become the cached data of a query that fetches the whole
    * album.
    */
-  public cachedSummary(albumId: AlbumId): AlbumRow | null {
+  public cachedSummary(albumId: AlbumId): AlbumListItem | null {
     return this.#albumSummaries().find((summary) => summary.id === albumId) ?? null;
   }
 
-  #albumSummaries(): AlbumRow[] {
+  #albumSummaries(): AlbumListItem[] {
     const albumLists = this.#queryClient.getQueriesData<
-      InfiniteData<Result<Page<AlbumRow>>, number>
+      InfiniteData<Result<Page<AlbumListItem>>, number>
     >({ queryKey: LibraryQueryKeys.catalogs });
     const artistLists = this.#queryClient.getQueriesData<
-      InfiniteData<Result<Page<AlbumRow>>, number>
+      InfiniteData<Result<Page<AlbumListItem>>, number>
     >({ queryKey: LibraryQueryKeys.artistAlbumsPrefix });
     const catalogAlbums = albumLists
       .filter(([queryKey]) => LibraryQueryKeys.requestOf(queryKey).presentation === "albums")

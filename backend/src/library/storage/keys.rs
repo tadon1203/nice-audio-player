@@ -11,6 +11,8 @@
 //! Unknown is the empty string: the backend never returns display strings (ARCHITECTURE).
 
 use crate::ids::AlbumId;
+use crate::library::sync::media::year_of;
+use crate::library::sync::scan::absolute_directory;
 use std::ffi::OsStr;
 use std::path::Path;
 use unicode_normalization::UnicodeNormalization;
@@ -145,7 +147,7 @@ pub(crate) struct TrackKeys {
     /// The folded names the filter looks in.
     pub search: String,
     /// Which printing of the album the track is on, as a path below its library directory (see
-    /// [`album_edition_of`]), `""` for a track with no album.
+    /// `album_edition_of` in `sync/scan.rs`), `""` for a track with no album.
     pub album_relative_dir: String,
     /// The album the track is on (see `AlbumId`); a track with no album has the ID of an empty
     /// title in an empty directory.
@@ -171,7 +173,7 @@ impl TrackKeys {
         )
     }
 
-    /// All the keys. `album_relative_dir` is the album's edition (see [`album_edition_of`]) and
+    /// All the keys. `album_relative_dir` is the album's edition (see `album_edition_of` in `sync/scan.rs`) and
     /// `directory_path` the path of its library directory. Both are kept only when the track has an
     /// album.
     pub(crate) fn build(
@@ -231,45 +233,6 @@ pub(crate) fn track_search_key(
     search_key(&[title, artist, album, album_artist])
 }
 
-/// The printing of an album a file belongs to, as the path of its directory below the library
-/// directory: the directory of the file, or the directory above it when it is a disc directory
-/// ("CD1", "Disc 2"), so one album on several discs stays one album while the same title and artist
-/// in two directories (an original and a remaster) are two.
-pub(crate) fn album_edition_of(relative_path: &str) -> String {
-    let directory = relative_path
-        .rsplit_once('/')
-        .map_or("", |(directory, _)| directory);
-    let directory = match directory.rsplit_once('/') {
-        Some((parent, last)) if is_disc_directory(last) => parent,
-        None if is_disc_directory(directory) => "",
-        _ => directory,
-    };
-    directory.to_owned()
-}
-
-/// The absolute path of an album edition: the library directory's path, `/`, then the edition's
-/// path below it. `/` is written on every platform, so the text is the same in Rust and in SQL
-/// (`album_id()` joins them the same way).
-pub(crate) fn absolute_directory(directory_path: &str, relative_dir: &str) -> String {
-    format!("{directory_path}/{relative_dir}")
-}
-
-fn is_disc_directory(name: &str) -> bool {
-    let name = name.trim().to_lowercase();
-    let Some(rest) = ["disc", "disk", "cd"]
-        .iter()
-        .find_map(|prefix| name.strip_prefix(prefix))
-    else {
-        return false;
-    };
-    let rest = rest.trim_start_matches([' ', '_', '-', '.']);
-    let digits = rest.chars().take_while(char::is_ascii_digit).count();
-    (1..=2).contains(&digits)
-        && rest
-            .get(digits..)
-            .is_some_and(|tail| !tail.starts_with(char::is_alphanumeric))
-}
-
 /// A tag value with its surrounding space removed; unknown is `""`. Identity is
 /// case-sensitive: "Case" and "case" are two albums.
 pub(crate) fn text_key(value: Option<&str>) -> String {
@@ -296,18 +259,6 @@ pub(crate) fn title_key(title: Option<&str>, file_name: &str) -> String {
         .and_then(|stem| stem.to_str())
         .unwrap_or(file_name)
         .to_owned()
-}
-
-/// The year of a tag date (`2019`, `2019-05`, `2019-05-03`): its first four characters, when they
-/// are digits from 1000 to 9999. Anything else, `0000` included, is no year.
-pub(crate) fn year_of(date: &str) -> Option<i32> {
-    let year = date.trim().get(..4)?;
-    if !year.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    year.parse()
-        .ok()
-        .filter(|year| (1000..=9999).contains(year))
 }
 
 #[cfg(test)]
@@ -439,26 +390,6 @@ mod tests {
     }
 
     #[test]
-    fn a_year_is_four_digits_from_1000_to_9999() {
-        assert_eq!(year_of("2019"), Some(2019));
-        assert_eq!(year_of(" 2019-05-03"), Some(2019));
-        assert_eq!(year_of("1000"), Some(1000));
-        assert_eq!(year_of("9999-12"), Some(9999));
-        for none in [
-            "0000",
-            "0999",
-            "19",
-            "n/a",
-            "+123",
-            "-123",
-            "日本語日本語",
-            "",
-        ] {
-            assert_eq!(year_of(none), None, "{none:?}");
-        }
-    }
-
-    #[test]
     fn the_effective_album_artist_falls_back_to_the_artist() {
         assert_eq!(album_artist_key(Some(" Band "), Some("Singer")), "Band");
         assert_eq!(album_artist_key(Some("  "), Some("Singer")), "Singer");
@@ -471,26 +402,6 @@ mod tests {
         assert_eq!(title_key(Some(" Song "), "01.flac"), "Song");
         assert_eq!(title_key(Some(""), "multi.part.flac"), "multi.part");
         assert_eq!(title_key(None, "plain"), "plain");
-    }
-
-    #[test]
-    fn an_album_edition_is_a_directory_and_a_disc_directory_belongs_to_its_parent() {
-        assert_eq!(album_edition_of("Artist/Album/01.flac"), "Artist/Album");
-        assert_eq!(album_edition_of("Artist/Album/CD1/01.flac"), "Artist/Album");
-        assert_eq!(
-            album_edition_of("Artist/Album/Disc 02/01.flac"),
-            "Artist/Album"
-        );
-        assert_eq!(album_edition_of("01.flac"), "");
-        assert_eq!(album_edition_of("CD1/01.flac"), "");
-        assert_eq!(
-            album_edition_of("Artist/Album (2011 Remaster)/01.flac"),
-            "Artist/Album (2011 Remaster)"
-        );
-        assert_eq!(
-            album_edition_of("Artist/CD Collection/01.flac"),
-            "Artist/CD Collection"
-        );
     }
 
     #[test]
@@ -520,11 +431,5 @@ mod tests {
     #[test]
     fn identity_keeps_case() {
         assert_ne!(text_key(Some("Case")), text_key(Some("case")));
-    }
-
-    #[test]
-    fn a_disc_directory_with_a_multibyte_suffix_is_not_one_and_does_not_panic() {
-        assert!(!is_disc_directory("disc 1é"));
-        assert!(is_disc_directory("disc 1"));
     }
 }

@@ -3,7 +3,6 @@
 //! new album.
 
 use super::scan::{Fixture, fixture, run_scan, tagged_tone, track_ids_by_path, write_tone};
-use crate::library::directories;
 use lofty::tag::ItemKey::{AlbumTitle, TrackArtist, TrackTitle};
 
 fn album_ids(fixture: &Fixture) -> Vec<String> {
@@ -56,7 +55,7 @@ fn a_removed_directory_that_comes_back_gets_the_same_album_ids() {
 
     std::fs::remove_dir_all(fixture.music.join("Solo")).unwrap();
     run_scan(&fixture, false);
-    directories::delete_missing(&fixture.database).unwrap();
+    crate::library::sync::missing::delete_missing_tracks(&fixture.database).unwrap();
     assert_eq!(album_ids(&fixture).len(), 0);
     write_album(&fixture, "Record");
     run_scan(&fixture, false);
@@ -93,7 +92,7 @@ fn a_deleted_track_id_is_not_used_again() {
 
     std::fs::remove_file(fixture.music.join("b.wav")).unwrap();
     run_scan(&fixture, false);
-    directories::delete_missing(&fixture.database).unwrap();
+    crate::library::sync::missing::delete_missing_tracks(&fixture.database).unwrap();
     write_tone(&fixture.music.join("c.wav"), 24_000);
     run_scan(&fixture, false);
 

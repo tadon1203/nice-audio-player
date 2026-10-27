@@ -21,8 +21,8 @@ use serde::Serialize;
 use super::decode::{CompressedAudioSource, DecodeError, DecodeStep};
 use crate::errors::contain;
 use crate::ids::PlaybackId;
-use crate::library::media::ValidatedAudioFile;
-use crate::library::tracks::PlayableTrack;
+use crate::library::read::playback::PlayableTrack;
+use crate::library::sync::media::ValidatedAudioFile;
 use crate::messages::{self, BackendMessage};
 use crate::threads::{Cancellation, run_in_background};
 
@@ -367,8 +367,8 @@ impl Drop for Waveforms {
 mod tests {
     use super::*;
     use crate::ids::TrackId;
-    use crate::library::media::validate_audio_file;
-    use crate::library::scan::content_hash;
+    use crate::library::sync::media::validate_audio_file;
+    use crate::library::sync::scan::hash_file_content;
     use crate::messages::BackendMessage;
     use crate::test_support::bare_track;
     use crate::test_support::{MessageLog, TestDirectory, null_messages, write_pcm_i16_wav};
@@ -542,7 +542,7 @@ mod tests {
     fn service_publishes_the_waveform_and_caches_it() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
-        let hash = content_hash(Path::new(&file.path)).unwrap();
+        let hash = hash_file_content(Path::new(&file.path)).unwrap();
         let (host, sender) = MessageLog::shared();
         let service = Waveforms::start(directory.file("cache"), sender);
         service.loaded(PlaybackId::first(), &track_of(&file, Some(&hash)));
