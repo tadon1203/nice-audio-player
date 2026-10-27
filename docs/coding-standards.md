@@ -46,8 +46,6 @@ Keep naming **boring, plain, and conventional**. Do not use ornate or enterprise
 
 ## TypeScript
 
-Source: [TypeScript Do's and Don'ts](https://www.typescriptlang.org/docs/handbook/declaration-files/do-s-and-don-ts.html).
-
 ### Types
 
 - Do not use `Number`, `String`, `Boolean`, `Symbol`, or `Object` as types. Use `number`, `string`, `boolean`, `symbol`, or `object`.
@@ -76,8 +74,6 @@ Source: [TypeScript Do's and Don'ts](https://www.typescriptlang.org/docs/handboo
 
 - Keep `strict: true` in `tsconfig.json`.
 - Set an individual strict flag to `false` only with a stated reason. An individual flag overrides the `strict` family.
-
-Sources: [Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html), [TSConfig `strict`](https://www.typescriptlang.org/tsconfig/strict.html).
 
 ### Inference and assertions
 
@@ -110,8 +106,6 @@ Sources: [Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.ht
 
 - Use `import type` for imports that are used only as types.
 - Derive a type from a value or another type with `typeof`, `keyof`, and indexed access types. Do not write the same shape twice.
-
-Sources: [Everyday Types](https://www.typescriptlang.org/docs/handbook/2/everyday-types.html), [Basic Types](https://www.typescriptlang.org/docs/handbook/2/basic-types.html), [Functions](https://www.typescriptlang.org/docs/handbook/2/functions.html), [Objects](https://www.typescriptlang.org/docs/handbook/2/objects.html), [Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html), [Modules](https://www.typescriptlang.org/docs/handbook/2/modules.html), [Creating Types from Types](https://www.typescriptlang.org/docs/handbook/2/types-from-types.html).
 
 ## Frontend (TypeScript & Svelte 5)
 
