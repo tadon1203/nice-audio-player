@@ -1,27 +1,42 @@
-import type { CreateInfiniteQueryOptions, InfiniteData } from "@tanstack/svelte-query";
-import { type CommandError, type LetterIndexEntry, type LibraryState } from "#lib/native/bindings";
-import type { Result } from "#lib/native/result";
 import {
-  type CatalogRepository,
-  type LibraryCatalogItem,
-  type LibraryCatalogRequest,
-  type Page,
-} from "./catalog-repository";
-import { LibraryErrors } from "./library-errors";
-import { LibraryQueryKeys } from "./library-query-keys";
-import { PagedCollection } from "./paged-collection.svelte";
-import { QueryResult } from "./query-result.svelte";
-
-/** The Library state the catalog reads: `null` until the Backend's first push. */
-export interface LibraryStateSource {
-  readonly snapshot: LibraryState | null;
-}
-
-/** Which single region owns the workspace; states never compete. */
-export type LibraryViewState = "loading" | "unavailable" | "catalogError" | "empty" | "content";
+  createInfiniteQuery,
+  createQuery,
+  type CreateInfiniteQueryOptions,
+  type CreateInfiniteQueryResult,
+  type CreateQueryResult,
+  type InfiniteData,
+} from "@tanstack/svelte-query";
+import {
+  type CommandError,
+  type LetterIndexEntry,
+  type LibraryStatus,
+  type ScanFailure,
+} from "#lib/native/bindings";
+import type { Result } from "#lib/native/result";
+import type { Library } from "./library.svelte";
+import { catalogRequestOf } from "./library-keys";
+import type { LibraryCatalogItem, LibraryCatalogRequest, LibraryViewState, Page } from "./types";
 
 /** How long typing pauses before the filter reaches the query. The input itself never waits. */
 const FILTER_DEBOUNCE_MS = 120;
+
+const scanFailureMessages = {
+  directoryUnreadable: "A library directory could not be read.",
+  failed: "The scan stopped unexpectedly.",
+} as const satisfies Record<ScanFailure, string>;
+
+/** The user-facing message for a Library status, or null when the Library is ready. */
+export function libraryStatusMessage(status: LibraryStatus): string | null {
+  if (status.status === "ready") return null;
+  return "The library storage is unavailable.";
+}
+
+/** Explains why a scan failed; the caller already shows that it failed. */
+export function scanFailureMessage(failureCode: string | null): string {
+  return failureCode !== null && Object.hasOwn(scanFailureMessages, failureCode)
+    ? scanFailureMessages[failureCode as ScanFailure]
+    : "The scan stopped unexpectedly.";
+}
 
 /** The filter the query uses, with the presentation it was typed for. */
 interface SettledFilter {
@@ -33,13 +48,16 @@ interface SettledFilter {
  * A presentation's list, its letter index, and its one view state. Loads the list once the library
  * is ready and derives the one view state to render. The filter is debounced into the query key so
  * typing stays responsive while the list refetches; the previous list of the same presentation stays
- * on screen until the new one arrives. Construct during component initialization.
+ * on screen until the new one arrives. Created by `Library.catalog` during component initialization.
  */
 export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
+  readonly #library: Library;
   readonly #request: () => TRequest;
-  readonly #library: LibraryStateSource;
-  readonly #pages: PagedCollection<Page<LibraryCatalogItem<TRequest["presentation"]>>>;
-  readonly #index: QueryResult<LetterIndexEntry[]>;
+  readonly #pages: CreateInfiniteQueryResult<
+    InfiniteData<Result<Page<LibraryCatalogItem<TRequest["presentation"]>>>>,
+    Error
+  >;
+  readonly #index: CreateQueryResult<Result<LetterIndexEntry[]>, Error>;
   // Both start unset: until the debounce settles, the live request is the one in use.
   #settled = $state.raw<SettledFilter | null>(null);
   #shown = $state.raw<TRequest | null>(null);
@@ -53,23 +71,22 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
       : current;
   }
 
-  get #statusMessage(): string | null {
-    const status = this.#library.snapshot?.status;
-    return status ? LibraryErrors.statusMessage(status) : null;
+  get #libraryStatus(): LibraryStatus | null {
+    return this.#library.state?.status ?? null;
   }
 
   get #ready(): boolean {
-    return this.#library.snapshot?.status.status === "ready";
+    return this.#libraryStatus?.status === "ready";
   }
 
   get #viewState(): LibraryViewState {
-    return this.#statusMessage !== null
+    return this.statusMessage !== null
       ? "unavailable"
-      : this.#library.snapshot === null || this.#pages.isPending
+      : this.#library.state === null || this.#pages.isPending
         ? "loading"
-        : this.#pages.error !== null
+        : this.error !== null
           ? "catalogError"
-          : this.#pages.items.length === 0
+          : this.items.length === 0
             ? "empty"
             : "content";
   }
@@ -84,18 +101,14 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     );
   }
 
-  public constructor(
-    catalog: CatalogRepository,
-    request: () => TRequest,
-    library: LibraryStateSource,
-  ) {
-    this.#request = request;
+  public constructor(library: Library, request: () => TRequest) {
     this.#library = library;
-    this.#pages = new PagedCollection(() => this.#pageOptions(catalog));
+    this.#request = request;
+    this.#pages = createInfiniteQuery(() => this.#pageOptions());
     // The letter index follows the list's filter and sort (not where it was entered), so a jump
     // keeps the entries it was made from.
-    this.#index = new QueryResult(() => ({
-      ...catalog.indexOptions(this.#queryRequest, this.#ready),
+    this.#index = createQuery(() => ({
+      ...library.getCatalogIndex(this.#queryRequest, this.#ready),
       placeholderData: (
         previous: Result<LetterIndexEntry[]> | undefined,
       ): Result<LetterIndexEntry[]> | undefined => previous,
@@ -131,7 +144,8 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
 
   /** Why the library cannot be browsed, when its status says so. */
   public get statusMessage(): string | null {
-    return this.#statusMessage;
+    const status = this.#libraryStatus;
+    return status ? libraryStatusMessage(status) : null;
   }
 
   /** True while the list refetches behind existing content. */
@@ -139,22 +153,28 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     return this.#updating;
   }
 
+  /** The rows of every page that loaded. A failed page adds none. */
   public get items(): readonly LibraryCatalogItem<TRequest["presentation"]>[] {
-    return this.#pages.items;
+    return (
+      this.#pages.data?.pages.flatMap((outcome) => (outcome.ok ? outcome.value.items : [])) ?? []
+    );
   }
 
   public get totalCount(): number | null {
-    return this.#pages.totalCount;
+    const first = this.#pages.data?.pages[0];
+    return first?.ok ? first.value.total : null;
   }
 
   /** The list's letter index: entries of names in list order; empty when the sort has none. */
   public get index(): readonly LetterIndexEntry[] {
-    return this.#index.data ?? [];
+    const outcome = this.#index.data;
+    return outcome?.ok ? outcome.value : [];
   }
 
-  /** The reason the list failed to load, or null. */
+  /** The reason the first failed page failed, or null when no page has failed. */
   public get error(): CommandError | null {
-    return this.#pages.error;
+    const failed = this.#pages.data?.pages.find((outcome) => !outcome.ok);
+    return failed !== undefined && !failed.ok ? failed.error : null;
   }
 
   public get hasNextPage(): boolean {
@@ -165,18 +185,20 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     return this.#pages.isFetchingNextPage;
   }
 
-  public readonly fetchNextPage = (): Promise<void> => this.#pages.fetchNextPage();
+  public readonly fetchNextPage = async (): Promise<void> => {
+    await this.#pages.fetchNextPage();
+  };
 
-  public readonly refetch = (): Promise<void> => this.#pages.refetch();
+  public readonly refetch = async (): Promise<void> => {
+    await this.#pages.refetch();
+  };
 
   /**
    * The list's query options, with the previous list kept only while the presentation stays the
    * same. The query function is chosen by `presentation`, so its pages hold exactly that
    * presentation's item type; TypeScript cannot correlate the two through the union.
    */
-  #pageOptions(
-    catalog: CatalogRepository,
-  ): CreateInfiniteQueryOptions<
+  #pageOptions(): CreateInfiniteQueryOptions<
     Result<Page<LibraryCatalogItem<TRequest["presentation"]>>>,
     Error,
     InfiniteData<Result<Page<LibraryCatalogItem<TRequest["presentation"]>>>>
@@ -187,11 +209,11 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
       previousQuery: { queryKey: readonly unknown[] } | undefined,
     ): Data | undefined =>
       previousQuery !== undefined &&
-      LibraryQueryKeys.requestOf(previousQuery.queryKey).presentation === presentation
+      catalogRequestOf(previousQuery.queryKey).presentation === presentation
         ? previousData
         : undefined;
     return {
-      ...catalog.pageOptions(this.#queryRequest, this.#ready),
+      ...this.#library.getCatalogPages(this.#queryRequest, this.#ready),
       placeholderData: keepWithinPresentation,
     } as unknown as CreateInfiniteQueryOptions<
       Result<Page<LibraryCatalogItem<TRequest["presentation"]>>>,

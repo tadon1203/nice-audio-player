@@ -1,4 +1,4 @@
 **/skills/**
-src/lib/ui/shadcn/**
+src/lib/components/ui/shadcn/**
 .svelte-kit/**
 build/**

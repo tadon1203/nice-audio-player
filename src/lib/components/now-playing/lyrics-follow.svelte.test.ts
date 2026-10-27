@@ -6,7 +6,7 @@ import { LyricsFollow } from "./lyrics-follow.svelte";
 // `current` is reactive so a test can move the spring by hand, as the animation frames would.
 const glideTargets = vi.hoisted(() => [] as number[]);
 const springs = vi.hoisted(() => [] as Array<{ current: number }>);
-vi.mock("#lib/ui/motion/retargetable-spring.svelte", () => ({
+vi.mock("#lib/components/ui/motion/retargetable-spring.svelte", () => ({
   RetargetableSpring: class {
     public current = $state(0);
     #target = 0;

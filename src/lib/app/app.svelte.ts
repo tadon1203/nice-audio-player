@@ -1,23 +1,18 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { createContext } from "svelte";
 import { prefersReducedMotion } from "svelte/motion";
-import { AlbumRepository } from "#lib/library/album-repository";
-import { ArtistRepository } from "#lib/library/artist-repository";
-import { CatalogRepository } from "#lib/library/catalog-repository";
-import { LibraryDirectoryCommands } from "#lib/library/library-directory-commands.svelte";
-import { LibraryTrackCommands } from "#lib/library/library-track-commands";
-import { LibraryViews } from "#lib/library/library-views.svelte";
-import { LyricsRepository } from "#lib/lyrics/lyrics-repository";
+import { Appearance } from "#lib/appearance/appearance.svelte";
+import { Library } from "#lib/library/library.svelte";
+import { Lyrics } from "#lib/lyrics/lyrics.svelte";
 import * as native from "#lib/native/commands";
 import { AudioOutputDevices } from "#lib/player/audio-output-devices.svelte";
 import { PlaybackClock } from "#lib/player/playback-clock.svelte";
 import { Player } from "#lib/player/player.svelte";
-import { Appearance } from "#lib/appearance/appearance.svelte";
 import { Connection } from "./connection.svelte";
-import { LibraryStateReplica } from "./library-state-replica.svelte";
+import { Notices } from "./notices.svelte";
 import { NowPlaying } from "./now-playing.svelte";
 import { ScrollOffsets } from "./scroll.svelte";
-import { Notices, UserActions } from "./user-actions.svelte";
+import { UserActions } from "./user-actions.svelte";
 
 const [getApp, setAppContext] = createContext<App>();
 
@@ -40,38 +35,44 @@ export interface Motion {
 }
 
 /**
- * The Renderer's root. It composes the areas and holds the state of the whole window: the
- * Queue panel, the Now Playing layer, and the motion rule. A component reads it with `useApp`.
+ * The window's UI state. It is not Backend state: it lives only in the Renderer, and it spans
+ * several Areas, so the App holds it.
+ */
+class AppUi {
+  /** What the user sees as notices, errors, and offers. */
+  public readonly notices = new Notices();
+  /** Runs user actions and tells which places are busy. */
+  public readonly actions = new UserActions(this.notices);
+  /** The scroll positions of the workspace, by list path. */
+  public readonly scroll = new ScrollOffsets();
+  public readonly nowPlaying = new NowPlaying();
+  /** Whether the Queue panel is open. */
+  public queuePanelOpen = $state(false);
+}
+
+/**
+ * The Renderer's root. It composes the Areas and holds the UI state of the whole window. A component
+ * reads it with `useApp`.
  */
 export class App {
   public readonly queryClient: QueryClient;
   public readonly player: Player;
-  public readonly library: {
-    readonly catalog: CatalogRepository;
-    readonly albums: AlbumRepository;
-    readonly artists: ArtistRepository;
-    readonly directories: LibraryDirectoryCommands;
-    readonly tracks: LibraryTrackCommands;
-    readonly views: LibraryViews;
-    readonly state: LibraryStateReplica;
-  };
-  public readonly lyrics: LyricsRepository;
+  public readonly library: Library;
+  public readonly lyrics: Lyrics;
   public readonly appearance: Appearance;
   public readonly outputDevices: AudioOutputDevices;
   public readonly motion: Motion;
-  public readonly nowPlaying: NowPlaying;
+  public readonly ui: AppUi;
   public readonly connection: Connection;
-  public readonly actions: UserActions;
-  public readonly notices: Notices;
-  public readonly scroll: ScrollOffsets;
-  /** Whether the Queue panel is open. */
-  public queuePanelOpen = $state(false);
 
   public constructor(queryClient: QueryClient) {
     this.queryClient = queryClient;
     this.player = new Player(native.player, new PlaybackClock());
     this.appearance = new Appearance(native.appearance);
     this.outputDevices = new AudioOutputDevices(native.player);
+    this.library = new Library(native.library, queryClient);
+    this.lyrics = new Lyrics(native.lyrics, queryClient);
+    this.ui = new AppUi();
 
     const appearance = this.appearance;
     this.motion = {
@@ -83,26 +84,12 @@ export class App {
       },
     };
 
-    const catalog = new CatalogRepository(native.library, queryClient);
-    const lyrics = new LyricsRepository(native.lyrics, queryClient);
-    this.lyrics = lyrics;
-    this.library = {
-      catalog,
-      albums: new AlbumRepository(native.library, queryClient),
-      artists: new ArtistRepository(native.library),
-      directories: new LibraryDirectoryCommands(native.library),
-      tracks: new LibraryTrackCommands(native.library),
-      views: new LibraryViews(),
-      state: new LibraryStateReplica(() => {
-        catalog.refresh();
-        lyrics.refresh();
-      }),
-    };
-
-    this.nowPlaying = new NowPlaying();
-    this.notices = new Notices();
-    this.actions = new UserActions(this.notices);
-    this.scroll = new ScrollOffsets();
-    this.connection = new Connection(native.app, this);
+    this.connection = new Connection(native.app, {
+      player: this.player,
+      library: this.library,
+      lyrics: this.lyrics,
+      appearance: this.appearance,
+      notices: this.ui.notices,
+    });
   }
 }

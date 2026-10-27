@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Button } from "#lib/ui/shadcn/button";
+  import { Button } from "#lib/components/ui/shadcn/button";
   import { type Lyrics, type QueueItem } from "#lib/native/bindings";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
-  import FactLine from "#lib/ui/fact-line.svelte";
+  import FactLine from "#lib/components/ui/fact-line.svelte";
   import { Tracks } from "#lib/library/tracks";
   import { TrackFacts } from "./track-facts";
   import { NowPlayingActions } from "./now-playing-actions.svelte";

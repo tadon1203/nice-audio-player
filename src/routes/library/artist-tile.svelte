@@ -1,8 +1,8 @@
 <script lang="ts">
   import { type ArtistListItem } from "#lib/native/bindings";
   import { resolve } from "$app/paths";
-  import { artistNameLabel } from "#lib/library/unknown-name";
-  import Artwork from "#lib/ui/artwork.svelte";
+  import { artistNameLabel } from "#lib/library/tracks";
+  import Artwork from "#lib/components/ui/artwork.svelte";
   import { CountFormat } from "#lib/utils/count-format";
 
   let { artist }: { artist: ArtistListItem } = $props();

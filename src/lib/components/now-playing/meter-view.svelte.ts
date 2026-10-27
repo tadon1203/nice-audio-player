@@ -2,13 +2,12 @@ import type { Attachment } from "svelte/attachments";
 import { meter } from "#lib/native/commands";
 import { BALLISTICS, BAND_COUNT } from "#lib/meter/ballistics";
 import { DrawLoop } from "#lib/meter/draw-loop";
-import { MeterDisplay } from "#lib/meter/meter-display";
+import { formatHeldPeak, MeterDisplay } from "#lib/meter/meter-display";
 import { MeterFeed } from "#lib/meter/meter-feed.svelte";
 import { reduceMeterFrames } from "#lib/meter/meter-frames";
 import { MeterDraw } from "#lib/meter/meter-draw";
-import { Readout } from "#lib/meter/readout";
 import { useApp } from "#lib/app/app.svelte";
-import { DocumentVisibility } from "#lib/ui/document-visibility.svelte";
+import { DocumentVisibility } from "#lib/components/ui/document-visibility.svelte";
 
 const NARROW_BELOW_PX = 512;
 const READOUT_MS = 250;
@@ -56,7 +55,7 @@ export class MeterView {
     left: null,
     right: null,
   };
-  readonly #floorText = Readout.formatHeldPeak(BALLISTICS.floorDb);
+  readonly #floorText = formatHeldPeak(BALLISTICS.floorDb);
   #layout = $state<MeterLayout>("wide");
   #readouts = $state<[string, string]>([this.#floorText, this.#floorText]);
   #clips = $state<[boolean, boolean]>([false, false]);
@@ -205,8 +204,8 @@ export class MeterView {
 
   #refreshReadouts(): void {
     this.#readouts = [
-      Readout.formatHeldPeak(this.#display.peak[0].peakCap),
-      Readout.formatHeldPeak(this.#display.peak[1].peakCap),
+      formatHeldPeak(this.#display.peak[0].peakCap),
+      formatHeldPeak(this.#display.peak[1].peakCap),
     ];
     this.#clips = [this.#display.clip[0], this.#display.clip[1]];
   }

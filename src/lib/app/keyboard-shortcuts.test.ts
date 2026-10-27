@@ -64,6 +64,6 @@ describe("global seek shortcut", () => {
     const [sent] = mocks.seek.mock.calls[0]!;
     expect(Number.isInteger(sent)).toBe(true);
     expect(sent).toBeGreaterThan(10_000);
-    expect(app.notices.at("dock")).toBeNull();
+    expect(app.ui.notices.at("dock")).toBeNull();
   });
 });

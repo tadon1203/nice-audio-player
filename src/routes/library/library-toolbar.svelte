@@ -1,15 +1,15 @@
 <script lang="ts" generics="Key extends string">
   import Search from "@lucide/svelte/icons/search";
-  import CollectionSortControl from "#lib/ui/collection-sort-control.svelte";
-  import PageTitle from "#lib/ui/page-title.svelte";
-  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
+  import CollectionSortControl from "#lib/components/ui/collection-sort-control.svelte";
+  import PageTitle from "#lib/components/ui/page-title.svelte";
+  import RollingNumber from "#lib/components/ui/rolling-number/rolling-number.svelte";
   import {
     InputGroup,
     InputGroupAddon,
     InputGroupInput,
-  } from "#lib/ui/shadcn/input-group/index.js";
-  import type { SortableView } from "#lib/ui/sort-option";
-  import WorkspaceContainer from "#lib/ui/workspace-container.svelte";
+  } from "#lib/components/ui/shadcn/input-group/index.js";
+  import type { SortableView } from "#lib/components/ui/sort-option";
+  import WorkspaceContainer from "#lib/components/ui/workspace-container.svelte";
   import { CountFormat } from "#lib/utils/count-format";
 
   let {

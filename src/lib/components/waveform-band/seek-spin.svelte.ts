@@ -1,6 +1,6 @@
 import { onMount, tick } from "svelte";
 import { useApp } from "#lib/app/app.svelte";
-import { RollingMath } from "#lib/ui/rolling-number/rolling-math";
+import { RollingMath } from "#lib/components/ui/rolling-number/rolling-math";
 
 /**
  * The spin of the time digits after a seek. A completed seek spins the digits with its distance;

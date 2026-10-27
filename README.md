@@ -26,7 +26,7 @@ The checks to run are in [CLAUDE.md](./CLAUDE.md#commands).
 - Host: Tauri 2 runs the Windows WebView and packages the app.
 - Backend: Rust owns playback, the library, persistence, and native work.
 
-The shadcn-svelte primitives are in `src/lib/ui/shadcn`. To add one, run `pnpm dlx shadcn-svelte@latest add <component>`. Put product-specific compositions in `src/lib/components` or beside their route.
+The shadcn-svelte primitives are in `src/lib/components/ui/shadcn`. To add one, run `pnpm dlx shadcn-svelte@latest add <component>`. Put product-specific compositions in `src/lib/components` or beside their route.
 
 ## Agent skills
 

@@ -3,7 +3,7 @@
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { Sort } from "#lib/library/sort";
   import { type SortDirection, type TrackSortKey } from "#lib/native/bindings";
-  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { Button } from "#lib/components/ui/shadcn/button/index.js";
 
   let {
     header,

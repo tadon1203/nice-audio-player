@@ -1,7 +1,7 @@
 import type { Attachment } from "svelte/attachments";
 import { type QueueItemId } from "#lib/native/bindings";
 import type { HTMLAttributes } from "svelte/elements";
-import { ScrollView } from "#lib/ui/scroll-view.svelte";
+import { ScrollView } from "#lib/components/ui/scroll-view.svelte";
 import { DropSlot } from "./drop-slot";
 
 /** Within this distance of the scroll view's edge a drag scrolls it, this far per move. */

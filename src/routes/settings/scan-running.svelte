@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type ScanState } from "#lib/native/bindings";
-  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
-  import { Progress } from "#lib/ui/shadcn/progress/index.js";
+  import RollingNumber from "#lib/components/ui/rolling-number/rolling-number.svelte";
+  import { Progress } from "#lib/components/ui/shadcn/progress/index.js";
   import { CountFormat } from "#lib/utils/count-format";
 
   /** The running scan's counters, progress bar and current directory. */

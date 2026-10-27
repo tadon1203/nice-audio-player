@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from "#lib/ui/shadcn/button";
+  import { Button } from "#lib/components/ui/shadcn/button";
   import { type LetterIndexEntry } from "#lib/native/bindings";
 
   let {

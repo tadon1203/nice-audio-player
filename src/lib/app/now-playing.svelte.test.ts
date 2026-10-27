@@ -8,7 +8,15 @@ const mocks = vi.hoisted(() => ({
 vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
 vi.mock("$app/state", () => ({ page: mocks.page }));
 
-import { NowPlaying } from "./now-playing.svelte";
+import { motionTokens } from "#lib/components/ui/motion/tokens";
+import { NowPlaying, nowPlayingDuration } from "./now-playing.svelte";
+
+describe("nowPlayingDuration", () => {
+  it("opens at the large token and closes quicker", () => {
+    expect(nowPlayingDuration(true)).toBe(motionTokens.large.duration);
+    expect(nowPlayingDuration(false)).toBeLessThan(nowPlayingDuration(true));
+  });
+});
 
 beforeEach(() => {
   mocks.goto.mockClear();

@@ -4,10 +4,10 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "#lib/ui/shadcn/button";
+  import { Button } from "#lib/components/ui/shadcn/button";
   import { useApp } from "#lib/app/app.svelte";
-  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
-  import WaveformSeek from "#lib/ui/waveform/waveform-seek.svelte";
+  import RollingNumber from "#lib/components/ui/rolling-number/rolling-number.svelte";
+  import WaveformSeek from "#lib/components/ui/waveform/waveform-seek.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
   import { SeekDrag } from "./seek-drag.svelte";
@@ -33,7 +33,12 @@
     timeClass?: string;
   } = $props();
 
-  const { player: playback, motion, actions, nowPlaying } = useApp();
+  const {
+    player: playback,
+    motion,
+    ui: { actions, nowPlaying },
+  } = useApp();
+
   const trackKey = $derived(playback.item?.id ?? "none");
   const canSeek = $derived(playback.isActive && playback.durationMs !== null);
   const waveform = $derived(showWaveform ? playback.waveform : null);

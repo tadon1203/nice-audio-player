@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { BALLISTICS, type MeterInput } from "./ballistics";
-import { MeterDisplay } from "./meter-display";
+import { formatHeldPeak, MeterDisplay } from "./meter-display";
 import type { MeterFrame } from "#lib/native/bindings";
 import { reduceMeterFrames } from "./meter-frames";
-import { Readout } from "./readout";
 
 const { floorDb } = BALLISTICS;
 
@@ -204,19 +203,19 @@ describe("frames", () => {
   });
 });
 
-describe("Readout.formatHeldPeak", () => {
+describe("formatHeldPeak", () => {
   it("shows one decimal in dBFS", () => {
-    expect(Readout.formatHeldPeak(-6.04)).toBe("-6.0");
-    expect(Readout.formatHeldPeak(-12.36)).toBe("-12.4");
+    expect(formatHeldPeak(-6.04)).toBe("-6.0");
+    expect(formatHeldPeak(-12.36)).toBe("-12.4");
   });
 
   it("shows -inf at the floor", () => {
-    expect(Readout.formatHeldPeak(floorDb)).toBe("-inf");
-    expect(Readout.formatHeldPeak(-89.97)).toBe("-inf");
+    expect(formatHeldPeak(floorDb)).toBe("-inf");
+    expect(formatHeldPeak(-89.97)).toBe("-inf");
   });
 
   it("never shows a negative zero", () => {
-    expect(Readout.formatHeldPeak(-0.02)).toBe("0.0");
-    expect(Readout.formatHeldPeak(0)).toBe("0.0");
+    expect(formatHeldPeak(-0.02)).toBe("0.0");
+    expect(formatHeldPeak(0)).toBe("0.0");
   });
 });

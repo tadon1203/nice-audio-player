@@ -2,8 +2,8 @@
   import type { Snippet } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { useApp } from "#lib/app/app.svelte";
-  import { NowPlayingMotion } from "#lib/app/now-playing-motion";
-  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
+  import { NOW_PLAYING_EXIT_SPEED } from "#lib/app/now-playing.svelte";
+  import { SvelteMotion } from "#lib/components/ui/motion/svelte-motion";
   import { NowPlayingTransitions } from "./now-playing-transitions";
 
   /**
@@ -16,14 +16,17 @@
    */
   let { children }: { children?: Snippet } = $props();
 
-  const { motion, nowPlaying } = useApp();
+  const {
+    motion,
+    ui: { nowPlaying },
+  } = useApp();
 
   function lift(opening: boolean) {
     return (_node: Element): TransitionConfig => {
       const reduced = motion.reduced;
       const { duration, easing } = SvelteMotion.of("large");
       return {
-        duration: opening || reduced ? duration : duration * NowPlayingMotion.EXIT_SPEED,
+        duration: opening || reduced ? duration : duration * NOW_PLAYING_EXIT_SPEED,
         easing,
         css: (t, u) =>
           `opacity: ${t}; transform: translateY(${reduced ? 0 : NowPlayingTransitions.liftPx * u}px)`,

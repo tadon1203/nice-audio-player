@@ -5,8 +5,8 @@
   import { Tween } from "svelte/motion";
   import { type RepeatMode } from "#lib/native/bindings";
   import { useApp } from "#lib/app/app.svelte";
-  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
-  import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
+  import { SvelteMotion } from "#lib/components/ui/motion/svelte-motion";
+  import { SvelteSlide } from "#lib/components/ui/motion/svelte-slide";
   import type { TransitionConfig } from "svelte/transition";
 
   /** One turn of the icon per mode change; `one` drops a superscript 1 beside it. */

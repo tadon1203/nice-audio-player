@@ -1,8 +1,8 @@
 import type { Attachment } from "svelte/attachments";
 import { useApp } from "#lib/app/app.svelte";
-import { RetargetableSpring } from "#lib/ui/motion/retargetable-spring.svelte";
-import { SpringCurve } from "#lib/ui/motion/spring-curve";
-import { crossfade, motionTokens } from "#lib/ui/motion/tokens";
+import { RetargetableSpring } from "#lib/components/ui/motion/retargetable-spring.svelte";
+import { SpringCurve } from "#lib/components/ui/motion/spring-curve";
+import { crossfade, motionTokens } from "#lib/components/ui/motion/tokens";
 import { AnchorColumn } from "./anchor-column";
 import type { ScrollHow } from "./lyrics-follow-rules";
 

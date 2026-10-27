@@ -2,9 +2,13 @@
   import { untrack } from "svelte";
   import { type Lyrics, type QueueItem } from "#lib/native/bindings";
   import { useApp } from "#lib/app/app.svelte";
-  import Artwork from "#lib/ui/artwork.svelte";
-  import KineticText from "#lib/ui/kinetic-text/kinetic-text.svelte";
-  import { SLEEVE_RADIUS, SharedElement, sharedKey } from "#lib/ui/motion/shared-element";
+  import Artwork from "#lib/components/ui/artwork.svelte";
+  import KineticText from "#lib/components/ui/kinetic-text/kinetic-text.svelte";
+  import {
+    SLEEVE_RADIUS,
+    SharedElement,
+    sharedKey,
+  } from "#lib/components/ui/motion/shared-element";
   import { NowPlayingTransitions } from "./now-playing-transitions";
 
   // A directive takes a name, not a member, so the transition gets a local alias.
@@ -24,7 +28,11 @@
     lyrics: Lyrics | null;
   } = $props();
 
-  const { player: playback, nowPlaying } = useApp();
+  const {
+    player: playback,
+    ui: { nowPlaying },
+  } = useApp();
+
   // The title wipes in on track changes, but not when Now Playing first opens.
   const openedOn = untrack(() => item?.queueItemId);
   const changedSinceOpen = $derived(item?.queueItemId !== openedOn);

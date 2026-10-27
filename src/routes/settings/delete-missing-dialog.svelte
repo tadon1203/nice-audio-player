@@ -8,7 +8,7 @@
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-  } from "#lib/ui/shadcn/alert-dialog/index.js";
+  } from "#lib/components/ui/shadcn/alert-dialog/index.js";
   import { CountFormat } from "#lib/utils/count-format";
 
   let {

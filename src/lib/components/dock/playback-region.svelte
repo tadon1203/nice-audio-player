@@ -1,9 +1,17 @@
 <script lang="ts">
-  import { NowPlayingTween } from "#lib/app/now-playing-tween.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { DOCK_HEIGHT_NOW_PLAYING_PX, DOCK_HEIGHT_PX } from "./dock-metrics";
   import PlaybackDock from "./playback-dock.svelte";
 
-  const height = new NowPlayingTween(DOCK_HEIGHT_PX, DOCK_HEIGHT_NOW_PLAYING_PX);
+  const {
+    motion,
+    ui: { nowPlaying },
+  } = useApp();
+  const height = nowPlaying.follow(
+    DOCK_HEIGHT_PX,
+    DOCK_HEIGHT_NOW_PLAYING_PX,
+    () => motion.reduced,
+  );
 </script>
 
 <!--

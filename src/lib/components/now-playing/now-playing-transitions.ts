@@ -1,7 +1,7 @@
 import { prefersReducedMotion } from "svelte/motion";
 import { fade } from "svelte/transition";
-import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
-import { TokenTiming } from "#lib/ui/motion/token-timing";
+import { SvelteMotion } from "#lib/components/ui/motion/svelte-motion";
+import { TokenTiming } from "#lib/components/ui/motion/token-timing";
 import type { TransitionConfig } from "svelte/transition";
 
 /** The transitions of the Now Playing layer. */

@@ -1,16 +1,17 @@
 <script lang="ts">
   import { type TrackId } from "#lib/native/bindings";
+  import { createQuery } from "@tanstack/svelte-query";
   import { errorMessage } from "#lib/native/messages";
-  import { QueryResult } from "#lib/library/query-result.svelte";
+  import { resultError, resultValue } from "#lib/library/query-pages";
   import { useApp } from "#lib/app/app.svelte";
-  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { Button } from "#lib/components/ui/shadcn/button/index.js";
   import {
     Sheet,
     SheetContent,
     SheetDescription,
     SheetHeader,
     SheetTitle,
-  } from "#lib/ui/shadcn/sheet";
+  } from "#lib/components/ui/shadcn/sheet";
   import { AudioFormatText } from "#lib/utils/audio-format-text";
   import { CountFormat } from "#lib/utils/count-format";
   import { DurationFormat } from "#lib/utils/duration-format";
@@ -32,8 +33,9 @@
   } = $props();
 
   const { library } = useApp();
-  const query = new QueryResult(() => library.catalog.trackPropertiesOptions(trackId));
-  const properties = $derived(query.data);
+  const query = createQuery(() => library.getTrackProperties(trackId));
+  const properties = $derived(resultValue(query.data));
+  const error = $derived(resultError(query.data));
 
   const orNull = <T,>(value: T | null, format: (value: T) => string): string | null =>
     value === null ? null : format(value);
@@ -116,8 +118,8 @@
             </span>
           </dd>
         </dl>
-      {:else if query.error}
-        <p class="text-sm text-muted-foreground">{errorMessage(query.error)}</p>
+      {:else if error !== null}
+        <p class="text-sm text-muted-foreground">{errorMessage(error)}</p>
       {/if}
     </div>
   </SheetContent>

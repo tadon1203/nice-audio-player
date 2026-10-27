@@ -2,40 +2,46 @@
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import MediaDetailsHeader from "#lib/components/media-details/media-details-header.svelte";
+  import { createInfiniteQuery, createQuery } from "@tanstack/svelte-query";
   import { errorMessage } from "#lib/native/messages";
-  import { PagedCollection } from "#lib/library/paged-collection.svelte";
-  import { QueryResult } from "#lib/library/query-result.svelte";
-  import { artistNameLabel } from "#lib/library/unknown-name";
+  import { loadedItems, pagesError, resultError, resultValue } from "#lib/library/query-pages";
+  import { artistNameLabel } from "#lib/library/tracks";
   import { useApp } from "#lib/app/app.svelte";
   import { WorkspaceScroll } from "#lib/app/scroll.svelte";
-  import BackLink from "#lib/ui/back-link.svelte";
-  import CollectionSortControl from "#lib/ui/collection-sort-control.svelte";
-  import EmptyStatus from "#lib/ui/empty-status.svelte";
-  import ErrorAlert from "#lib/ui/error-alert.svelte";
-  import FactLine from "#lib/ui/fact-line.svelte";
-  import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";
-  import LoadingStatus from "#lib/ui/loading-status.svelte";
-  import VirtualMediaGrid from "#lib/ui/media-grid/virtual-media-grid.svelte";
-  import PageTitle from "#lib/ui/page-title.svelte";
-  import SectionTitle from "#lib/ui/section-title.svelte";
-  import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
+  import BackLink from "#lib/components/ui/back-link.svelte";
+  import CollectionSortControl from "#lib/components/ui/collection-sort-control.svelte";
+  import ErrorAlert from "#lib/components/ui/error-alert.svelte";
+  import FactLine from "#lib/components/ui/fact-line.svelte";
+  import LoadMoreSentinel from "#lib/components/ui/load-more-sentinel.svelte";
+  import VirtualMediaGrid from "#lib/components/ui/media-grid/virtual-media-grid.svelte";
+  import PageTitle from "#lib/components/ui/page-title.svelte";
+  import SectionTitle from "#lib/components/ui/section-title.svelte";
+  import StatusRegion from "#lib/components/ui/status-region.svelte";
+  import WorkspaceScrollRegion from "#lib/components/ui/workspace-scroll.svelte";
   import { CountFormat } from "#lib/utils/count-format";
   import AlbumTile from "../../album-tile.svelte";
 
-  const { actions, library, player: playback, scroll: scrollOffsets } = useApp();
-  const view = library.views.artistAlbums;
+  const {
+    ui: { actions, scroll: scrollOffsets },
+    library,
+    player: playback,
+  } = useApp();
+  const view = library.artistAlbums;
 
   const artistId = $derived(page.params.artistId ?? "");
 
-  const artistQuery = new QueryResult(() => library.artists.detailsOptions(artistId));
-  const albums = new PagedCollection(() =>
-    library.artists.albumsOptions({ artistId, sortKey: view.sortKey, direction: view.direction }),
+  const artistQuery = createQuery(() => library.getArtist(artistId));
+  const artist = $derived(resultValue(artistQuery.data));
+  const artistError = $derived(resultError(artistQuery.data));
+  const albumsQuery = createInfiniteQuery(() =>
+    library.getArtistAlbums({ artistId, sortKey: view.sortKey, direction: view.direction }),
   );
+  const albums = $derived(loadedItems(albumsQuery.data));
+  const albumsError = $derived(pagesError(albumsQuery.data));
 
   const scroll = new WorkspaceScroll(scrollOffsets, {
     resetKey: (): string => view.stateKey,
-    ready: (): boolean =>
-      artistQuery.data !== undefined && !albums.isPending && albums.items.length > 0,
+    ready: (): boolean => artist !== undefined && !albumsQuery.isPending && albums.length > 0,
   });
 
   export const snapshot = scrollOffsets.detailSnapshot(scroll.capture, scroll.restore);
@@ -44,23 +50,22 @@
 <WorkspaceScrollRegion viewportAttachment={scroll.attach} contentClass="py-8 pb-16">
   <BackLink href={resolve("/library/album-artists")}>Album Artists</BackLink>
 
-  {#if artistQuery.error !== null}
+  {#if artistError !== null}
     <ErrorAlert
-      message={errorMessage(artistQuery.error)}
-      onRetry={() => actions.run(() => artistQuery.refetch(), "library")}
+      message={errorMessage(artistError)}
+      onRetry={() => actions.run(async () => (await artistQuery.refetch()).data, "library")}
     />
-  {:else if artistQuery.data === undefined || albums.isPending}
+  {:else if artist === undefined || albumsQuery.isPending}
     <div class="mt-8">
       <PageTitle></PageTitle>
     </div>
-    <LoadingStatus>Reading artist…</LoadingStatus>
-  {:else if albums.error !== null}
+    <StatusRegion loading>Reading artist…</StatusRegion>
+  {:else if albumsError !== null}
     <ErrorAlert
-      message={errorMessage(albums.error)}
-      onRetry={() => actions.run(() => albums.refetch(), "library")}
+      message={errorMessage(albumsError)}
+      onRetry={() => actions.run(() => albumsQuery.refetch().then(() => undefined), "library")}
     />
   {:else}
-    {@const artist = artistQuery.data}
     {@const label = artistNameLabel(artist.name)}
     <MediaDetailsHeader title={label} artwork={artist.artwork} round>
       <div class="mt-2">
@@ -79,11 +84,11 @@
         <CollectionSortControl selectLabel="Sort artist albums" {view} />
       </div>
 
-      {#if albums.items.length > 0}
+      {#if albums.length > 0}
         <VirtualMediaGrid
-          items={albums.items}
+          items={albums}
           itemKey={(album) => album.id}
-          artworkAt={(index) => albums.items[index]?.artwork}
+          artworkAt={(index) => albums[index]?.artwork}
           sortSignature={view.sortSignature}
         >
           {#snippet tile(album)}
@@ -96,14 +101,15 @@
             />
           {/snippet}
         </VirtualMediaGrid>
-        {#if albums.hasNextPage}
+        {#if albumsQuery.hasNextPage}
           <LoadMoreSentinel
-            pending={albums.isFetchingNextPage}
-            onLoadMore={() => actions.run(() => albums.fetchNextPage(), "library")}
+            pending={albumsQuery.isFetchingNextPage}
+            onLoadMore={() =>
+              actions.run(() => albumsQuery.fetchNextPage().then(() => undefined), "library")}
           />
         {/if}
       {:else}
-        <EmptyStatus>No albums were indexed for this artist.</EmptyStatus>
+        <StatusRegion>No albums were indexed for this artist.</StatusRegion>
       {/if}
     </section>
   {/if}

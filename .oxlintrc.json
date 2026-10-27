@@ -24,7 +24,12 @@
                 "message": "Layering: `native` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `native` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -48,7 +53,7 @@
                 "message": "Layering: `native` must not import from `appearance`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/ui", "#lib/ui/**"],
+                "group": ["#lib/components/ui/**"],
                 "message": "Layering: `native` must not import from `ui`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -72,7 +77,12 @@
                 "message": "Layering: `utils` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `utils` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -96,7 +106,7 @@
                 "message": "Layering: `utils` must not import from `appearance`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/ui", "#lib/ui/**"],
+                "group": ["#lib/components/ui/**"],
                 "message": "Layering: `utils` must not import from `ui`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -113,7 +123,7 @@
       }
     },
     {
-      "files": ["src/lib/ui/**"],
+      "files": ["src/lib/components/ui/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -124,7 +134,12 @@
                 "message": "Layering: `ui` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `ui` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -168,7 +183,12 @@
                 "message": "Layering: `player` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `player` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -208,7 +228,12 @@
                 "message": "Layering: `library` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `library` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -248,7 +273,12 @@
                 "message": "Layering: `lyrics` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `lyrics` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -288,7 +318,12 @@
                 "message": "Layering: `meter` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `meter` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -332,7 +367,12 @@
                 "message": "Layering: `appearance` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `appearance` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
@@ -372,7 +412,12 @@
                 "message": "Layering: `app` must not import from `routes`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {
-                "group": ["#lib/components", "#lib/components/**"],
+                "group": [
+                  "#lib/components",
+                  "#lib/components/**",
+                  "!#lib/components/ui",
+                  "!#lib/components/ui/**"
+                ],
                 "message": "Layering: `app` must not import from `components`. Dependencies point down: routes > components > app > domains > ui/utils/native."
               },
               {

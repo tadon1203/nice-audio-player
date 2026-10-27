@@ -3,13 +3,13 @@
     Root as MenuRoot,
     Trigger as MenuTrigger,
     RadioGroup as MenuRadioGroup,
-  } from "#lib/ui/dropdown-menu";
+  } from "#lib/components/ui/dropdown-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import { useApp } from "#lib/app/app.svelte";
-  import DropdownMenuContent from "#lib/ui/dropdown-menu/dropdown-menu-content.svelte";
-  import DropdownMenuRadioItem from "#lib/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
-  import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
+  import DropdownMenuContent from "#lib/components/ui/dropdown-menu/dropdown-menu-content.svelte";
+  import DropdownMenuRadioItem from "#lib/components/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
+  import FlapText from "#lib/components/ui/rolling-number/flap-text.svelte";
   import { cn } from "#lib/utils/cn.js";
 
   const DEFAULT_DEVICE = "default";
@@ -20,7 +20,13 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const { player: playback, connection, actions, outputDevices } = useApp();
+  const {
+    player: playback,
+    connection,
+    outputDevices,
+    ui: { actions },
+  } = useApp();
+
   const path = new SignalPath();
   let open = $state(false);
 

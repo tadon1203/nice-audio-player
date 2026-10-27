@@ -1,6 +1,6 @@
 import { PlaybackSnapshots } from "#lib/player/playback-snapshots";
 import { VolumeStep } from "#lib/player/volume-step";
-import { Waveform } from "#lib/ui/waveform/waveform";
+import { Waveform } from "#lib/components/ui/waveform/waveform";
 import type { App } from "./app.svelte";
 
 const INTERACTIVE_TAGS = new Set(["BUTTON", "A", "INPUT", "TEXTAREA", "SELECT"]);
@@ -20,7 +20,7 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 /**
  * Handles one window `keydown` as a global playback shortcut (requirements.md, Keyboard). It skips
  * editable targets and anything the focused element (or the seek bar's own local arrow-key seek)
- * already handled via `defaultPrevented`. Each playback command runs through `app.actions`, so its
+ * already handled via `defaultPrevented`. Each playback command runs through `app.ui.actions`, so its
  * failure is reported like a click's.
  *
  * Player state is read when a key is pressed, never subscribed to.
@@ -28,7 +28,9 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 export function handleShortcut(event: KeyboardEvent, app: App): void {
   if (event.defaultPrevented || isEditableTarget(event.target)) return;
   const playback = app.player;
-  const { actions, nowPlaying } = app;
+  const {
+    ui: { actions, nowPlaying },
+  } = app;
 
   if (event.key === "l" && event.ctrlKey) {
     event.preventDefault();
@@ -39,7 +41,7 @@ export function handleShortcut(event: KeyboardEvent, app: App): void {
 
   if (event.key === "Escape" && !event.ctrlKey && !event.altKey && nowPlaying.isOpen) {
     // The queue panel and menus are above Now Playing and close first (they handle Escape).
-    if (app.queuePanelOpen) return;
+    if (app.ui.queuePanelOpen) return;
     event.preventDefault();
     nowPlaying.close();
     return;
@@ -56,7 +58,7 @@ export function handleShortcut(event: KeyboardEvent, app: App): void {
 
   if (event.key === "q" && event.ctrlKey) {
     event.preventDefault();
-    app.queuePanelOpen = !app.queuePanelOpen;
+    app.ui.queuePanelOpen = !app.ui.queuePanelOpen;
     return;
   }
 

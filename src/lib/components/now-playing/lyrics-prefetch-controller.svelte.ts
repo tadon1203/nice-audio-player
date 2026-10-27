@@ -19,7 +19,7 @@ export class LyricsPrefetchController {
       const nextId = playback.queue?.upcoming[0]?.id ?? null;
       for (const trackId of [currentId, nextId]) {
         if (trackId !== null) {
-          void this.#queryClient.query(lyrics.trackOptions(trackId)).catch(() => undefined);
+          void this.#queryClient.query(lyrics.getTrack(trackId)).catch(() => undefined);
         }
       }
     });

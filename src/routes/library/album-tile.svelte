@@ -1,11 +1,11 @@
 <script lang="ts">
   import { type ArtistId, type AlbumListItem } from "#lib/native/bindings";
   import { resolve } from "$app/paths";
-  import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
-  import Artwork from "#lib/ui/artwork.svelte";
-  import { SharedElement } from "#lib/ui/motion/shared-element";
-  import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
-  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { albumTitleLabel, artistNameLabel } from "#lib/library/tracks";
+  import Artwork from "#lib/components/ui/artwork.svelte";
+  import { SharedElement } from "#lib/components/ui/motion/shared-element";
+  import PlayPauseIcon from "#lib/components/ui/play-pause-icon.svelte";
+  import { Button } from "#lib/components/ui/shadcn/button/index.js";
   import { MISSING } from "#lib/utils/missing";
 
   let {

@@ -10,12 +10,12 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "#lib/ui/shadcn/button";
+  import { Button } from "#lib/components/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import type { Attachment } from "svelte/attachments";
   import { type LyricsTimedLine } from "#lib/native/bindings";
   import { useApp } from "#lib/app/app.svelte";
-  import TimePresentation from "#lib/ui/time-presentation.svelte";
+  import TimePresentation from "#lib/components/ui/time-presentation.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
   import IntervalLine from "./interval-line.svelte";
@@ -43,7 +43,10 @@
     attach: Attachment<HTMLElement>;
   } = $props();
 
-  const { nowPlaying } = useApp();
+  const {
+    ui: { nowPlaying },
+  } = useApp();
+
   const actions = new NowPlayingActions();
 
   const line = $derived(lines[index]!);

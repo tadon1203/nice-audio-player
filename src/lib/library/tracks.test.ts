@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { type AlbumId, type ArtistId } from "#lib/native/bindings";
-import { Tracks } from "./tracks";
+import {
+  albumTitleLabel,
+  artistNameLabel,
+  trackListContext,
+  Tracks,
+  UNKNOWN_ALBUM,
+  UNKNOWN_ARTIST,
+} from "./tracks";
 
 const albumId = "0f0e0d0c0b0a09080706050403020100" as AlbumId;
 const albumArtistId = "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99" as ArtistId;
@@ -42,5 +49,30 @@ describe("Tracks availability", () => {
     expect(Tracks.isPlayable({ state: "playable" })).toBe(true);
     expect(Tracks.isPlayable({ state: "unsupported" })).toBe(false);
     expect(Tracks.isPlayable({ state: "missing" })).toBe(false);
+  });
+});
+
+describe("unknown names", () => {
+  it("labels an empty album title and artist name as unknown", () => {
+    expect(albumTitleLabel("")).toBe(UNKNOWN_ALBUM);
+    expect(artistNameLabel("")).toBe(UNKNOWN_ARTIST);
+  });
+
+  it("keeps a name that is there", () => {
+    expect(albumTitleLabel("Abbey Road")).toBe("Abbey Road");
+    expect(artistNameLabel("~tilde")).toBe("~tilde");
+  });
+});
+
+describe("trackListContext", () => {
+  it("sends an empty filter as no search", () => {
+    const view = { filter: "", sortKey: "title", direction: "ascending" } as const;
+    expect(trackListContext(view)).toEqual({
+      kind: "tracks",
+      search: null,
+      sort: "title",
+      direction: "ascending",
+    });
+    expect(trackListContext({ ...view, filter: "x" })).toMatchObject({ search: "x" });
   });
 });

@@ -2,7 +2,7 @@
 
 Question: "I want to make as much motion as possible a spring (basically no overshoot). What's the appropriate way?"
 
-Context: An earlier design went all-spring with the `motion` package; a later one backed out because of a spring-to-CSS conversion layer, the `motion` dependency, and a `visualDuration`/`bounce` vocabulary Svelte does not share. Today: three durations (`feedback` 100ms, `move` 300ms, `large` 420ms) with one ease-out (`cubicOut` / `cubic-bezier(0.33, 1, 0.68, 1)`), plus `settle`, a Svelte `Spring` for the Now Playing timeline and lyrics scroll (`src/lib/ui/motion/tokens.ts`).
+Context: An earlier design went all-spring with the `motion` package; a later one backed out because of a spring-to-CSS conversion layer, the `motion` dependency, and a `visualDuration`/`bounce` vocabulary Svelte does not share. Today: three durations (`feedback` 100ms, `move` 300ms, `large` 420ms) with one ease-out (`cubicOut` / `cubic-bezier(0.33, 1, 0.68, 1)`), plus `settle`, a Svelte `Spring` for the Now Playing timeline and lyrics scroll (`src/lib/components/ui/motion/tokens.ts`).
 
 Numbers marked _(computed)_ come from a throwaway Node script evaluating the formulas below and simulating Svelte's integrator line for line; they are not from a source.
 
@@ -116,7 +116,7 @@ For comparison, Svelte's own keyframe sampling is one point per 16.7ms, so 26 po
   - The start (t50 ≈ 90ms) stays similar, but the tail gets longer and flatter on high-refresh displays.
   - Upstream: [sveltejs/svelte#10717](https://github.com/sveltejs/svelte/issues/10717) ("`spring` performs differently on displays with different refresh rates"), open, milestone 5.x.
 - `precision` is absolute. A 100px move with `precision: 0.01` (the default, which `settle` uses) keeps ticking until about **950ms** at 60Hz and about 1090ms at 144Hz _(computed)_, because it waits for a 0.01px residual.
-- `now-playing-motion.ts`'s exit scaling (stiffness / s², damping / s) is correct in continuous terms. It keeps ζ = 1 at 60Hz.
+- `now-playing.svelte.ts`'s exit scaling (stiffness / s², damping / s) is correct in continuous terms. It keeps ζ = 1 at 60Hz.
 
 ## 3. Is a fixed-duration critically damped spring visibly different from today's ease-out?
 
@@ -176,7 +176,7 @@ Note that the easing shape does not depend on the duration: with a fixed ε it i
 
 ### Interruptible values stay true springs
 
-Which values: the Now Playing timeline (`now-playing-tween.svelte.ts`), lyrics scroll (`lyrics-follow.svelte.ts`), and anything newly found to reverse mid-flight (the earlier design named the queue panel and the Sleeve hand-off as candidates).
+Which values: the Now Playing timeline (`NowPlaying.follow` in `now-playing.svelte.ts`), lyrics scroll (`lyrics-follow.svelte.ts`), and anything newly found to reverse mid-flight (the earlier design named the queue panel and the Sleeve hand-off as candidates).
 
 **Option A (minimal):** keep Svelte `Spring` and derive its parameters from the same token:
 

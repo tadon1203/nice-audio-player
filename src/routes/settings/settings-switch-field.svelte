@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Field, FieldLabel } from "#lib/ui/shadcn/field/index.js";
-  import { Switch } from "#lib/ui/shadcn/switch/index.js";
+  import { Field, FieldLabel } from "#lib/components/ui/shadcn/field/index.js";
+  import { Switch } from "#lib/components/ui/shadcn/switch/index.js";
   import { cn } from "#lib/utils/cn.js";
 
   /**

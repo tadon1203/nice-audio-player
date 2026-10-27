@@ -2,14 +2,21 @@
   import { type AppearancePatch } from "#lib/native/bindings";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import { useApp } from "#lib/app/app.svelte";
-  import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
-  import SectionTitle from "#lib/ui/section-title.svelte";
-  import * as Select from "#lib/ui/shadcn/select/index.js";
+  import FlapText from "#lib/components/ui/rolling-number/flap-text.svelte";
+  import SectionTitle from "#lib/components/ui/section-title.svelte";
+  import * as Select from "#lib/components/ui/shadcn/select/index.js";
   import SettingsSwitchField from "./settings-switch-field.svelte";
 
   const DEFAULT_DEVICE = "default";
 
-  const { player: playback, connection, appearance, actions, notices, outputDevices } = useApp();
+  const {
+    player: playback,
+    connection,
+    appearance,
+    outputDevices,
+    ui: { actions, notices },
+  } = useApp();
+
   const signalPath = new SignalPath();
 
   let deviceMenuOpen = $state(false);

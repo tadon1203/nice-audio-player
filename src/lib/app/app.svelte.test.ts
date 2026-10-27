@@ -59,8 +59,8 @@ describe("App", () => {
     expect(app.connection.state).toBe("connecting");
     expect(app.player).toBeDefined();
     expect(app.appearance.artworkBackdrop).toBeNull();
-    expect(app.library.state.snapshot).toBeNull();
-    expect(app.queuePanelOpen).toBe(false);
+    expect(app.library.state).toBeNull();
+    expect(app.ui.queuePanelOpen).toBe(false);
     expect(app.queryClient).toBeInstanceOf(QueryClient);
   });
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
-  import { LibraryErrors } from "#lib/library/library-errors";
+  import { scanFailureMessage } from "#lib/library/library-catalog.svelte";
   import { type ScanState } from "#lib/native/bindings";
   import { CountFormat } from "#lib/utils/count-format";
 
@@ -14,7 +14,7 @@
 
 {#if scan.status === "failed"}
   <p class="mt-4 text-sm text-destructive" role="alert">
-    {LibraryErrors.scanFailureMessage(scan.failure)}
+    {scanFailureMessage(scan.failure)}
   </p>
 {:else if scan.status === "completed"}
   <p class="mt-4 flex items-center gap-2 text-sm text-muted-foreground">

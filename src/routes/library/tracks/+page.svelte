@@ -1,7 +1,6 @@
 <script lang="ts">
   import TrackTable from "#lib/components/track-table/track-table.svelte";
-  import { LibraryCatalog } from "#lib/library/library-catalog.svelte";
-  import { TrackList } from "#lib/library/track-list";
+  import { trackListContext } from "#lib/library/tracks";
   import { useApp } from "#lib/app/app.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 
@@ -13,9 +12,13 @@
     searchPlaceholder: "Search tracks…",
   };
 
-  const { player: playback, actions, library } = useApp();
-  const view = library.views.tracks;
-  const catalog = new LibraryCatalog(library.catalog, () => view.request, library.state);
+  const {
+    player: playback,
+    ui: { actions },
+    library,
+  } = useApp();
+  const view = library.tracks;
+  const catalog = library.catalog(() => view.request);
 </script>
 
 <LibraryWorkspace
@@ -37,8 +40,7 @@
       sortKey={view.sortKey}
       sortDirection={view.direction}
       onsortchange={(key, direction) => view.setSort(key, direction)}
-      onplaytrack={(id) =>
-        actions.run(() => playback.start(TrackList.context(catalog.request), id))}
+      onplaytrack={(id) => actions.run(() => playback.start(trackListContext(catalog.request), id))}
     />
   {/snippet}
 </LibraryWorkspace>

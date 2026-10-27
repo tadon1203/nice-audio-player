@@ -3,7 +3,8 @@
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import PlaybackWaveformBand from "#lib/components/waveform-band/playback-waveform-band.svelte";
-  import { TrackLyrics } from "#lib/lyrics/track-lyrics.svelte";
+  import { createQuery } from "@tanstack/svelte-query";
+  import { resultValue } from "#lib/library/query-pages";
   import { useApp } from "#lib/app/app.svelte";
   import { cn } from "#lib/utils/cn.js";
   import Identity from "./identity.svelte";
@@ -13,8 +14,8 @@
   import { NowPlayingTransitions } from "./now-playing-transitions";
   import NowPlayingGlow from "./now-playing-glow.svelte";
   import QueueColumn from "./queue-column.svelte";
-  import { rightColumn } from "./right-column.svelte";
-  import { Button } from "#lib/ui/shadcn/button";
+  import { rightColumn } from "#lib/app/now-playing.svelte";
+  import { Button } from "#lib/components/ui/shadcn/button";
 
   // A directive takes a name, not a member, so the transitions get local aliases.
   const contentFade = NowPlayingTransitions.contentFade;
@@ -32,11 +33,12 @@
    * shared-element motion from the dock; the text is not shared, it fades in behind the Sleeve.
    * Below `md` everything stacks. The waveform grows along the bottom edge when its data arrives.
    */
-  const { player: playback, lyrics: lyricsRepository } = useApp();
+  const { player: playback, lyrics: lyricsSource } = useApp();
   const item = $derived(playback.item);
   const trackId = $derived(item?.id ?? null);
-  const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
-  const current = $derived(lyrics.current);
+  // Lyrics are optional: a failed read gives null, the same empty view as a track with none.
+  const lyricsQuery = createQuery(() => lyricsSource.getTrack(trackId));
+  const current = $derived(resultValue(lyricsQuery.data) ?? null);
 
   // While lyrics are loading keep the column the previous track had, so it does not flip twice
   // (they are also fetched ahead of time). The first ever render starts from what is cached.

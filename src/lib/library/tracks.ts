@@ -1,5 +1,37 @@
 import { resolve } from "$app/paths";
-import { type TrackListItem } from "#lib/native/bindings";
+import {
+  type PlaybackContext,
+  type SortDirection,
+  type TrackListItem,
+  type TrackSortKey,
+} from "#lib/native/bindings";
+
+/**
+ * The backend names an album or artist without a tag as "" (and sorts it last); how that reads
+ * is decided here.
+ */
+export const UNKNOWN_ALBUM = "Unknown album";
+export const UNKNOWN_ARTIST = "Unknown artist";
+
+export const albumTitleLabel = (title: string): string => title || UNKNOWN_ALBUM;
+export const artistNameLabel = (name: string): string => name || UNKNOWN_ARTIST;
+
+/** A track list's filter and sort: what the backend needs to rebuild the same list. */
+interface TrackListView {
+  filter: string;
+  sortKey: TrackSortKey;
+  direction: SortDirection;
+}
+
+/** The playback context that plays the tracks list as it is currently filtered and sorted. */
+export function trackListContext(view: TrackListView): PlaybackContext {
+  return {
+    kind: "tracks",
+    search: view.filter === "" ? null : view.filter,
+    sort: view.sortKey,
+    direction: view.direction,
+  };
+}
 
 interface Link {
   text: string;

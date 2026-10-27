@@ -2,10 +2,10 @@
   import type { Snippet } from "svelte";
   import { type ArtworkRef } from "#lib/native/bindings";
   import { useApp } from "#lib/app/app.svelte";
-  import Artwork from "#lib/ui/artwork.svelte";
-  import { SharedElement } from "#lib/ui/motion/shared-element";
-  import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
-  import PageTitle from "#lib/ui/page-title.svelte";
+  import Artwork from "#lib/components/ui/artwork.svelte";
+  import { SharedElement } from "#lib/components/ui/motion/shared-element";
+  import ArtworkGlow from "#lib/components/ui/artwork-glow/artwork-glow.svelte";
+  import PageTitle from "#lib/components/ui/page-title.svelte";
 
   let {
     title,

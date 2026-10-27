@@ -5,14 +5,14 @@
 </script>
 
 <script lang="ts">
-  import { timeStateClass } from "#lib/ui/time-state";
-  import { Button } from "#lib/ui/shadcn/button";
+  import { timeStateClass } from "#lib/components/ui/time-state";
+  import { Button } from "#lib/components/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import { useApp } from "#lib/app/app.svelte";
-  import { SvelteFlip } from "#lib/ui/motion/svelte-flip";
+  import { SvelteFlip } from "#lib/components/ui/motion/svelte-flip";
   /** The `animate:` of a row: a directive takes a name, not a member. */
   const flipRow = SvelteFlip.motion;
-  import Artwork from "#lib/ui/artwork.svelte";
+  import Artwork from "#lib/components/ui/artwork.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
   import { AnchorColumn } from "./anchor-column";
@@ -123,7 +123,7 @@
         <div role="listitem" class="pl-20">
           <Button
             type="button"
-            onclick={() => (app.queuePanelOpen = true)}
+            onclick={() => (app.ui.queuePanelOpen = true)}
             variant="text"
             size="compact"
             class="font-normal"

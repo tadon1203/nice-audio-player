@@ -15,6 +15,6 @@
     "playwright-report/**",
     "src/lib/native/bindings.ts",
     ".svelte-kit/**",
-    "src/lib/ui/shadcn/**"
+    "src/lib/components/ui/shadcn/**"
   ]
 }

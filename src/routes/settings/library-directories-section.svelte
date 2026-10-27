@@ -3,12 +3,11 @@
   import { app } from "#lib/native/commands";
   import { type LibraryDirectory } from "#lib/native/bindings";
   import { useApp } from "#lib/app/app.svelte";
-  import EmptyStatus from "#lib/ui/empty-status.svelte";
-  import LoadingStatus from "#lib/ui/loading-status.svelte";
-  import SectionTitle from "#lib/ui/section-title.svelte";
-  import { Button } from "#lib/ui/shadcn/button/index.js";
-  import { Checkbox } from "#lib/ui/shadcn/checkbox/index.js";
-  import { Field, FieldLabel } from "#lib/ui/shadcn/field/index.js";
+  import SectionTitle from "#lib/components/ui/section-title.svelte";
+  import StatusRegion from "#lib/components/ui/status-region.svelte";
+  import { Button } from "#lib/components/ui/shadcn/button/index.js";
+  import { Checkbox } from "#lib/components/ui/shadcn/checkbox/index.js";
+  import { Field, FieldLabel } from "#lib/components/ui/shadcn/field/index.js";
   import {
     Item,
     ItemActions,
@@ -16,7 +15,7 @@
     ItemDescription,
     ItemGroup,
     ItemTitle,
-  } from "#lib/ui/shadcn/item/index.js";
+  } from "#lib/components/ui/shadcn/item/index.js";
   import { CountFormat } from "#lib/utils/count-format";
   import DeleteMissingDialog from "./delete-missing-dialog.svelte";
   import RemoveLibraryDirectoryDialog from "./remove-library-directory-dialog.svelte";
@@ -25,16 +24,20 @@
   import ScanResult from "./scan-result.svelte";
   import ScanRunning from "./scan-running.svelte";
 
-  const { actions, library, notices } = useApp();
+  const {
+    library,
+    ui: { actions, notices },
+  } = useApp();
+
   const scanTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
   let removeTarget = $state<LibraryDirectory | null>(null);
   let resetOpen = $state(false);
   let deleteMissingOpen = $state(false);
 
-  const directories = $derived(library.state.snapshot?.directories ?? []);
+  const directories = $derived(library.state?.directories ?? []);
   const missingTotal = $derived(directories.reduce((n, r) => n + r.missingCount, 0));
-  const scan = $derived(library.state.snapshot?.scan ?? null);
+  const scan = $derived(library.state?.scan ?? null);
   const scanRunning = $derived(scan?.status === "running");
   /** A Library command is in flight: its controls wait for it, so one request is sent at a time. */
   const busy = $derived(actions.isRunning("library"));
@@ -51,7 +54,7 @@
     <div class="flex max-w-sm flex-col items-end gap-2">
       <Button
         type="button"
-        onclick={() => actions.run(() => library.directories.add(), "library")}
+        onclick={() => actions.run(() => library.addDirectory(), "library")}
         disabled={scanRunning || busy}
       >
         <FolderPlus data-icon="inline-start" aria-hidden="true" />
@@ -80,11 +83,11 @@
     <ScanRunning {scan} />
   {/if}
 
-  {#if library.state.snapshot === null}
-    <LoadingStatus>Loading library directories…</LoadingStatus>
+  {#if library.state === null}
+    <StatusRegion loading>Loading library directories…</StatusRegion>
   {:else if directories.length === 0}
-    <EmptyStatus
-      >No library directories yet. Add a directory to start building your library.</EmptyStatus
+    <StatusRegion
+      >No library directories yet. Add a directory to start building your library.</StatusRegion
     >
   {:else}
     <ItemGroup
@@ -124,10 +127,7 @@
                 bind:checked={
                   () => directory.enabled,
                   (checked) =>
-                    actions.run(
-                      () => library.directories.setEnabled(directory.id, checked),
-                      "library",
-                    )
+                    actions.run(() => library.setDirectoryEnabled(directory.id, checked), "library")
                 }
                 disabled={scanRunning || busy}
               />
@@ -206,14 +206,14 @@
   <ResetLibraryDialog
     open={resetOpen}
     onOpenChange={(open) => (resetOpen = open)}
-    onConfirm={() => actions.run(() => library.directories.resetAndRescan(), "library")}
+    onConfirm={() => actions.run(() => library.resetAndRescan(), "library")}
   />
 
   <DeleteMissingDialog
     open={deleteMissingOpen}
     count={missingTotal}
     onOpenChange={(open) => (deleteMissingOpen = open)}
-    onConfirm={() => actions.run(() => library.directories.deleteMissing(), "library")}
+    onConfirm={() => actions.run(() => library.deleteMissingTracks(), "library")}
   />
 
   <RemoveLibraryDirectoryDialog
@@ -221,7 +221,6 @@
     onOpenChange={(open) => {
       if (!open) removeTarget = null;
     }}
-    onConfirm={(directory) =>
-      actions.run(() => library.directories.remove(directory.id), "library")}
+    onConfirm={(directory) => actions.run(() => library.removeDirectory(directory.id), "library")}
   />
 </section>

@@ -2,9 +2,10 @@
   import { type TrackId } from "#lib/native/bindings";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import { TrackLyrics } from "#lib/lyrics/track-lyrics.svelte";
+  import { createQuery } from "@tanstack/svelte-query";
+  import { resultValue } from "#lib/library/query-pages";
   import { useApp } from "#lib/app/app.svelte";
-  import { Button } from "#lib/ui/shadcn/button";
+  import { Button } from "#lib/components/ui/shadcn/button";
   import { cn } from "#lib/utils/cn.js";
   import { AnchorColumn } from "./anchor-column";
   import { AnchorPadding } from "./anchor-padding.svelte";
@@ -22,9 +23,15 @@
    */
   let { trackId, class: className }: { trackId: TrackId | null; class?: string } = $props();
 
-  const { player: playback, lyrics: lyricsRepository, nowPlaying } = useApp();
-  const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
-  const found = $derived(lyrics.current?.status === "found" ? lyrics.current : null);
+  const {
+    player: playback,
+    lyrics: lyricsSource,
+    ui: { nowPlaying },
+  } = useApp();
+
+  const lyricsQuery = createQuery(() => lyricsSource.getTrack(trackId));
+  const current = $derived(resultValue(lyricsQuery.data) ?? null);
+  const found = $derived(current?.status === "found" ? current : null);
   const content = $derived(found?.content ?? null);
   const rawLines = $derived(content?.kind === "timed" ? content.lines : null);
   const timedLines = $derived(rawLines === null ? null : LyricsLines.withIntro(rawLines));

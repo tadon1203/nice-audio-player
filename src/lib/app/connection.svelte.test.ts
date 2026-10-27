@@ -86,7 +86,7 @@ describe("Connection", () => {
 
     expect(app.player.snapshot).toEqual(stopped);
     expect(app.appearance.artworkBackdrop).toBe(true);
-    expect(app.library.state.snapshot).not.toBeNull();
+    expect(app.library.state).not.toBeNull();
   });
 
   it("routes a skipped track to the Notices", () => {
@@ -95,7 +95,7 @@ describe("Connection", () => {
 
     attempts[0].onMessage({ kind: "trackSkipped", value: { title: "Song" } });
 
-    expect(app.notices.at("dock")).toEqual({
+    expect(app.ui.notices.at("dock")).toEqual({
       kind: "skipped",
       message: "Couldn't play Song, skipped",
     });
@@ -134,7 +134,7 @@ describe("Connection", () => {
     for (const message of latestStates()) attempts[1].onMessage(message);
 
     expect(app.connection.state).toBe("ready");
-    expect(app.notices.at("dock")).toBeNull();
+    expect(app.ui.notices.at("dock")).toBeNull();
   });
 
   it("is failed, and applies nothing, when the connect command fails", async () => {

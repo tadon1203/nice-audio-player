@@ -1,10 +1,13 @@
 <script lang="ts">
-  import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
+  import {
+    Root as ContextMenuRoot,
+    Trigger as ContextMenuTrigger,
+  } from "#lib/components/ui/context-menu";
   import { Tracks } from "#lib/library/tracks";
   import { type SortDirection, type TrackSortKey, type TrackId } from "#lib/native/bindings";
   import { useApp } from "#lib/app/app.svelte";
-  import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
-  import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
+  import ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
+  import ContextMenuItem from "#lib/components/ui/context-menu/context-menu-item.svelte";
   import {
     TableBody,
     TableCaption,
@@ -12,9 +15,9 @@
     TableHead,
     TableHeader,
     TableRow,
-  } from "#lib/ui/shadcn/table";
+  } from "#lib/components/ui/shadcn/table";
   import { cn } from "#lib/utils/cn.js";
-  import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
+  import { VirtualRows } from "#lib/components/ui/virtual-rows.svelte";
   import { TrackColumns, type TrackTableLayout, type TrackTableRow } from "./track-columns";
   import { TrackDiscs } from "./track-discs";
   import { TrackRowStates } from "./track-row-states";

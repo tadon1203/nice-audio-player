@@ -2,8 +2,8 @@
   import "../app.css";
   import { isTauri } from "#lib/native/desktop";
   import { prefersReducedMotion } from "svelte/motion";
-  import { CssMotion } from "#lib/ui/motion/css-motion";
-  import AppFrame from "./app-frame.svelte";
+  import { CssMotion } from "#lib/components/ui/motion/css-motion";
+  import AppFrame from "#lib/components/layout/app-frame.svelte";
 
   let { children } = $props();
 

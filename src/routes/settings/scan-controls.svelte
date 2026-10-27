@@ -2,15 +2,18 @@
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import X from "@lucide/svelte/icons/x";
   import { useApp } from "#lib/app/app.svelte";
-  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { Button } from "#lib/components/ui/shadcn/button/index.js";
   import { ScanStatus } from "./scan-status";
 
   /** The scan's state in words, and the button that starts or cancels it. */
   let { directoryCount }: { directoryCount: number } = $props();
 
-  const { actions, library } = useApp();
+  const {
+    library,
+    ui: { actions },
+  } = useApp();
 
-  const scan = $derived(library.state.snapshot?.scan ?? null);
+  const scan = $derived(library.state?.scan ?? null);
 </script>
 
 <div class="flex max-w-sm flex-col items-end gap-2">
@@ -22,7 +25,7 @@
       <Button
         type="button"
         variant="outline"
-        onclick={() => actions.run(() => library.directories.cancelScan(), "library")}
+        onclick={() => actions.run(() => library.cancelScan(), "library")}
       >
         <X data-icon="inline-start" aria-hidden="true" />
         Cancel scan
@@ -31,7 +34,7 @@
       <Button
         type="button"
         variant="outline"
-        onclick={() => actions.run(() => library.directories.startScan(), "library")}
+        onclick={() => actions.run(() => library.startScan(), "library")}
         disabled={scan === null || directoryCount === 0 || actions.isRunning("library")}
       >
         <RefreshCw data-icon="inline-start" aria-hidden="true" />

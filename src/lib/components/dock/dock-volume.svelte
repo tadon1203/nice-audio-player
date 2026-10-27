@@ -5,11 +5,11 @@
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import { useApp } from "#lib/app/app.svelte";
   import { VolumeStep } from "#lib/player/volume-step";
-  import { SpringCurve } from "#lib/ui/motion/spring-curve";
-  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
-  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
-  import { Button } from "#lib/ui/shadcn/button";
-  import { Slider } from "#lib/ui/shadcn/slider";
+  import { SpringCurve } from "#lib/components/ui/motion/spring-curve";
+  import { SvelteMotion } from "#lib/components/ui/motion/svelte-motion";
+  import RollingNumber from "#lib/components/ui/rolling-number/rolling-number.svelte";
+  import { Button } from "#lib/components/ui/shadcn/button";
+  import { Slider } from "#lib/components/ui/shadcn/slider";
   import DockSignalPath from "./dock-signal-path.svelte";
   import NextTrackPreview from "./next-track-preview.svelte";
 
@@ -19,7 +19,13 @@
    * transport's centre line.
    */
   const app = useApp();
-  const { player: playback, connection, motion, actions, nowPlaying } = app;
+  const {
+    player: playback,
+    connection,
+    motion,
+    ui: { actions, nowPlaying },
+  } = app;
+
   const ready = $derived(connection.state === "ready");
   const readout = $derived(VolumeStep.formatDb(playback.volume, playback.muted));
 
@@ -78,8 +84,8 @@
       variant="quiet"
       aria-label="Queue"
       title="Queue"
-      aria-pressed={app.queuePanelOpen}
-      onclick={() => (app.queuePanelOpen = !app.queuePanelOpen)}
+      aria-pressed={app.ui.queuePanelOpen}
+      onclick={() => (app.ui.queuePanelOpen = !app.ui.queuePanelOpen)}
     >
       <List aria-hidden="true" />
     </Button>

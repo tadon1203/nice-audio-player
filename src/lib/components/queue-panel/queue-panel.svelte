@@ -1,21 +1,24 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
-  import { ScrollView } from "#lib/ui/scroll-view.svelte";
+  import { ScrollView } from "#lib/components/ui/scroll-view.svelte";
   import { useApp } from "#lib/app/app.svelte";
-  import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#lib/ui/shadcn/sheet";
+  import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#lib/components/ui/shadcn/sheet";
   import QueueFooter from "./queue-footer.svelte";
   import QueueItem from "./queue-row.svelte";
   import { ShuffleCascade } from "./shuffle-cascade.svelte";
   import UpcomingList from "./upcoming-list.svelte";
 
   const app = useApp();
-  const { player: playback, actions } = app;
+  const {
+    player: playback,
+    ui: { actions },
+  } = app;
 
   const queue = $derived(playback.queue);
   const history = $derived(queue?.history ?? []);
   const cascade = new ShuffleCascade(
     () => playback.shuffleEnabled,
-    () => app.queuePanelOpen,
+    () => app.ui.queuePanelOpen,
   );
 
   const scrollView = ScrollView.provide();
@@ -28,7 +31,7 @@
 
 <!-- Not modal: the library stays visible and usable beside the queue, so there is no backdrop and
      a click elsewhere does not close it (Escape and the queue button do). -->
-<Sheet open={app.queuePanelOpen} onOpenChange={(open) => (app.queuePanelOpen = open)}>
+<Sheet open={app.ui.queuePanelOpen} onOpenChange={(open) => (app.ui.queuePanelOpen = open)}>
   <SheetContent
     side="right"
     class="w-80 gap-0 p-0"

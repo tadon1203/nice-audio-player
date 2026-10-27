@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useApp } from "#lib/app/app.svelte";
-  import Artwork from "#lib/ui/artwork.svelte";
-  import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
+  import Artwork from "#lib/components/ui/artwork.svelte";
+  import { SvelteSlide } from "#lib/components/ui/motion/svelte-slide";
   import { cn } from "#lib/utils/cn.js";
   import type { TransitionConfig } from "svelte/transition";
 

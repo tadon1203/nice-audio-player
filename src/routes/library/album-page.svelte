@@ -1,26 +1,25 @@
 <script lang="ts">
   import { type AlbumId, type ArtistId, type TrackId } from "#lib/native/bindings";
   import Shuffle from "@lucide/svelte/icons/shuffle";
+  import { createInfiniteQuery, createQuery } from "@tanstack/svelte-query";
   import { resolve } from "$app/paths";
   import AlbumStrip from "#lib/components/media-details/album-strip.svelte";
   import MediaDetailsHeader from "#lib/components/media-details/media-details-header.svelte";
   import TrackTable from "#lib/components/track-table/track-table.svelte";
   import { errorMessage } from "#lib/native/messages";
-  import { PagedCollection } from "#lib/library/paged-collection.svelte";
-  import { QueryResult } from "#lib/library/query-result.svelte";
-  import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
+  import { loadedItems, pagesError, resultError, resultValue } from "#lib/library/query-pages";
+  import { albumTitleLabel, artistNameLabel } from "#lib/library/tracks";
   import { useApp } from "#lib/app/app.svelte";
   import { WorkspaceScroll } from "#lib/app/scroll.svelte";
-  import BackLink from "#lib/ui/back-link.svelte";
-  import EmptyStatus from "#lib/ui/empty-status.svelte";
-  import ErrorAlert from "#lib/ui/error-alert.svelte";
-  import FactLine from "#lib/ui/fact-line.svelte";
-  import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";
-  import LoadingStatus from "#lib/ui/loading-status.svelte";
-  import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
-  import SectionTitle from "#lib/ui/section-title.svelte";
-  import { Button } from "#lib/ui/shadcn/button/index.js";
-  import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
+  import BackLink from "#lib/components/ui/back-link.svelte";
+  import ErrorAlert from "#lib/components/ui/error-alert.svelte";
+  import FactLine from "#lib/components/ui/fact-line.svelte";
+  import LoadMoreSentinel from "#lib/components/ui/load-more-sentinel.svelte";
+  import PlayPauseIcon from "#lib/components/ui/play-pause-icon.svelte";
+  import SectionTitle from "#lib/components/ui/section-title.svelte";
+  import StatusRegion from "#lib/components/ui/status-region.svelte";
+  import { Button } from "#lib/components/ui/shadcn/button/index.js";
+  import WorkspaceScrollRegion from "#lib/components/ui/workspace-scroll.svelte";
   import { CountFormat } from "#lib/utils/count-format";
   import { DurationFormat } from "#lib/utils/duration-format";
 
@@ -38,13 +37,21 @@
     readonly parentArtistId: ArtistId | null;
   } = $props();
 
-  const { actions, library, player: playback, scroll: scrollOffsets } = useApp();
+  const {
+    ui: { actions, scroll: scrollOffsets },
+    library,
+    player: playback,
+  } = useApp();
 
-  const details = new QueryResult(() => library.albums.detailsOptions(albumId));
-  const tracks = new PagedCollection(() => library.albums.tracksOptions(albumId));
+  const detailsQuery = createQuery(() => library.getAlbum(albumId));
+  const details = $derived(resultValue(detailsQuery.data));
+  const detailsError = $derived(resultError(detailsQuery.data));
+  const tracksQuery = createInfiniteQuery(() => library.getAlbumTracks(albumId));
+  const tracks = $derived(loadedItems(tracksQuery.data));
+  const tracksError = $derived(pagesError(tracksQuery.data));
 
   // The list cache usually holds the album already, so the header can show it before the details.
-  const summary = $derived(details.data?.summary ?? library.albums.cachedSummary(albumId));
+  const summary = $derived(details?.summary ?? library.getCachedAlbum(albumId));
   const title = $derived(summary === null ? "" : albumTitleLabel(summary.title));
   const artist = $derived(summary === null ? "" : artistNameLabel(summary.albumArtist.name));
 
@@ -57,8 +64,7 @@
     actions.run(() => playback.start({ kind: "album", albumId }, trackId));
 
   const scroll = new WorkspaceScroll(scrollOffsets, {
-    ready: (): boolean =>
-      details.data !== undefined && !tracks.isPending && tracks.items.length > 0,
+    ready: (): boolean => details !== undefined && !tracksQuery.isPending && tracks.length > 0,
   });
 
   export const snapshot = scrollOffsets.detailSnapshot(scroll.capture, scroll.restore);
@@ -74,29 +80,25 @@
     <BackLink href={resolve("/library/albums")}>Albums</BackLink>
   {/if}
 
-  {#if details.error !== null}
+  {#if detailsError !== null}
     <ErrorAlert
-      message={errorMessage(details.error)}
-      onRetry={() => actions.run(() => details.refetch(), "library")}
+      message={errorMessage(detailsError)}
+      onRetry={() => actions.run(() => detailsQuery.refetch().then(() => undefined), "library")}
     />
-  {:else if details.data === undefined || tracks.isPending}
+  {:else if details === undefined || tracksQuery.isPending}
     <MediaDetailsHeader {title} {artist} artwork={summary?.artwork ?? null} sharedKey={albumId} />
-    <LoadingStatus>Reading album…</LoadingStatus>
-  {:else if tracks.error !== null}
+    <StatusRegion loading>Reading album…</StatusRegion>
+  {:else if tracksError !== null}
     <ErrorAlert
-      message={errorMessage(tracks.error)}
-      onRetry={() => actions.run(() => tracks.refetch(), "library")}
+      message={errorMessage(tracksError)}
+      onRetry={() => actions.run(() => tracksQuery.refetch().then(() => undefined), "library")}
     />
   {:else}
-    {@const album = details.data}
+    {@const album = details}
     <MediaDetailsHeader {title} {artist} artwork={album.summary.artwork} sharedKey={albumId}>
       {#snippet strip()}
-        {#if tracks.items.length > 0}
-          <AlbumStrip
-            tracks={tracks.items}
-            activeTrackId={playback.activeTrackId}
-            onplaytrack={playTrack}
-          />
+        {#if tracks.length > 0}
+          <AlbumStrip {tracks} activeTrackId={playback.activeTrackId} onplaytrack={playTrack} />
         {/if}
       {/snippet}
       <FactLine
@@ -134,23 +136,19 @@
 
     <section class="mt-10" aria-labelledby="album-track-list-title">
       <SectionTitle id="album-track-list-title" class="sr-only">Tracks</SectionTitle>
-      {#if tracks.items.length > 0}
+      {#if tracks.length > 0}
         <div class="mt-4">
-          <TrackTable
-            rows={tracks.items}
-            layout="album"
-            caption="Album tracks"
-            onplaytrack={playTrack}
-          />
+          <TrackTable rows={tracks} layout="album" caption="Album tracks" onplaytrack={playTrack} />
         </div>
       {:else}
-        <EmptyStatus>No tracks were indexed for this album.</EmptyStatus>
+        <StatusRegion>No tracks were indexed for this album.</StatusRegion>
       {/if}
     </section>
-    {#if tracks.hasNextPage}
+    {#if tracksQuery.hasNextPage}
       <LoadMoreSentinel
-        pending={tracks.isFetchingNextPage}
-        onLoadMore={() => actions.run(() => tracks.fetchNextPage(), "library")}
+        pending={tracksQuery.isFetchingNextPage}
+        onLoadMore={() =>
+          actions.run(() => tracksQuery.fetchNextPage().then(() => undefined), "library")}
       />
     {/if}
   {/if}

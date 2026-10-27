@@ -5,18 +5,17 @@
     LibraryPresentationMeta,
     LibraryScroll,
     WorkspaceCatalog,
-  } from "#lib/library/library-workspace";
+  } from "#lib/library/types";
   import { errorMessage } from "#lib/native/messages";
-  import { labelAt, skipTo } from "#lib/library/letter-index";
+  import { labelAt, skipTo } from "#lib/library/sort";
   import { useApp } from "#lib/app/app.svelte";
   import { WorkspaceScroll } from "#lib/app/scroll.svelte";
-  import EmptyStatus from "#lib/ui/empty-status.svelte";
-  import ErrorAlert from "#lib/ui/error-alert.svelte";
-  import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";
-  import LoadingStatus from "#lib/ui/loading-status.svelte";
-  import LetterIndexBadge from "#lib/ui/letter-index-badge.svelte";
-  import type { SortableView } from "#lib/ui/sort-option";
-  import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
+  import ErrorAlert from "#lib/components/ui/error-alert.svelte";
+  import LoadMoreSentinel from "#lib/components/ui/load-more-sentinel.svelte";
+  import LetterIndexBadge from "#lib/components/ui/letter-index-badge.svelte";
+  import type { SortableView } from "#lib/components/ui/sort-option";
+  import StatusRegion from "#lib/components/ui/status-region.svelte";
+  import WorkspaceScrollRegion from "#lib/components/ui/workspace-scroll.svelte";
   import IndexRail from "./index-rail.svelte";
   import LibraryToolbar from "./library-toolbar.svelte";
 
@@ -49,7 +48,9 @@
 
   let topIndex = $state(0);
 
-  const { actions, scroll: scrollOffsets } = useApp();
+  const {
+    ui: { actions, scroll: scrollOffsets },
+  } = useApp();
 
   const workspaceScroll = new WorkspaceScroll(scrollOffsets, {
     key: (): string => scrollKey,
@@ -89,7 +90,7 @@
     {/if}
     <WorkspaceScrollRegion viewportAttachment={workspaceScroll.attach} contentClass="pt-6 pb-16">
       {#if catalog.viewState === "loading"}
-        <LoadingStatus>Loading library…</LoadingStatus>
+        <StatusRegion loading>Loading library…</StatusRegion>
       {:else if catalog.viewState === "unavailable"}
         <ErrorAlert message={catalog.statusMessage ?? ""} />
       {:else if catalog.error !== null}
@@ -98,7 +99,7 @@
           onRetry={() => actions.run(() => catalog.refetch(), "library")}
         />
       {:else if catalog.viewState === "empty"}
-        <EmptyStatus>
+        <StatusRegion>
           {#if filter === ""}
             No {meta.plural} in your library.
             <a href={resolve("/settings")} class="text-foreground underline underline-offset-4">
@@ -107,7 +108,7 @@
           {:else}
             No results for “{filter}”.
           {/if}
-        </EmptyStatus>
+        </StatusRegion>
       {:else}
         {@render content(catalog.items, scroll)}
         {#if catalog.hasNextPage}

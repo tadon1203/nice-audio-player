@@ -1,24 +1,37 @@
 <script lang="ts">
-  import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
+  import {
+    Root as ContextMenuRoot,
+    Trigger as ContextMenuTrigger,
+  } from "#lib/components/ui/context-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
   import { Tracks } from "#lib/library/tracks";
   import { PlaybackFailure } from "#lib/player/playback-failure";
   import { useApp } from "#lib/app/app.svelte";
   import { errorMessage } from "#lib/native/messages";
-  import Artwork from "#lib/ui/artwork.svelte";
-  import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
-  import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
-  import { SLEEVE_RADIUS, SharedElement, sharedKey } from "#lib/ui/motion/shared-element";
-  import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
-  import { Button } from "#lib/ui/shadcn/button";
-  import * as Tooltip from "#lib/ui/shadcn/tooltip";
+  import Artwork from "#lib/components/ui/artwork.svelte";
+  import ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
+  import ContextMenuItem from "#lib/components/ui/context-menu/context-menu-item.svelte";
+  import {
+    SLEEVE_RADIUS,
+    SharedElement,
+    sharedKey,
+  } from "#lib/components/ui/motion/shared-element";
+  import { SvelteSlide } from "#lib/components/ui/motion/svelte-slide";
+  import { Button } from "#lib/components/ui/shadcn/button";
+  import * as Tooltip from "#lib/components/ui/shadcn/tooltip";
   import type { TransitionConfig } from "svelte/transition";
 
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
 
-  const { player: playback, connection, motion, notices, actions, nowPlaying } = useApp();
+  const {
+    player: playback,
+    connection,
+    motion,
+    ui: { notices, actions, nowPlaying },
+  } = useApp();
+
   // A failed startup shows its reason here, since there is no playback state to report on.
   const startupError = $derived(connection.state === "failed" ? connection.startupError : null);
   const notice = $derived(

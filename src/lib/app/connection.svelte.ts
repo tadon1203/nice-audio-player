@@ -1,24 +1,37 @@
 import { type BackendMessage, type CommandError } from "#lib/native/bindings";
 import type { app as appCommands } from "#lib/native/commands";
+import type { Appearance } from "#lib/appearance/appearance.svelte";
+import type { Library } from "#lib/library/library.svelte";
+import type { Lyrics } from "#lib/lyrics/lyrics.svelte";
+import type { Player } from "#lib/player/player.svelte";
 import { countE2e } from "./e2e-counts";
-import type { App } from "./app.svelte";
+import type { Notices } from "./notices.svelte";
 
 export type ConnectionState = "connecting" | "ready" | "failed";
 
 /** The state kinds the Backend sends on connect: the connection is ready once each has arrived. */
 const STATE_KINDS = ["player", "queue", "library", "waveform", "appearance"] as const;
 
+/** The Areas that the pushed messages go to. */
+export interface ConnectionAreas {
+  readonly player: Player;
+  readonly library: Library;
+  readonly lyrics: Lyrics;
+  readonly appearance: Appearance;
+  readonly notices: Notices;
+}
+
 /** The one place that runs the connect procedure and routes every pushed message to its area. */
 export class Connection {
   readonly #commands: typeof appCommands;
-  readonly #app: App;
+  readonly #areas: ConnectionAreas;
   readonly #arrived = new Set<string>();
   #state = $state.raw<ConnectionState>("connecting");
   #startupError = $state.raw<CommandError | null>(null);
 
-  public constructor(commands: typeof appCommands, app: App) {
+  public constructor(commands: typeof appCommands, areas: ConnectionAreas) {
     this.#commands = commands;
-    this.#app = app;
+    this.#areas = areas;
   }
 
   public get state(): ConnectionState {
@@ -63,25 +76,26 @@ export class Connection {
   #route(message: BackendMessage): void {
     switch (message.kind) {
       case "player":
-        this.#app.player.acceptPlayback(message.value);
+        this.#areas.player.acceptPlayback(message.value);
         break;
       case "queue":
-        this.#app.player.acceptQueue(message.value);
+        this.#areas.player.acceptQueue(message.value);
         break;
       case "library":
-        this.#app.library.state.accept(message.value);
+        // A moved Library version means the lists may have changed, so the lyrics refresh too.
+        if (this.#areas.library.accept(message.value)) this.#areas.lyrics.refresh();
         break;
       case "waveform":
-        this.#app.player.acceptWaveform(message.value);
+        this.#areas.player.acceptWaveform(message.value);
         break;
       case "appearance":
-        this.#app.appearance.accept(message.value);
+        this.#areas.appearance.accept(message.value);
         break;
       case "position":
-        this.#app.player.acceptPosition(message.value);
+        this.#areas.player.acceptPosition(message.value);
         return;
       case "trackSkipped":
-        this.#app.notices.noteSkipped(message.value.title);
+        this.#areas.notices.noteSkipped(message.value.title);
         return;
     }
     this.#noteArrived(message.kind);

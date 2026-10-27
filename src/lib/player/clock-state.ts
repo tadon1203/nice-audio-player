@@ -1,5 +1,5 @@
 import { type QueueItemId } from "#lib/native/bindings";
-import { PositionEstimate, type PositionAnchor } from "#lib/ui/motion/position-estimate";
+import { PositionEstimate, type PositionAnchor } from "#lib/components/ui/motion/position-estimate";
 
 /** What a playback snapshot says about time: everything the clock needs, and nothing else. */
 export interface ClockReport {

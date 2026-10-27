@@ -1,19 +1,20 @@
-import type {
-  CurrentPlayback,
-  AlbumId,
-  AudioOutputSelection,
-  PlaybackContext,
-  PlaybackFailureCode,
-  PlaybackId,
-  QueueItem,
-  PlaybackPosition,
-  QueueState,
-  RepeatMode,
-  PlayerState,
-  QueueWindow,
-  PlaybackWaveform,
-  QueueItemId,
-  TrackId,
+import {
+  UPCOMING_WINDOW,
+  type CurrentPlayback,
+  type AlbumId,
+  type AudioOutputSelection,
+  type PlaybackContext,
+  type PlaybackFailureCode,
+  type PlaybackId,
+  type QueueItem,
+  type PlaybackPosition,
+  type QueueState,
+  type RepeatMode,
+  type PlayerState,
+  type QueueWindow,
+  type PlaybackWaveform,
+  type QueueItemId,
+  type TrackId,
 } from "#lib/native/bindings";
 import type { player } from "#lib/native/commands";
 import type { Result } from "#lib/native/result";
@@ -28,6 +29,16 @@ interface PendingSeek {
   playbackId: PlaybackId | null;
   seekCount: number;
 }
+
+/** The upcoming chunks read so far, for the queue version they were cut from. */
+interface UpcomingLoaded {
+  version: number | null;
+  chunks: ReadonlyMap<number, QueueItem[]>;
+}
+
+/** A failed chunk read is tried this many times in all. */
+const UPCOMING_MAX_ATTEMPTS = 3;
+const UPCOMING_RETRY_DELAY_MS = 1000;
 
 /** How close the pushed volume must be to the one set for the preview to clear (the backend holds f32). */
 const VOLUME_TOLERANCE = 1e-4;
@@ -60,6 +71,11 @@ export class Player {
   #transitionDirection = $state.raw<TransitionDirection>("forward");
   #pendingSeek = $state.raw<PendingSeek | null>(null);
   #volumePreview = $state.raw<number | null>(null);
+
+  /** The upcoming chunks read beyond the queue state; they belong to one queue version. */
+  #upcomingLoaded = $state.raw<UpcomingLoaded>({ version: null, chunks: new Map() });
+  readonly #upcomingInFlight = new Set<string>();
+  readonly #upcomingAttempts = new Map<string, number>();
 
   public constructor(playerCommands: typeof player, clock: PlaybackClock) {
     this.#player = playerCommands;
@@ -346,6 +362,71 @@ export class Player {
   /** A slice of the upcoming list beyond what the queue state carries. */
   public fetchQueueWindow(offset: number, limit: number): Promise<Result<QueueWindow>> {
     return this.#player.queueWindow(offset, limit);
+  }
+
+  /** The upcoming item at `index`, or undefined while it has not arrived. */
+  public upcomingAt(index: number): QueueItem | undefined {
+    const prefix = this.#queue?.upcoming ?? [];
+    if (index < prefix.length) return prefix[index];
+    if (this.#upcomingLoaded.version !== this.queueVersion) return undefined;
+    const chunk = this.#upcomingLoaded.chunks.get(Math.floor(index / UPCOMING_WINDOW));
+    return chunk?.[index % UPCOMING_WINDOW];
+  }
+
+  /**
+   * Reads the upcoming chunks around `range` (the rows on screen) that the queue state does not
+   * carry. Call during component initialization: it owns an `$effect`.
+   */
+  public followUpcoming(range: () => { start: number; end: number } | null): void {
+    $effect(() => {
+      const queue = this.#queue;
+      const version = this.queueVersion;
+      const visible = range();
+      if (queue === null || version === null || visible === null) return;
+      const total = queue.upcomingCount;
+      const { start, end } = visible;
+      const first = Math.max(start, queue.upcoming.length);
+      for (
+        let chunk = Math.floor(first / UPCOMING_WINDOW);
+        chunk * UPCOMING_WINDOW < total && chunk * UPCOMING_WINDOW <= end;
+      ) {
+        this.#fetchUpcomingChunk(chunk, version);
+        chunk += 1;
+      }
+    });
+  }
+
+  #fetchUpcomingChunk(chunk: number, version: number): void {
+    const key = `${version}:${chunk}`;
+    const have = this.#upcomingLoaded.version === version && this.#upcomingLoaded.chunks.has(chunk);
+    if (have || this.#upcomingInFlight.has(key)) return;
+    this.#upcomingInFlight.add(key);
+    void this.fetchQueueWindow(chunk * UPCOMING_WINDOW, UPCOMING_WINDOW)
+      .then((outcome) => {
+        if (!outcome.ok) {
+          this.#retryUpcomingLater(chunk, version, key);
+          return;
+        }
+        const window = outcome.value;
+        this.#upcomingAttempts.delete(key);
+        const sameVersion = this.#upcomingLoaded.version === window.version;
+        const chunks = new Map(sameVersion ? this.#upcomingLoaded.chunks : []);
+        chunks.set(Math.floor(window.offset / UPCOMING_WINDOW), window.items);
+        this.#upcomingLoaded = { version: window.version, chunks };
+      })
+      // The adapter never rejects. A rejection is retried like a failed read, to be safe.
+      .catch(() => this.#retryUpcomingLater(chunk, version, key))
+      .finally(() => this.#upcomingInFlight.delete(key));
+  }
+
+  /** Tries a failed chunk again after a delay, while the queue is still the same version. */
+  #retryUpcomingLater(chunk: number, version: number, key: string): void {
+    const attempts = (this.#upcomingAttempts.get(key) ?? 0) + 1;
+    this.#upcomingAttempts.set(key, attempts);
+    if (attempts >= UPCOMING_MAX_ATTEMPTS) return;
+    setTimeout(() => {
+      if (this.queueVersion === version) this.#fetchUpcomingChunk(chunk, version);
+    }, UPCOMING_RETRY_DELAY_MS);
   }
 
   #session(): CurrentPlayback | null {

@@ -13,14 +13,14 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "#lib/ui/shadcn/button";
+  import { Button } from "#lib/components/ui/shadcn/button";
   import type { Attachment } from "svelte/attachments";
   import { Tracks } from "#lib/library/tracks";
   import { prefersReducedMotion } from "svelte/motion";
   import type { TransitionConfig } from "svelte/transition";
   import { useApp } from "#lib/app/app.svelte";
-  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
-  import { Tooltip, TooltipContent, TooltipTrigger } from "#lib/ui/shadcn/tooltip";
+  import { SvelteMotion } from "#lib/components/ui/motion/svelte-motion";
+  import { Tooltip, TooltipContent, TooltipTrigger } from "#lib/components/ui/shadcn/tooltip";
   import { cn } from "#lib/utils/cn.js";
   import { SegmentStrip } from "./segment-strip";
 

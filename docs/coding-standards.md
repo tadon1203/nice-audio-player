@@ -56,7 +56,6 @@ Casing and conversion names follow the standards below. The Rust compiler lints 
 
 - A read of many items is `list_<items>`. A read of one item is the noun. Do not use a `get_` prefix in Rust.
 - A Host command is `<area>_<operation>`. It calls the method of the same operation on that area's object: `player_pause` calls `Player::pause`. On `SettingsStore`, the method adds the area noun: `appearance_update` calls `SettingsStore::update_appearance`. On `BackendApp`, `lyrics_track` calls `BackendApp::track_lyrics`. The cross-area use cases on `BackendApp` (`play`, `enqueue_track`, `track_lyrics`, `reset_library`) are the exception: they keep their own operation name, and the command calls them by that name.
-- In TypeScript, write a plain read as a property, a `get x()` accessor, or a function named with a noun. Do not write `getX()`.
 - A boolean named `is_`, `has_`, or `can_` is clear. Use the prefix when the bare name is not clear (`next: bool`). A bare name that reads as a state (`muted`, `paused`) is allowed. So is the name of an HTML attribute (`disabled`, `pressed`).
 - A callback prop is `on` plus the event name, in lower case: `onplaytrack`, `onsortchange`. The name matches the DOM events. An `on` attribute on an element is a DOM event listener. Never write its name in camel case.
 - A private member of a TypeScript class uses `#`, not an underscore.

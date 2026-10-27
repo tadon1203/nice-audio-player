@@ -1,4 +1,4 @@
-import { Waveform } from "#lib/ui/waveform/waveform";
+import { Waveform } from "#lib/components/ui/waveform/waveform";
 
 /** How loud a track is over its length, one value per waveform bucket. */
 export class TrackEnergy {

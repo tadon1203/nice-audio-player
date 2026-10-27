@@ -1,9 +1,8 @@
 <script lang="ts">
   import { useApp } from "#lib/app/app.svelte";
-  import { UpcomingItems } from "#lib/player/upcoming-items.svelte";
-  import { SvelteFlip } from "#lib/ui/motion/svelte-flip";
-  import { TokenTiming } from "#lib/ui/motion/token-timing";
-  import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
+  import { SvelteFlip } from "#lib/components/ui/motion/svelte-flip";
+  import { TokenTiming } from "#lib/components/ui/motion/token-timing";
+  import { VirtualRows } from "#lib/components/ui/virtual-rows.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { QueueDrag } from "./queue-drag.svelte";
   import QueueItem, { QUEUE_ROW_PX } from "./queue-row.svelte";
@@ -21,7 +20,10 @@
     cascading: boolean;
   } = $props();
 
-  const { player: playback, actions } = useApp();
+  const {
+    player: playback,
+    ui: { actions },
+  } = useApp();
 
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
 
@@ -40,13 +42,13 @@
 
   const firstRow = $derived(virtual.items[0]?.index);
   const lastRow = $derived(virtual.items.at(-1)?.index);
-  const itemAt = new UpcomingItems(playback, () =>
+  playback.followUpcoming(() =>
     firstRow === undefined || lastRow === undefined ? null : { start: firstRow, end: lastRow },
   );
   // Beyond what the snapshot carries, a row waits for its chunk to arrive.
   const rows = $derived(
     virtual.items.map(({ index }) => {
-      const item = itemAt.at(index);
+      const item = playback.upcomingAt(index);
       return { index, item, key: item?.queueItemId ?? `waiting-${index}` };
     }),
   );
