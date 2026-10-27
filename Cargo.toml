@@ -18,7 +18,6 @@ debug = false
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.99"
 
 # `=` on the specta family: it is a prerelease, and its crates must move together.
 [workspace.dependencies]

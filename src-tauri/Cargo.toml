@@ -5,7 +5,6 @@ description = "A local-first Windows desktop music player"
 authors = ["Nice Audio Player"]
 edition.workspace = true
 default-run = "nice-audio-player"
-rust-version.workspace = true
 
 [[bin]]
 name = "nice-audio-player"
