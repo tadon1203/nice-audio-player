@@ -7,5 +7,5 @@ use crate::AppState;
 #[tauri::command]
 #[specta::specta]
 pub(crate) fn appearance_update(patch: AppearancePatch, state: tauri::State<'_, AppState>) {
-    state.backend.appearance_update(&patch);
+    state.backend.settings().update_appearance(&patch);
 }

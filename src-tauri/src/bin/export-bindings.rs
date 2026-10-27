@@ -8,7 +8,6 @@ use anyhow::Context;
 fn main() -> anyhow::Result<()> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/native/bindings.ts");
     let generated = nice_audio_player_lib::render_typescript_bindings()
-        .context("could not render the TypeScript bindings")?
-        .replace("\r\n", "\n");
+        .context("could not render the TypeScript bindings")?;
     fs::write(&path, generated).with_context(|| format!("could not write {}", path.display()))
 }

@@ -2,9 +2,10 @@
 //! and where a track's file is. The scan, sync, and ID tests are in their own files.
 
 use crate::errors::CommandError;
+use crate::library::Library;
+use crate::library::read::tracks::TrackLocation;
 use crate::library::storage::{self, Database};
 use crate::library::sync::directories;
-use crate::library::{Library, TrackLocation};
 use crate::test_support::CommandCode;
 use crate::test_support::{TestDirectory, null_messages};
 use rusqlite::Connection;

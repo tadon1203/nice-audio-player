@@ -107,6 +107,10 @@ impl Database {
         }
     }
 
+    pub(crate) fn is_usable(&self) -> bool {
+        self.usable
+    }
+
     pub(crate) fn data_dir(&self) -> &Path {
         self.path.parent().unwrap_or_else(|| Path::new("."))
     }

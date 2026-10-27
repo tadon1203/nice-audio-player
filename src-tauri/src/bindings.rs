@@ -89,12 +89,8 @@ mod tests {
     fn committed_bindings_are_current() {
         let path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/native/bindings.ts");
-        let generated = render_typescript()
-            .expect("render TypeScript bindings")
-            .replace("\r\n", "\n");
-        let committed = std::fs::read_to_string(&path)
-            .unwrap_or_default()
-            .replace("\r\n", "\n");
+        let generated = render_typescript().expect("render TypeScript bindings");
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
         assert!(
             committed == generated,
             "src/lib/native/bindings.ts is stale; run `pnpm bindings`"

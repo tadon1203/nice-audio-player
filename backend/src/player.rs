@@ -22,7 +22,7 @@ use std::sync::{
 use crate::ids::{QueueItemId, TrackId};
 use crate::library::Library;
 use crate::messages::BackendMessage;
-use crate::player::audio::output::{AudioOutputSelection, OutputStreamFactory};
+use crate::player::audio::output::{AudioOutputDevice, AudioOutputSelection, OutputStreamFactory};
 use crate::player::audio::waveform::Waveforms;
 use crate::player::errors::{PlayerError, Result};
 use crate::player::meter::Meter;
@@ -31,7 +31,7 @@ use crate::settings::SettingsStore;
 use crate::threads::{WorkerThread, request};
 
 pub(crate) mod audio;
-pub(crate) mod errors;
+pub mod errors;
 pub(crate) mod lyrics;
 pub(crate) mod meter;
 pub(crate) mod playback;
@@ -74,7 +74,7 @@ impl Default for PlayerPreferences {
 
 /// The one object the application holds to play music. The worker stops when it is dropped or
 /// `shutdown` is called.
-pub(crate) struct Player {
+pub struct Player {
     inputs: Sender<WorkerInput>,
     worker: WorkerThread,
 }
@@ -123,7 +123,7 @@ impl Player {
 
     /// Upcoming items from `offset`, at most `limit`, read by the worker from the queue and the
     /// library. The rows carry the queue version they were cut from.
-    pub(crate) fn queue_window(&self, offset: u32, limit: u32) -> Result<QueueWindow> {
+    pub fn queue_window(&self, offset: u32, limit: u32) -> Result<QueueWindow> {
         self.call(|reply| PlayerCommand::QueueWindow {
             offset,
             limit,
@@ -141,59 +141,64 @@ impl Player {
         })
     }
 
-    pub(crate) fn previous(&self) -> Result<()> {
+    pub fn previous(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::Previous { reply })
     }
 
-    pub(crate) fn next(&self) -> Result<()> {
+    pub fn next(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::Next { reply })
     }
 
-    pub(crate) fn pause(&self) -> Result<()> {
+    pub fn pause(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::Pause { reply })
     }
 
-    pub(crate) fn resume(&self) -> Result<()> {
+    pub fn resume(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::Resume { reply })
     }
 
     /// The worker clamps `position_ms` to the duration of the track it has loaded; the clamp is not
     /// done here, where the loaded track could change before the command arrives.
-    pub(crate) fn seek(&self, position_ms: u64) -> Result<()> {
+    pub fn seek(&self, position_ms: u64) -> Result<()> {
         self.call(|reply| PlayerCommand::Seek { position_ms, reply })
     }
 
-    pub(crate) fn set_volume(&self, volume: NormalizedVolume) -> Result<()> {
+    pub fn set_volume(&self, volume: NormalizedVolume) -> Result<()> {
         self.call(|reply| PlayerCommand::SetVolume { volume, reply })
     }
 
-    pub(crate) fn set_muted(&self, muted: bool) -> Result<()> {
+    pub fn set_muted(&self, muted: bool) -> Result<()> {
         self.call(|reply| PlayerCommand::SetMuted { muted, reply })
     }
 
-    pub(crate) fn set_output_selection(&self, selection: AudioOutputSelection) -> Result<()> {
+    pub fn set_output_selection(&self, selection: AudioOutputSelection) -> Result<()> {
         self.call(|reply| PlayerCommand::SetOutputSelection { selection, reply })
     }
 
-    pub(crate) fn set_repeat_mode(&self, mode: RepeatMode) -> Result<()> {
+    /// The output devices the system has. Blocking: the device query waits on the audio host.
+    pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>> {
+        crate::player::audio::output::list_output_devices()
+    }
+
+    pub fn set_repeat_mode(&self, mode: RepeatMode) -> Result<()> {
         self.call(|reply| PlayerCommand::SetRepeatMode { mode, reply })
     }
 
-    pub(crate) fn set_shuffle(&self, enabled: bool) -> Result<()> {
+    pub fn set_shuffle(&self, enabled: bool) -> Result<()> {
         self.call(|reply| PlayerCommand::SetShuffle { enabled, reply })
     }
 
-    pub(crate) fn remove_queue_item(&self, id: QueueItemId) -> Result<()> {
+    pub fn remove_queue_item(&self, id: QueueItemId) -> Result<()> {
         self.call(|reply| PlayerCommand::RemoveQueueItem { id, reply })
     }
 
     /// `to` is a position in the upcoming list, 0 being next up.
-    pub(crate) fn move_queue_item(&self, id: QueueItemId, to: usize) -> Result<()> {
+    pub fn move_queue_item(&self, id: QueueItemId, to: usize) -> Result<()> {
         self.call(|reply| PlayerCommand::MoveQueueItem { id, to, reply })
     }
 
     /// Makes an upcoming item current and plays it.
-    pub(crate) fn play_queue_item(&self, id: QueueItemId) -> Result<()> {
+    pub fn play_queue_item(&self, id: QueueItemId) -> Result<()> {
         self.call(|reply| PlayerCommand::PlayQueueItem { id, reply })
     }
 
@@ -207,12 +212,12 @@ impl Player {
         })
     }
 
-    pub(crate) fn clear_queue(&self) -> Result<()> {
+    pub fn clear_queue(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::ClearQueue { reply })
     }
 
     /// Puts back the queue before the last replacement, playing the item that was current.
-    pub(crate) fn restore_previous_queue(&self) -> Result<()> {
+    pub fn restore_previous_queue(&self) -> Result<()> {
         self.call(|reply| PlayerCommand::RestorePreviousQueue { reply })
     }
 

@@ -6,7 +6,7 @@
 //! the write side (`sync`: the directories, their watchers, and the scan). `Library` is the one
 //! entry point to both. Its methods only delegate.
 
-pub(crate) mod errors;
+pub mod errors;
 pub(crate) mod read;
 pub(crate) mod storage;
 pub(crate) mod sync;
@@ -29,8 +29,8 @@ use crate::library::read::playback::{
     playback_for_tracks,
 };
 use crate::library::read::tracks::{
-    TrackListItem, TrackLocation, TrackProperties, TrackSortKey, track_listing, track_location,
-    track_properties, track_row,
+    TrackListItem, TrackProperties, TrackSortKey, track_listing, track_location, track_properties,
+    track_row,
 };
 use crate::library::storage::version::LibraryVersion;
 use crate::library::storage::{Database, ReadConnection};
@@ -57,7 +57,7 @@ pub enum LibraryStatus {
 }
 
 #[derive(Clone)]
-pub(crate) struct Library {
+pub struct Library {
     database: Database,
     sync: Arc<SyncHandle>,
     /// See [`Library::version`]. Shared with the sync worker and the scan thread, which advance it
@@ -98,6 +98,11 @@ impl Library {
         })
     }
 
+    /// Whether the database opened. An unavailable Library fails every command.
+    pub fn is_available(&self) -> bool {
+        self.database.is_usable()
+    }
+
     /// The current [`LibraryVersion`].
     pub(crate) fn version(&self) -> u64 {
         self.version.get()
@@ -115,37 +120,37 @@ impl Library {
 
     /// Adds a directory. A path that is not valid Unicode cannot be stored, so it is refused rather
     /// than changed.
-    pub(crate) fn add_directory(&self, path: PathBuf) -> Result<()> {
+    pub fn add_directory(&self, path: PathBuf) -> Result<()> {
         let Ok(path) = path.into_os_string().into_string() else {
             return Err(LibraryError::InvalidDirectory(None));
         };
         self.sync.add_directory(path)
     }
 
-    pub(crate) fn set_directory_enabled(&self, id: DirectoryId, enabled: bool) -> Result<()> {
+    pub fn set_directory_enabled(&self, id: DirectoryId, enabled: bool) -> Result<()> {
         self.sync.set_directory_enabled(id, enabled)
     }
 
-    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<()> {
+    pub fn remove_directory(&self, id: DirectoryId) -> Result<()> {
         self.sync.remove_directory(id)
     }
 
     /// Deletes every Missing track from the Library. Source files are never touched.
-    pub(crate) fn delete_missing_tracks(&self) -> Result<()> {
+    pub fn delete_missing_tracks(&self) -> Result<()> {
         self.sync.delete_missing_tracks()
     }
 
-    pub(crate) fn start_scan(&self) -> Result<()> {
+    pub fn start_scan(&self) -> Result<()> {
         self.sync.start_scan()
     }
 
-    pub(crate) fn cancel_scan(&self) -> Result<()> {
+    pub fn cancel_scan(&self) -> Result<()> {
         self.sync.cancel_scan()
     }
 
     /// The accent color of the stored original image at `path` (the path the Renderer holds), computed
     /// on first request and cached. A path that names no stored image has no accent.
-    pub(crate) fn artwork_accent(&self, path: &str) -> Result<Option<String>> {
+    pub fn artwork_accent(&self, path: &str) -> Result<Option<String>> {
         let Some(hash) = hash_of_original(path) else {
             return Ok(None);
         };
@@ -178,23 +183,17 @@ impl Library {
         })
     }
 
-    pub(crate) fn list_tracks(
-        &self,
-        request: &ListRequest<TrackSortKey>,
-    ) -> Result<Page<TrackListItem>> {
+    pub fn list_tracks(&self, request: &ListRequest<TrackSortKey>) -> Result<Page<TrackListItem>> {
         let listing = track_listing(request.search.as_deref(), request.sort, request.direction);
         self.page(&listing, request.offset, request.limit, track_row)
     }
 
-    pub(crate) fn list_albums(
-        &self,
-        request: &ListRequest<AlbumSortKey>,
-    ) -> Result<Page<AlbumListItem>> {
+    pub fn list_albums(&self, request: &ListRequest<AlbumSortKey>) -> Result<Page<AlbumListItem>> {
         let listing = album_listing(request.search.as_deref(), request.sort, request.direction);
         self.page(&listing, request.offset, request.limit, album_row)
     }
 
-    pub(crate) fn list_artists(
+    pub fn list_artists(
         &self,
         request: &ListRequest<ArtistSortKey>,
     ) -> Result<Page<ArtistListItem>> {
@@ -203,7 +202,7 @@ impl Library {
     }
 
     /// A page of one Album Artist's albums. An Album Artist with no albums is not found.
-    pub(crate) fn list_artist_albums(
+    pub fn list_artist_albums(
         &self,
         artist: ArtistId,
         request: &ListRequest<ArtistAlbumSortKey>,
@@ -222,7 +221,7 @@ impl Library {
     }
 
     /// Every track of one album, in playing order. An album with no tracks is not found.
-    pub(crate) fn list_album_tracks(&self, album: AlbumId) -> Result<Vec<AlbumTrackListItem>> {
+    pub fn list_album_tracks(&self, album: AlbumId) -> Result<Vec<AlbumTrackListItem>> {
         let listing = album_track_listing(album);
         let connection = self.read()?;
         let rows = listing.page_rows(&connection, 0, u32::MAX, album_track_row)?;
@@ -233,7 +232,7 @@ impl Library {
     }
 
     /// The letter index of the Tracks list. A list by duration has none.
-    pub(crate) fn track_index(
+    pub fn track_index(
         &self,
         request: &ListRequest<TrackSortKey>,
     ) -> Result<Vec<LetterIndexEntry>> {
@@ -242,7 +241,7 @@ impl Library {
     }
 
     /// The letter index of the Albums list: by name, or by year.
-    pub(crate) fn album_index(
+    pub fn album_index(
         &self,
         request: &ListRequest<AlbumSortKey>,
     ) -> Result<Vec<LetterIndexEntry>> {
@@ -251,7 +250,7 @@ impl Library {
     }
 
     /// The letter index of the Album Artists list. Only a list by name has one.
-    pub(crate) fn artist_index(
+    pub fn artist_index(
         &self,
         request: &ListRequest<ArtistSortKey>,
     ) -> Result<Vec<LetterIndexEntry>> {
@@ -260,25 +259,25 @@ impl Library {
     }
 
     /// One Album Artist's row, by its ID.
-    pub(crate) fn get_artist(&self, artist: ArtistId) -> Result<ArtistListItem> {
+    pub fn artist(&self, artist: ArtistId) -> Result<ArtistListItem> {
         let connection = self.read()?;
         artist_by_id(&connection, artist)
     }
 
     /// The details of an album by its ID.
-    pub(crate) fn get_album(&self, album_id: AlbumId) -> Result<AlbumDetails> {
+    pub fn album(&self, album_id: AlbumId) -> Result<AlbumDetails> {
         let connection = self.read()?;
         album_details(&connection, album_id)
     }
 
-    /// Where the track's file is.
-    pub(crate) fn track_location(&self, id: TrackId) -> Result<TrackLocation> {
+    /// The track's file, for the Host to show in Explorer. A file that is gone is unavailable.
+    pub fn track_file(&self, id: TrackId) -> Result<PathBuf> {
         let connection = self.read()?;
-        track_location(&connection, id)
+        Ok(track_location(&connection, id)?.existing()?.path)
     }
 
     /// Tags, audio format and the file's path, or `TrackNotFound` for an unknown track.
-    pub(crate) fn track_properties(&self, id: TrackId) -> Result<TrackProperties> {
+    pub fn track_properties(&self, id: TrackId) -> Result<TrackProperties> {
         let connection = self.read()?;
         track_properties(&connection, id)
     }

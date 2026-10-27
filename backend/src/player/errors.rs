@@ -5,7 +5,7 @@ use crate::errors::CommandError;
 use crate::library::errors::LibraryError;
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum PlayerError {
+pub enum PlayerError {
     #[error("the queue item is not upcoming or is not in the queue")]
     QueueItemNotFound,
     #[error(transparent)]
@@ -14,7 +14,7 @@ pub(crate) enum PlayerError {
     Internal(#[from] anyhow::Error),
 }
 
-pub(crate) type Result<T> = std::result::Result<T, PlayerError>;
+pub type Result<T> = std::result::Result<T, PlayerError>;
 
 impl PlayerError {
     /// The code the Renderer sees.

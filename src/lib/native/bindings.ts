@@ -21,6 +21,7 @@ export const commands = {
 	playerSeek: (positionMs: number) => __TAURI_INVOKE<null>("player_seek", { positionMs }),
 	playerSetVolume: (volume: NormalizedVolume) => __TAURI_INVOKE<null>("player_set_volume", { volume }),
 	playerSetMuted: (muted: boolean) => __TAURI_INVOKE<null>("player_set_muted", { muted }),
+	/**  The output devices the system has. Blocking: the device query waits on the audio host. */
 	playerListOutputDevices: () => __TAURI_INVOKE<AudioOutputDevice[]>("player_list_output_devices"),
 	playerSetRepeatMode: (mode: RepeatMode) => __TAURI_INVOKE<null>("player_set_repeat_mode", { mode }),
 	playerSetShuffle: (enabled: boolean) => __TAURI_INVOKE<null>("player_set_shuffle", { enabled }),

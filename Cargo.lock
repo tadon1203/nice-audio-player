@@ -2709,7 +2709,6 @@ dependencies = [
  "log",
  "nice-audio-player-backend",
  "parking_lot",
- "serde",
  "serde_json",
  "specta",
  "specta-typescript",

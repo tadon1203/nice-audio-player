@@ -12,7 +12,7 @@ fn a_track_with_an_album_tag_carries_the_album_and_album_artist_ids() {
     let filed = library.playback_for_track(track_id_of(1)).unwrap();
     let album_id = filed.track.album.as_ref().unwrap().album.id;
     assert_eq!(
-        library.get_album(album_id).unwrap().track_count,
+        library.album(album_id).unwrap().track_count,
         1,
         "the ID opens the album the playback names"
     );

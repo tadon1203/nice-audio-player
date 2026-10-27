@@ -4,7 +4,7 @@
 use crate::errors::CommandError;
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum LibraryError {
+pub enum LibraryError {
     #[error("the track was not found")]
     TrackNotFound,
     #[error("the album was not found")]
@@ -29,7 +29,7 @@ pub(crate) enum LibraryError {
     Internal(#[from] anyhow::Error),
 }
 
-pub(crate) type Result<T> = std::result::Result<T, LibraryError>;
+pub type Result<T> = std::result::Result<T, LibraryError>;
 
 impl LibraryError {
     /// The code the Renderer sees.

@@ -85,7 +85,7 @@ pub(crate) fn read(path: &Path) -> SettingsFile {
     }
 }
 
-pub(crate) struct SettingsStore {
+pub struct SettingsStore {
     state: Mutex<State>,
     messages: Sender<BackendMessage>,
 }
@@ -126,7 +126,7 @@ impl SettingsStore {
     }
 
     /// Applies a renderer update. The appearance is sent when something changed.
-    pub(crate) fn update_appearance(&self, patch: &AppearancePatch) {
+    pub fn update_appearance(&self, patch: &AppearancePatch) {
         self.modify(|file| {
             if let Some(value) = patch.artwork_backdrop {
                 file.appearance.artwork_backdrop = value;

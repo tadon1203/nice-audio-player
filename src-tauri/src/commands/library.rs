@@ -19,7 +19,7 @@ pub(crate) async fn library_reset(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, backend::app::BackendApp::reset_library).await?;
+    blocking(&state, BackendApp::reset_library).await?;
     // `restart` skips the exit event, so close the database cleanly first.
     state.backend.shutdown();
     app.restart()
@@ -32,7 +32,7 @@ pub(crate) async fn library_add_directory(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
     blocking(&state, move |backend| {
-        backend.add_directory(PathBuf::from(path))
+        Ok(backend.library()?.add_directory(PathBuf::from(path))?)
     })
     .await
 }
@@ -45,7 +45,7 @@ pub(crate) async fn library_set_directory_enabled(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
     blocking(&state, move |backend| {
-        backend.set_directory_enabled(id, enabled)
+        Ok(backend.library()?.set_directory_enabled(id, enabled)?)
     })
     .await
 }
@@ -56,7 +56,10 @@ pub(crate) async fn library_remove_directory(
     id: DirectoryId,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, move |backend| backend.remove_directory(id)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.remove_directory(id)?)
+    })
+    .await
 }
 
 /// Deletes the Missing tracks from the Library. Never touches a source file.
@@ -65,7 +68,10 @@ pub(crate) async fn library_remove_directory(
 pub(crate) async fn library_delete_missing_tracks(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, BackendApp::delete_missing_tracks).await
+    blocking(&state, |backend| {
+        Ok(backend.library()?.delete_missing_tracks()?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -73,7 +79,7 @@ pub(crate) async fn library_delete_missing_tracks(
 pub(crate) async fn library_start_scan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, BackendApp::start_scan).await
+    blocking(&state, |backend| Ok(backend.library()?.start_scan()?)).await
 }
 
 #[tauri::command]
@@ -81,7 +87,7 @@ pub(crate) async fn library_start_scan(
 pub(crate) async fn library_cancel_scan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, BackendApp::cancel_scan).await
+    blocking(&state, |backend| Ok(backend.library()?.cancel_scan()?)).await
 }
 
 #[tauri::command]
@@ -90,7 +96,10 @@ pub(crate) async fn library_list_tracks(
     request: ListRequest<TrackSortKey>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Page<TrackListItem>, CommandError> {
-    blocking(&state, move |backend| backend.list_tracks(&request)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.list_tracks(&request)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -99,7 +108,10 @@ pub(crate) async fn library_list_albums(
     request: ListRequest<AlbumSortKey>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Page<AlbumListItem>, CommandError> {
-    blocking(&state, move |backend| backend.list_albums(&request)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.list_albums(&request)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -108,7 +120,10 @@ pub(crate) async fn library_list_artists(
     request: ListRequest<ArtistSortKey>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Page<ArtistListItem>, CommandError> {
-    blocking(&state, move |backend| backend.list_artists(&request)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.list_artists(&request)?)
+    })
+    .await
 }
 
 /// The letter index of the Tracks list: how many names start under each label, in list order.
@@ -118,7 +133,10 @@ pub(crate) async fn library_track_index(
     request: ListRequest<TrackSortKey>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LetterIndexEntry>, CommandError> {
-    blocking(&state, move |backend| backend.track_index(&request)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.track_index(&request)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -127,7 +145,10 @@ pub(crate) async fn library_album_index(
     request: ListRequest<AlbumSortKey>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LetterIndexEntry>, CommandError> {
-    blocking(&state, move |backend| backend.album_index(&request)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.album_index(&request)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -136,7 +157,10 @@ pub(crate) async fn library_artist_index(
     request: ListRequest<ArtistSortKey>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LetterIndexEntry>, CommandError> {
-    blocking(&state, move |backend| backend.artist_index(&request)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.artist_index(&request)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -145,7 +169,10 @@ pub(crate) async fn library_artist(
     artist_id: ArtistId,
     state: tauri::State<'_, AppState>,
 ) -> Result<ArtistListItem, CommandError> {
-    blocking(&state, move |backend| backend.artist(artist_id)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.artist(artist_id)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -156,7 +183,7 @@ pub(crate) async fn library_list_artist_albums(
     state: tauri::State<'_, AppState>,
 ) -> Result<Page<AlbumListItem>, CommandError> {
     blocking(&state, move |backend| {
-        backend.artist_albums(artist_id, &request)
+        Ok(backend.library()?.list_artist_albums(artist_id, &request)?)
     })
     .await
 }
@@ -167,7 +194,10 @@ pub(crate) async fn library_album(
     album_id: AlbumId,
     state: tauri::State<'_, AppState>,
 ) -> Result<AlbumDetails, CommandError> {
-    blocking(&state, move |backend| backend.album_by_id(album_id)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.album(album_id)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -176,7 +206,10 @@ pub(crate) async fn library_list_album_tracks(
     album_id: AlbumId,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<AlbumTrackListItem>, CommandError> {
-    blocking(&state, move |backend| backend.album_tracks(album_id)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.list_album_tracks(album_id)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -185,7 +218,10 @@ pub(crate) async fn library_track_properties(
     track_id: TrackId,
     state: tauri::State<'_, AppState>,
 ) -> Result<TrackProperties, CommandError> {
-    blocking(&state, move |backend| backend.track_properties(track_id)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.track_properties(track_id)?)
+    })
+    .await
 }
 
 /// Shows the track's file in Explorer, selected.
@@ -196,7 +232,7 @@ pub(crate) async fn library_reveal_track(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
     blocking(&state, move |backend| {
-        reveal_in_file_manager(&backend.track_file(track_id)?)
+        reveal_in_file_manager(&backend.library()?.track_file(track_id)?)
     })
     .await
 }
@@ -207,5 +243,8 @@ pub(crate) async fn library_artwork_accent(
     path: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, CommandError> {
-    blocking(&state, move |backend| backend.artwork_accent(&path)).await
+    blocking(&state, move |backend| {
+        Ok(backend.library()?.artwork_accent(&path)?)
+    })
+    .await
 }

@@ -9,8 +9,6 @@ mod artwork;
 mod bindings;
 mod commands;
 mod delivery;
-#[cfg(not(feature = "wdio"))]
-mod logging;
 mod os;
 
 pub use bindings::render_typescript as render_typescript_bindings;
@@ -42,7 +40,7 @@ fn configure_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
                 log::debug!("host.window.focus_failed cause={cause:#}");
             }
         }))
-        .plugin(logging::plugin())
+        .plugin(log_plugin())
 }
 
 /// Brings the window back from the taskbar and to the front.
@@ -60,6 +58,49 @@ fn configure_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R
     builder
         .plugin(tauri_plugin_wdio::init())
         .plugin(tauri_plugin_wdio_webdriver::init())
+}
+
+/// The log plugin: a colored console and a plain log file. The colors are on the console only: the
+/// log file is read by tools and by people after the fact, and escape codes would make it hard to
+/// read.
+#[cfg(not(feature = "wdio"))]
+fn log_plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    use std::io::IsTerminal;
+    use tauri_plugin_log::{
+        RotationStrategy, Target, TargetKind,
+        fern::colors::{Color, ColoredLevelConfig},
+    };
+
+    let console = Target::new(TargetKind::Stdout);
+    // A pipe or a redirect is not a terminal, and `NO_COLOR` is the user's request for no color.
+    let console = if std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none() {
+        let colors = ColoredLevelConfig::new()
+            .error(Color::Red)
+            .warn(Color::Yellow)
+            .info(Color::Green)
+            .debug(Color::Blue)
+            .trace(Color::BrightBlack);
+        console.format(move |out, message, record| {
+            out.finish(format_args!(
+                "[{}][\x1b[90m{}\x1b[0m] {}",
+                colors.color(record.level()),
+                record.target(),
+                message,
+            ));
+        })
+    } else {
+        console
+    };
+
+    tauri_plugin_log::Builder::new()
+        .clear_targets()
+        .target(console)
+        .target(Target::new(TargetKind::LogDir { file_name: None }))
+        // The default keeps one 40 KB file: minutes of history. A failure is investigated after
+        // the fact, so keep a few megabytes.
+        .max_file_size(1_000_000)
+        .rotation_strategy(RotationStrategy::KeepSome(5))
+        .build()
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -82,10 +123,8 @@ pub fn run() -> anyhow::Result<()> {
                 Some(dir) => std::path::PathBuf::from(dir),
                 None => app.path().app_data_dir()?,
             };
-            app.manage(artwork::ArtworkDir(data_dir.clone()));
             let (sender, messages) = mpsc::channel();
-            let backend = BackendApp::new(data_dir, sender, Box::new(CpalOutput));
-            let backend = Arc::new(backend);
+            let backend = Arc::new(BackendApp::new(data_dir, sender, Box::new(CpalOutput)));
             let delivery = Arc::new(Delivery::default());
             app.manage(AppState {
                 backend: Arc::clone(&backend),

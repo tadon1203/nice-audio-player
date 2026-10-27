@@ -95,7 +95,7 @@ On connect, the Backend first sends the latest value of each state. So the Rende
 - A failure after the Backend accepted a command arrives as state. It is not the answer to the command.
 - A query answers with its data or with an Error code. It never answers with Backend state.
 - The Backend sends no text for the user. The Renderer maps each Error code to text.
-- The Host reaches the Backend only through `BackendApp` and its public modules.
+- The Host reaches the Backend only through `BackendApp`, the area objects it hands out (`player()`, `library()`, `settings()`, `meter()`, `data_dir()`), and the public modules that name the types it uses. `BackendApp` has no method that only forwards to one area.
 - The Renderer reads and writes settings through the IPC of the area that owns them. Appearance is read from `app_connect` and written with `appearanceUpdate`. Player preferences are read and written through the player commands.
 - The Backend pushes a state whole. Each push replaces the value that the Renderer holds.
 - A backend event is a fact. It does not build state in the Renderer.
