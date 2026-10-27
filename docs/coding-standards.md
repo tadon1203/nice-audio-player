@@ -12,30 +12,30 @@ Do not document rules that linters or formatters already enforce. Tool configura
 
 ## Design principles
 
-- **Keep it simple and plain**: Avoid speculative enterprise abstractions, unnecessary forwarding layers, and single-implementation traits or interfaces. Introduce seams only where behavior actually varies or at I/O boundaries.
-- **Single source of truth**: Each piece of state has one clear owner. Derived values should be calculated on demand rather than stored and synchronized manually.
-- **Fail cleanly**: Validate data at boundaries (I/O, IPC, user input). Trust validated internal data. Do not write defensive fallbacks or silent error swallowing that masks bugs.
-- **Commands vs. Queries**: A command mutates state and acknowledges completion or failure; it does not return the updated global state. Queries read data without modifying state.
+- Keep it simple and plain. Avoid speculative enterprise abstractions, unnecessary forwarding layers, and single-implementation traits or interfaces. Introduce seams only where behavior actually varies or at I/O boundaries.
+- Use a single source of truth. Each piece of state has one clear owner. Derived values should be calculated on demand rather than stored and synchronized manually.
+- Fail cleanly. Validate data at boundaries (I/O, IPC, user input). Trust validated internal data. Do not write defensive fallbacks or silent error swallowing that masks bugs.
+- Keep commands and queries separate. A command mutates state and acknowledges completion or failure; it does not return the updated global state. Queries read data without modifying state.
 
 ## Naming
 
 Keep naming **boring, plain, and conventional**. Do not use ornate or enterprise-style patterns.
 
-- **Conventions by language**:
-- **Rust**: Follow standard [Rust API Guidelines (Naming)](https://rust-lang.github.io/api-guidelines/naming.html).
-- **TypeScript**: Standard `UpperCamelCase` for types/classes/interfaces, `lowerCamelCase` for variables and functions, and `SCREAMING_SNAKE_CASE` for constants.
+- Conventions by language:
+- Rust: Follow standard [Rust API Guidelines (Naming)](https://rust-lang.github.io/api-guidelines/naming.html).
+- TypeScript: Standard `UpperCamelCase` for types/classes/interfaces, `lowerCamelCase` for variables and functions, and `SCREAMING_SNAKE_CASE` for constants.
 
-- **Boring and direct**:
+- Boring and direct:
 - Name things for what they are, not how clever they sound. Use concrete nouns for types/values and active verbs for functions.
 - Avoid clever metaphors or project-specific jargon where standard, boring terms exist.
 - Abbreviate only universally recognized terms. Spell out everything else.
 
 ## Errors and panics
 
-- **Recoverable conditions**: Use `Result` for failures that can normally happen in an environment (file missing, network/device drop, invalid input).
-- **Unrecoverable bugs**: Unmet internal invariants and impossible conditions should panic or abort. Avoid defensive checks that create dead code.
-- **Validation**: Validate at system boundaries. Pass strongly typed, validated values inward.
-- **Error chains**: Preserve error causes using standard error wrapping (`?`, `source`, or error context libraries) rather than discarding error context.
+- Use `Result` for recoverable conditions: failures that can normally happen in an environment (file missing, network/device drop, invalid input).
+- Unmet internal invariants and impossible conditions should panic or abort. Avoid defensive checks that create dead code.
+- Validate at system boundaries. Pass strongly typed, validated values inward.
+- Preserve error causes using standard error wrapping (`?`, `source`, or error context libraries) rather than discarding error context.
 
 ## Rust
 
@@ -57,6 +57,42 @@ Keep naming **boring, plain, and conventional**. Do not use ornate or enterprise
 - Use `$effect` only for side effects (DOM interaction, external subscriptions, analytics).
 - Use `<svelte:window>` / `<svelte:document>` for window-level event listeners.
 - Use standard runes mode for all new code (`$props`, `$derived`, `$effect`, snippets).
+
+#### Reactivity & State
+
+Do not destructure a `$state` array or object if its elements must stay reactive. Destructuring breaks reactivity unless you declare the result in `$derived` or `$props`.
+
+Use `$state.raw` for large objects or collections that you only reassign, such as API payloads or read-only cache items. Recursive proxies use memory and CPU time.
+
+Pass a getter (`() => state`) or an object with getters to external functions and constructors. A state variable gives its value when you read it.
+
+Do not export a reassigned `$state` variable from a `.svelte.ts` module. Wrap the state in an exported object or class instance, or expose read and write functions.
+
+Call `$state.snapshot(val)` before you pass reactive state to an API that expects plain objects. Examples are `structuredClone`, Web Workers, and Tauri IPC payloads.
+
+#### Props & Bindings
+
+Do not change a prop in a child component. For two-way binding, declare the prop with `$bindable()`. Otherwise, use callback props (`on<event>`).
+
+Type snippet props with `Snippet<[T1, T2, ...]>` from `svelte`. Render a snippet only with `{@render ...}` or `{@render snippet?.()}`. Do not call a snippet as a function.
+
+Use function bindings (`bind:value={() => readVal, (newVal) => writeVal}`) for linked state. Do not use two-way `$effect` loops to sync dependent inputs.
+
+#### Effects & Lifecycle
+
+`$effect` and `$derived` track only the reads that run synchronously. A read in `setTimeout`, in a promise, or after `await` is not tracked.
+
+Use `untrack(() => state)` to read a value in an effect without tracking it.
+
+Put `$inspect.trace(label)` on the first line of an effect or `$derived.by`. Use it to find which dependency caused an update.
+
+#### DOM, Events & Styling
+
+Svelte 5 delegates common DOM events, such as `click`, `keydown`, and `pointerdown`, to the root. For a custom event that a delegated listener must receive, set `{ bubbles: true }`. To add a listener in code, use `on` from `svelte/events`.
+
+Use `{@attach fn}`, not the deprecated `use:action`. An attachment runs in an effect scope. It is removed on unmount or when its arguments change. Wrapper components can compose attachments.
+
+Pass arrays or objects to the `class` attribute (handled by `clsx`), or use the `ClassValue` type from `svelte/elements`. Do not use `class:` directives or manual string concatenation.
 
 ## Testing
 
