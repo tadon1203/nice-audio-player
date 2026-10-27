@@ -44,10 +44,43 @@ Keep naming **boring, plain, and conventional**. Do not use ornate or enterprise
 - Real-time or audio threads must not allocate, block, lock, or perform I/O.
 - Handle every `Result`. Log or explicitly pass errors up; do not discard errors with `let _ = ...` unless dropping the result is deliberate (e.g., sending to an optional or closed channel).
 
+## TypeScript
+
+Source: [TypeScript Do's and Don'ts](https://www.typescriptlang.org/docs/handbook/declaration-files/do-s-and-don-ts.html).
+
+### Types
+
+- Do not use `Number`, `String`, `Boolean`, `Symbol`, or `Object` as types. Use `number`, `string`, `boolean`, `symbol`, or `object`.
+- Do not use `any`, except when you migrate a JavaScript file. Use `unknown` when you do not know the type.
+- Do not write a generic type that does not use its type parameter.
+
+### Callbacks
+
+- Use `void` as the return type of a callback whose return value you ignore. `any` lets the caller use the value without a check.
+- Do not mark a callback parameter as optional unless you mean it. A callback can ignore a trailing parameter, so write the parameter as required.
+
+### Overloads
+
+- Do not write overloads that differ only in callback arity. Write one overload with the maximum arity.
+- Put more specific overloads before more general overloads. TypeScript uses the first overload that matches.
+- Use optional parameters instead of overloads that differ only in trailing parameters, when all overloads return the same type.
+- Use a union type instead of overloads that differ only in the type of one argument, when all overloads return the same type.
+
 ## Frontend (TypeScript & Svelte 5)
 
 - Favor plain objects and standard functions. Use classes primarily when encapsulating reactive state and behavior together.
 - Keep presentational components decoupled from global store and application logic by passing data via props.
+
+### TypeScript conventions
+
+Follow the official TypeScript guidelines and Do's and Don'ts:
+
+- Use lowercase primitive types: number, string, boolean, symbol, and object. Do not use boxed object wrappers such as Number or String.
+- Use unknown for unchecked or external data, then narrow the type with type guards. Do not use any.
+- Use void for callback return values that callers ignore. Do not mark callback parameters as optional unless callers must explicitly pass undefined.
+- Use union types or optional parameters instead of overload signatures when you can. When you must use overloads, put specific signatures before general signatures.
+- Prefer interface extension (interface A extends B) over type intersections (&) when you compose object shapes.
+- Avoid as casts. Use type annotations and type predicates (x is T) instead.
 
 ### Svelte 5 conventions
 
