@@ -66,6 +66,19 @@ Source: [TypeScript Do's and Don'ts](https://www.typescriptlang.org/docs/handboo
 - Use optional parameters instead of overloads that differ only in trailing parameters, when all overloads return the same type.
 - Use a union type instead of overloads that differ only in the type of one argument, when all overloads return the same type.
 
+### Narrowing
+
+- Narrow a union with `typeof`, `in`, `instanceof`, or a literal property (discriminated union) before you read a member-specific property.
+- Check `null` on its own. `typeof null` is `"object"`. A truthiness check also removes `0` and `""`. Use `x != null` to remove both `null` and `undefined`.
+- Handle every case of a union in a `switch`. In `default`, assign the value to a `never` variable. A new union member then causes a compile error.
+
+### Compiler options
+
+- Keep `strict: true` in `tsconfig.json`.
+- Set an individual strict flag to `false` only with a stated reason. An individual flag overrides the `strict` family.
+
+Sources: [Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html), [TSConfig `strict`](https://www.typescriptlang.org/tsconfig/strict.html).
+
 ## Frontend (TypeScript & Svelte 5)
 
 - Favor plain objects and standard functions. Use classes primarily when encapsulating reactive state and behavior together.
