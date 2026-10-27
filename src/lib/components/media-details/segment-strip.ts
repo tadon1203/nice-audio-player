@@ -1,9 +1,6 @@
-import { type TrackId } from "#lib/native/bindings";
+import { type TrackId, type TrackSummary } from "#lib/native/bindings";
 
-export interface StripTrack {
-  id: TrackId;
-  durationMs: number | null;
-}
+export type StripTrack = Pick<TrackSummary, "id" | "durationMs">;
 
 /** The time state of a segment relative to the playing track. */
 export type SegmentState = "past" | "current" | "future";

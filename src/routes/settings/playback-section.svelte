@@ -9,7 +9,7 @@
 
   const DEFAULT_DEVICE = "default";
 
-  const { player: playback, connection, appearance, outputDevices, actions, notices } = useApp();
+  const { player: playback, connection, appearance, actions, notices } = useApp();
 
   const signalPath = new SignalPath();
 
@@ -39,7 +39,7 @@
 
   // The device list is read each time the menu opens, so a device connected since is offered.
   function listDevices(isOpen: boolean): void {
-    if (isOpen) actions.run(() => outputDevices.refresh(), "settings");
+    if (isOpen) actions.run(() => playback.refreshOutputDevices(), "settings");
   }
 
   const saveError = $derived(notices.at("settings")?.message ?? null);
@@ -85,7 +85,7 @@
           </Select.Trigger>
           <Select.Content align="start">
             <Select.Item value={DEFAULT_DEVICE} label="System default" />
-            {#each outputDevices.devices as device (device.id)}
+            {#each playback.outputDevices as device (device.id)}
               <Select.Item value={device.id} label={device.name} />
             {/each}
           </Select.Content>

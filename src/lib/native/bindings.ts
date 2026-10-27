@@ -247,7 +247,7 @@ export type LibraryDirectory = {
 	lastSuccessfulScanAtMs: number | null,
 	/**  Tracks whose file is there. */
 	trackCount: number,
-	/**  Tracks whose file is gone (see **Missing** in CONTEXT.md). */
+	/**  Tracks whose file is gone. */
 	missingCount: number,
 };
 

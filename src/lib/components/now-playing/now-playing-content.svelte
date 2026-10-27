@@ -34,7 +34,7 @@
    * Below `md` everything stacks. The waveform grows along the bottom edge when its data arrives.
    */
   const { player: playback, lyrics: lyricsSource } = useApp();
-  const item = $derived(playback.item);
+  const item = $derived(playback.item ?? null);
   const trackId = $derived(item?.id ?? null);
   // Lyrics are optional: a failed read gives null, the same empty view as a track with none.
   const lyricsQuery = createQuery(() => lyricsSource.getTrack(trackId));

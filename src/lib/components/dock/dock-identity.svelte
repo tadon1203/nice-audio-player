@@ -6,7 +6,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
   import { Tracks } from "#lib/library/tracks";
-  import { PlaybackFailure } from "#lib/player/playback-failure";
+  import { playbackFailureMessage } from "#lib/player/messages";
   import { useApp } from "#lib/app/app.svelte";
   import { errorMessage } from "#lib/native/messages";
   import Artwork from "#lib/components/ui/artwork.svelte";
@@ -34,7 +34,7 @@
       ? { kind: "error" as const, message: errorMessage(startupError) }
       : notices.at("dock"),
   );
-  const item = $derived(playback.item);
+  const item = $derived(playback.item ?? null);
   const trackKey = $derived(item?.id ?? "none");
   const title = $derived(item?.title ?? "Nothing playing");
   const nowPlayingOpen = $derived(nowPlaying.isOpen);
@@ -180,7 +180,7 @@
               </Button>
             </div>
           {:else if playback.failure !== null}
-            {@const reason = PlaybackFailure.message(playback.failure)}
+            {@const reason = playbackFailureMessage(playback.failure)}
             <div class="flex min-w-0 items-center gap-2">
               <span class="block truncate text-sm text-destructive" role="alert" title={reason}>
                 {reason}
@@ -203,7 +203,7 @@
               <span aria-hidden="true" class="shrink-0 text-sm text-muted-foreground">·</span>
               <Button
                 type="button"
-                onclick={() => actions.run(() => playback.undoQueueChange())}
+                onclick={() => actions.run(() => playback.restorePreviousQueue())}
                 variant="text"
                 size="inline"
                 class="font-normal"

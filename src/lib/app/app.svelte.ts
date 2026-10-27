@@ -5,8 +5,6 @@ import { Appearance } from "#lib/appearance/appearance.svelte";
 import { Library } from "#lib/library/library.svelte";
 import { Lyrics } from "#lib/lyrics/lyrics.svelte";
 import type * as native from "#lib/native/commands";
-import { AudioOutputDevices } from "#lib/player/audio-output-devices.svelte";
-import { PlaybackClock } from "#lib/player/playback-clock.svelte";
 import { Player } from "#lib/player/player.svelte";
 import { Connection } from "./connection.svelte";
 import { type LyricsSpan, NowPlaying } from "./now-playing.svelte";
@@ -53,7 +51,6 @@ export class App {
   public readonly library: Library;
   public readonly lyrics: Lyrics;
   public readonly appearance: Appearance;
-  public readonly outputDevices: AudioOutputDevices;
   public readonly motion: Motion;
   public readonly connection: Connection;
   public readonly notices: Notices;
@@ -77,9 +74,8 @@ export class App {
     this.queryClient = queryClient;
     this.notices = notices;
     this.actions = new UserActions(notices);
-    this.player = new Player(areas.player, new PlaybackClock());
+    this.player = new Player({ player: areas.player, queryClient, notices });
     this.appearance = new Appearance(areas.appearance);
-    this.outputDevices = new AudioOutputDevices(areas.player);
     this.library = new Library(areas.library, queryClient);
     this.lyrics = new Lyrics(areas.lyrics, queryClient);
 

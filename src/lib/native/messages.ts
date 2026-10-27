@@ -1,13 +1,4 @@
-import type { CommandError, PlaybackFailureCode } from "./bindings";
-
-/** Why playback stopped by itself, as the dock shows the listener. */
-export const outputFailureMessages = {
-  noOutputDevice: "No audio output device is available.",
-  outputDeviceUnavailable: "The audio output device is unavailable.",
-  unsupportedOutput: "The output device configuration is unsupported.",
-  outputFailed: "The audio output failed.",
-  decodeFailed: "The audio file could not be decoded.",
-} as const satisfies Record<PlaybackFailureCode, string>;
+import type { CommandError } from "./bindings";
 
 /** The text for each code a command can reject with. */
 const messages = {

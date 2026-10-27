@@ -91,7 +91,7 @@ MP3, FLAC, WAV, AAC, and M4A. The app counts a file as supported only if it can 
   - Kana file under the head of their row (か for が). All kanji form one group, "漢".
   - Choosing a letter starts the list at that letter. The app does not load the items before it.
   - Choosing the first letter, or changing the sort or filter, starts the list from the top.
-- Albums are filed by Album Artist, title, and directory. See Album and Compilation in [CONTEXT.md](../CONTEXT.md). A disc directory ("CD1", "Disc 2") belongs to the album directory above it.
+- Albums are filed by Album Artist, title, and directory. A disc directory ("CD1", "Disc 2") belongs to the album directory above it.
 
 ## Lyrics
 
@@ -110,7 +110,7 @@ MP3, FLAC, WAV, AAC, and M4A. The app counts a file as supported only if it can 
 
 ## Meters
 
-Meters are a third view of Now Playing, beside Lyrics and Queue. On a wide window, the meters replace the lyrics. The queue stays. The meters show the Spectrum and the Level meter (see [CONTEXT.md](../CONTEXT.md)) on one shared dB axis, from −90 to 0 dBFS. They measure the audio as it leaves the app, after volume.
+Meters are a third view of Now Playing, beside Lyrics and Queue. On a wide window, the meters replace the lyrics. The queue stays. The meters show the Spectrum and the Level meter on one shared dB axis, from −90 to 0 dBFS. They measure the audio as it leaves the app, after volume.
 
 - The Level meter shows left and right side by side. Each channel has a peak, an RMS, and a held peak.
 - Level bars are thin and white. The artwork does not tint them. They sit on the bare surface, with no panel. The held peak is a thin, full-white Peak cap.

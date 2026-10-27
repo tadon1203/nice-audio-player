@@ -1,10 +1,36 @@
-import { AudioFormatText } from "#lib/utils/audio-format-text";
 import { useApp } from "#lib/app/app.svelte";
-import {
-  PlaybackTechnicalStatus,
-  type PlaybackSignalPath,
-} from "#lib/player/playback-technical-status";
-import { PlaybackSnapshots } from "#lib/player/playback-snapshots";
+import type { AudioOutputSelection, PlaybackChannelConversion } from "#lib/native/bindings";
+import type { SignalPathFacts } from "#lib/player/player.svelte";
+import { AudioFormatText } from "#lib/utils/audio-format-text";
+
+/** The dock's signal path: `source › processing › output`. `processing` is null when bit-perfect. */
+export interface PlaybackSignalPath {
+  readonly source: string;
+  readonly processing: string | null;
+  readonly output: string;
+  readonly selection: AudioOutputSelection;
+}
+
+/** The step text of each channel conversion. "none" adds no step. */
+const CHANNEL_STEPS: Partial<Record<PlaybackChannelConversion, string>> = {
+  monoToStereo: "mono to stereo",
+  stereoToMono: "stereo to mono",
+  downmix: "surround downmix",
+};
+
+/** Describes the signal path from its facts. Pure: the facts in, the path out. */
+export function describeSignalPath(facts: SignalPathFacts): PlaybackSignalPath {
+  const steps = [
+    facts.resamplingActive ? `${AudioFormatText.kilohertz(facts.outputSampleRate)} kHz` : undefined,
+    facts.channelConversion ? CHANNEL_STEPS[facts.channelConversion] : undefined,
+  ].filter((step): step is string => step !== undefined);
+  return {
+    source: facts.sourceLabel,
+    processing: steps.length > 0 ? steps.join(", ") : null,
+    output: facts.outputName || "Output",
+    selection: facts.selection,
+  };
+}
 
 /**
  * The signal path of the loaded track, or null when nothing is loaded. Construct it during
@@ -12,29 +38,9 @@ import { PlaybackSnapshots } from "#lib/player/playback-snapshots";
  */
 export class SignalPath {
   readonly #playback = useApp().player;
-  readonly #session = $derived(PlaybackSnapshots.session(this.#playback.snapshot));
-
-  readonly #current = $derived.by<PlaybackSignalPath | null>(() => {
-    const session = this.#session;
-    if (session === null) return null;
-    return PlaybackTechnicalStatus.describe(
-      {
-        sourceLabel: AudioFormatText.path({
-          format: session.sourceFormat,
-          bitDepth: session.sourceBitDepth,
-          sampleRate: session.sourceSampleRate,
-          bitrateKbps: session.sourceBitrateKbps,
-        }),
-        resamplingActive: session.resamplingActive,
-        outputSampleRate: session.outputSampleRate,
-        channelConversion: session.channelConversion,
-        outputName: session.outputDeviceName,
-      },
-      this.#playback.snapshot?.base.outputSelection ?? null,
-    );
-  });
 
   public get current(): PlaybackSignalPath | null {
-    return this.#current;
+    const facts = this.#playback.signalPath;
+    return facts === null ? null : describeSignalPath(facts);
   }
 }

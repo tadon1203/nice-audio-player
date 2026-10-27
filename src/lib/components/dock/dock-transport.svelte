@@ -3,7 +3,7 @@
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { useApp } from "#lib/app/app.svelte";
-  import { PlaybackSnapshots } from "#lib/player/playback-snapshots";
+  import { nextRepeatMode } from "#lib/player/player.svelte";
   import PlayPauseIcon from "#lib/components/ui/play-pause-icon.svelte";
   import { Button } from "#lib/components/ui/shadcn/button";
   import DockToggleButton from "./dock-toggle-button.svelte";
@@ -72,10 +72,7 @@
       label="Repeat: {playback.repeatMode}"
       pressed={playback.repeatMode !== "off"}
       disabled={!ready}
-      onclick={() =>
-        actions.run(() =>
-          playback.setRepeatMode(PlaybackSnapshots.nextRepeatMode(playback.repeatMode)),
-        )}
+      onclick={() => actions.run(() => playback.setRepeatMode(nextRepeatMode(playback.repeatMode)))}
     >
       <RepeatIcon mode={playback.repeatMode} />
     </DockToggleButton>

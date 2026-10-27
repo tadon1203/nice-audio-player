@@ -13,7 +13,7 @@ pub struct LibraryDirectory {
     pub last_successful_scan_at_ms: Option<u64>,
     /// Tracks whose file is there.
     pub track_count: u64,
-    /// Tracks whose file is gone (see **Missing** in CONTEXT.md).
+    /// Tracks whose file is gone.
     pub missing_count: u64,
 }
 

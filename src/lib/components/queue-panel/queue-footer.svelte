@@ -1,16 +1,8 @@
 <script lang="ts">
   import { useApp } from "#lib/app/app.svelte";
   import { Button } from "#lib/components/ui/shadcn/button";
-  import type { Result } from "#lib/native/result";
 
-  const { player: playback, actions, notices } = useApp();
-
-  /** Clears the upcoming queue, and offers to undo it when there was anything to clear. */
-  const clearUpcoming = async (): Promise<Result<boolean>> => {
-    const outcome = await playback.playerClearQueue();
-    if (outcome.ok && outcome.value) notices.offerUndo("Upcoming cleared");
-    return outcome;
-  };
+  const { player: playback, actions } = useApp();
 
   const queue = $derived(playback.queue);
   const upcomingCount = $derived(queue?.upcomingCount ?? 0);
@@ -22,7 +14,7 @@
       type="button"
       variant="quiet"
       size="compact"
-      onclick={() => actions.run(clearUpcoming)}
+      onclick={() => actions.run(() => playback.clearUpcoming())}
       class="w-full"
     >
       Clear upcoming

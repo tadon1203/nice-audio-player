@@ -108,4 +108,4 @@ If the product wants the analyzer to match RME, the honest statement is: RME doe
 
 ## Follow-up outline (draft only; no ticket file created)
 
-**Analyzer and meter ballistics as pure functions.** Status: needs a design decision. Implement bar and cap update as `step(state, input_db, dt)` in the renderer or shared package with the numbers above as named constants, so the numbers can be tuned in one place and unit-tested at 60, 120 and 144 Hz with identical results. Decide the displayed range (90 dB) and the meter's 8.6 dB/s against the analyzer's 30 dB/s in `/grill-with-docs`; add the terms Bar, Cap, Hold to `CONTEXT.md` if kept.
+**Analyzer and meter ballistics as pure functions.** Status: needs a design decision. Implement bar and cap update as `step(state, input_db, dt)` in the renderer or shared package with the numbers above as named constants, so the numbers can be tuned in one place and unit-tested at 60, 120 and 144 Hz with identical results. Decide the displayed range (90 dB) and the meter's 8.6 dB/s against the analyzer's 30 dB/s in `/grilling`.

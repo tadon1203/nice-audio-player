@@ -43,7 +43,7 @@
   const anchor = new AnchorPadding();
   const follow = new AnchorFollow();
   let container = $state<HTMLDivElement | null>(null);
-  const currentId = $derived(current?.queueItemId ?? null);
+  const currentId = $derived(playback.item?.queueItemId ?? null);
   const hasRows = $derived(current !== null || history.length + upcoming.length > 0);
   const rows = $derived(QueueRows.build(history, current, upcoming));
   /** Where the current track sits in `rows` (past rows are before it). */

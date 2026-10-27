@@ -1,6 +1,6 @@
-import { PlaybackSnapshots } from "#lib/player/playback-snapshots";
+import { nextRepeatMode } from "#lib/player/player.svelte";
+import { nextSeekPosition } from "#lib/components/ui/waveform/seek-math";
 import { VolumeStep } from "#lib/player/volume-step";
-import { Waveform } from "#lib/components/ui/waveform/waveform";
 import type { App } from "./app.svelte";
 
 const INTERACTIVE_TAGS = new Set(["BUTTON", "A", "INPUT", "TEXTAREA", "SELECT"]);
@@ -65,22 +65,22 @@ export function handleShortcut(event: KeyboardEvent, app: App): void {
     const queue = playback.queue;
     // Also keeps the web view from saving or reloading the page.
     event.preventDefault();
-    if (queue === null) return;
+    if (queue === undefined) return;
     actions.run(() =>
       key === "s"
         ? playback.setShuffle(!queue.shuffleEnabled)
-        : playback.setRepeatMode(PlaybackSnapshots.nextRepeatMode(queue.repeatMode)),
+        : playback.setRepeatMode(nextRepeatMode(queue.repeatMode)),
     );
     return;
   }
 
-  const { snapshot, durationMs } = playback;
+  const { state, durationMs } = playback;
 
   if ((event.key === "ArrowUp" || event.key === "ArrowDown") && event.ctrlKey) {
-    if (snapshot === null) return;
+    if (state === undefined) return;
     event.preventDefault();
     const volume = VolumeStep.step(playback.volume, event.key === "ArrowUp" ? 1 : -1);
-    actions.run(() => playback.changeVolume(volume));
+    actions.run(() => playback.setVolume(volume));
     return;
   }
 
@@ -93,8 +93,8 @@ export function handleShortcut(event: KeyboardEvent, app: App): void {
     }
     // Holding the key continues from the seek still waiting to be sent, not the stale position;
     // otherwise from where the clock is now.
-    const from = playback.pendingSeekMs() ?? playback.clock.estimate();
-    const next = Waveform.nextSeekPosition(event.key, from, durationMs ?? 0);
+    const from = playback.pendingSeekMs ?? playback.clock.estimate();
+    const next = nextSeekPosition(event.key, from, durationMs ?? 0);
     if (next === null) return;
     event.preventDefault();
     actions.run(() => playback.seek(next));

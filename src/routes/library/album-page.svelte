@@ -57,7 +57,7 @@
 
   // Playing a track continues through the rest of its album.
   const playTrack = (trackId: TrackId): void =>
-    actions.run(() => playback.start({ kind: "album", albumId }, trackId));
+    actions.run(() => playback.play({ kind: "album", albumId }, trackId));
 
   const scroll = new WorkspaceScroll(scrollOffsets, {
     ready: (): boolean => details !== undefined && !tracksQuery.isPending && tracks.length > 0,

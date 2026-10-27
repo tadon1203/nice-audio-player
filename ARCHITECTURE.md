@@ -44,7 +44,7 @@ The template for this document. Replace each placeholder in `<>`. Keep all other
 
 ## Mental model
 
-The system has three layers. Control moves in one direction. The terms are defined in [CONTEXT.md](./CONTEXT.md).
+The system has three layers. Control moves in one direction.
 
 - **Renderer** (`src`): SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. It composes views. It caches native state. It holds no second source of truth.
 - **Host** (`src-tauri`): Tauri 2. It runs the Windows WebView. It connects the Backend to the window and to the operating system. It holds no domain rules.

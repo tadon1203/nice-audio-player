@@ -57,7 +57,7 @@ describe("global seek shortcut", () => {
   it("sends whole milliseconds even though the running clock is fractional", async () => {
     mocks.seek.mockResolvedValue({ ok: true, value: null });
     const app = new App(native, new QueryClient(), new Notices());
-    app.player.acceptPlayback(playing(10_000));
+    app.player.acceptState(playing(10_000));
     vi.spyOn(app.player.clock, "estimate").mockReturnValue(10_250.37);
 
     handleShortcut(new KeyboardEvent("keydown", { key: "ArrowRight" }), app);

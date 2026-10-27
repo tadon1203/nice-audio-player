@@ -67,7 +67,7 @@ export class Connection {
   #route(message: BackendMessage): void {
     switch (message.kind) {
       case "player":
-        this.#areas.player.acceptPlayback(message.value);
+        this.#areas.player.acceptState(message.value);
         break;
       case "queue":
         this.#areas.player.acceptQueue(message.value);

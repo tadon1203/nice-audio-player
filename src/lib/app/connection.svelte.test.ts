@@ -86,7 +86,7 @@ describe("Connection", () => {
 
     for (const message of latestStates()) attempts[0].onMessage(message);
 
-    expect(app.player.snapshot).toEqual(stopped);
+    expect(app.player.state).toEqual(stopped);
     expect(app.appearance.artworkBackdrop).toBe(true);
     expect(app.library.state).not.toBeNull();
   });
@@ -111,7 +111,7 @@ describe("Connection", () => {
     attempts[0].onMessage({ kind: "player", value: stopped });
     attempts[0].onMessage({ kind: "player", value: second });
 
-    expect(app.player.snapshot).toEqual(second);
+    expect(app.player.state).toEqual(second);
   });
 
   it("is failed, and applies nothing, when the connect command fails", async () => {
@@ -122,6 +122,6 @@ describe("Connection", () => {
 
     await vi.waitFor(() => expect(app.connection.state).toBe("failed"));
     expect(app.connection.startupError).toEqual({ code: "internal" });
-    expect(app.player.snapshot).toBeNull();
+    expect(app.player.state).toBeUndefined();
   });
 });

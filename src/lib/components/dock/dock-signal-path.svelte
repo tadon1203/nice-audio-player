@@ -20,7 +20,7 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const { player: playback, connection, outputDevices, actions } = useApp();
+  const { player: playback, connection, actions } = useApp();
 
   const path = new SignalPath();
   let open = $state(false);
@@ -46,7 +46,7 @@
 
   // The device list is read each time the menu opens, so a device connected since is offered.
   function listDevices(isOpen: boolean): void {
-    if (isOpen) actions.run(() => outputDevices.refresh());
+    if (isOpen) actions.run(() => playback.refreshOutputDevices());
   }
 </script>
 
@@ -73,7 +73,7 @@
     <DropdownMenuContent align="end">
       <MenuRadioGroup value={selected} onValueChange={select}>
         <DropdownMenuRadioItem value={DEFAULT_DEVICE}>System default</DropdownMenuRadioItem>
-        {#each outputDevices.devices as device (device.id)}
+        {#each playback.outputDevices as device (device.id)}
           <DropdownMenuRadioItem value={device.id}>{device.name}</DropdownMenuRadioItem>
         {/each}
       </MenuRadioGroup>

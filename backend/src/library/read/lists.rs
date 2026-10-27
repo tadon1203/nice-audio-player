@@ -1,7 +1,7 @@
 //! The parts that every list shares: the request and page types, the SQL of a list, and the letter
 //! index. A domain file builds its `Listing` and its sort specs. This file turns a `Listing` into
 //! SQL, takes one page of it, and reads its letter index. A letter index groups a list's names by
-//! their first character, in the list's own order (see CONTEXT.md).
+//! their first character, in the list's own order.
 
 use crate::library::errors::Result;
 use crate::library::storage::keys;

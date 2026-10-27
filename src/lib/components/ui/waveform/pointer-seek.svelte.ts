@@ -1,5 +1,5 @@
 import type { Attachment } from "svelte/attachments";
-import { Waveform } from "./waveform";
+import { nextSeekPosition, positionFromOffset, scrubGain, scrubPosition } from "./seek-math";
 
 export interface PointerSeekOptions {
   durationMs: number;
@@ -15,7 +15,7 @@ export interface PointerSeekOptions {
  * Pointer and keyboard interaction for the seek bar: press to jump, drag to scrub, hover to
  * preview a time. Dragging moves the position by the pointer's horizontal travel; the further
  * the pointer is from the bar vertically (or with Shift held) the slower it moves, so long
- * tracks can be set finely (`Waveform.scrubGain`). `onInput` follows the drag; `onCommit` fires
+ * tracks can be set finely (`scrubGain`). `onInput` follows the drag; `onCommit` fires
  * once on release. Put `attach` on the bar element; `options` is read live.
  */
 export class PointerSeek {
@@ -40,9 +40,9 @@ export class PointerSeek {
   readonly #scrubTo = (event: PointerEvent): number => {
     const rect = this.#element?.getBoundingClientRect();
     const distance = rect ? Math.max(rect.top - event.clientY, event.clientY - rect.bottom, 0) : 0;
-    const gain = Waveform.scrubGain(distance, event.shiftKey);
+    const gain = scrubGain(distance, event.shiftKey);
     this.#scrub = {
-      positionMs: Waveform.scrubPosition(
+      positionMs: scrubPosition(
         this.#scrub.positionMs,
         event.clientX - this.#scrub.lastX,
         gain,
@@ -61,11 +61,7 @@ export class PointerSeek {
     this.#element.setPointerCapture(event.pointerId);
     this.#dragging = true;
     // Pressing jumps to the pointer; only the drag after it is scaled.
-    const positionMs = Waveform.positionFromOffset(
-      this.#offsetOf(event),
-      this.#liveWidth(),
-      durationMs,
-    );
+    const positionMs = positionFromOffset(this.#offsetOf(event), this.#liveWidth(), durationMs);
     this.#scrub = { positionMs, lastX: event.clientX };
     this.#scrubMs = positionMs;
     onInput(positionMs);
@@ -80,7 +76,7 @@ export class PointerSeek {
       return;
     }
     this.#hoverX = nextHoverX;
-    onHoverPositionChange?.(Waveform.positionFromOffset(nextHoverX, width, durationMs));
+    onHoverPositionChange?.(positionFromOffset(nextHoverX, width, durationMs));
   };
 
   readonly #onPointerUp = (event: PointerEvent): void => {
@@ -105,7 +101,7 @@ export class PointerSeek {
   readonly #onKeyDown = (event: KeyboardEvent): void => {
     const { seekable, valueMs, durationMs, onInput, onCommit } = this.#options();
     if (!seekable) return;
-    const next = Waveform.nextSeekPosition(event.key, valueMs, durationMs);
+    const next = nextSeekPosition(event.key, valueMs, durationMs);
     if (next === null) return;
     event.preventDefault();
     onInput(next);
@@ -148,6 +144,6 @@ export class PointerSeek {
     if (this.#dragging && this.#scrubMs !== null) return this.#scrubMs;
     return this.#hoverX === null
       ? null
-      : Waveform.positionFromOffset(this.#hoverX, this.#liveWidth(), this.#options().durationMs);
+      : positionFromOffset(this.#hoverX, this.#liveWidth(), this.#options().durationMs);
   }
 }

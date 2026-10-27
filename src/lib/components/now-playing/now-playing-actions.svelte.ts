@@ -17,7 +17,7 @@ export class NowPlayingActions {
   /** Plays a queue item; the queue keeps every other item in place. */
   public readonly playerPlayQueueItem = (queueItemId: QueueItemId): void => {
     const { actions, player: playback } = this.#app;
-    actions.run(() => playback.playerPlayQueueItem(queueItemId));
+    actions.run(() => playback.playQueueItem(queueItemId));
   };
 
   /** Copies text to the clipboard; a refused copy is reported. */

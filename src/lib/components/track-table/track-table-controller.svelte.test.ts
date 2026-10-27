@@ -20,10 +20,10 @@ function fakeApp(
   activeTrackId: TrackId | null = null,
 ): {
   app: App;
-  calls: Record<"playerEnqueueTrack" | "pause" | "resume" | "reveal", Mock>;
+  calls: Record<"enqueue" | "pause" | "resume" | "reveal", Mock>;
 } {
   const calls = {
-    playerEnqueueTrack: vi.fn(async (_id: TrackId, _next: boolean) => {}),
+    enqueue: vi.fn(async (_id: TrackId, _next: boolean) => {}),
     pause: vi.fn(async () => {}),
     resume: vi.fn(async () => {}),
     reveal: vi.fn(async (_id: TrackId) => {}),
@@ -33,7 +33,7 @@ function fakeApp(
     player: {
       activeTrackId,
       status,
-      playerEnqueueTrack: calls.playerEnqueueTrack,
+      enqueue: calls.enqueue,
       pause: calls.pause,
       resume: calls.resume,
     },
@@ -128,8 +128,8 @@ describe("TrackTableController", () => {
 
     controller.playNext();
     controller.addToQueue();
-    expect(calls.playerEnqueueTrack).toHaveBeenNthCalledWith(1, row.id, true);
-    expect(calls.playerEnqueueTrack).toHaveBeenNthCalledWith(2, row.id, false);
+    expect(calls.enqueue).toHaveBeenNthCalledWith(1, row.id, true);
+    expect(calls.enqueue).toHaveBeenNthCalledWith(2, row.id, false);
     tr.remove();
   });
 });

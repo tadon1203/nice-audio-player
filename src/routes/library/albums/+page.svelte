@@ -40,7 +40,7 @@
         <AlbumTile
           {album}
           onplay={(played) =>
-            actions.run(() => playback.start({ kind: "album", albumId: played.id }, null))}
+            actions.run(() => playback.play({ kind: "album", albumId: played.id }, null))}
         />
       {/snippet}
     </VirtualMediaGrid>

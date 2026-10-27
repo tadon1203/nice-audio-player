@@ -48,7 +48,7 @@
       return;
     }
     const volume = VolumeStep.step(playback.volume, event.deltaY < 0 ? 1 : -1);
-    actions.run(() => playback.changeVolume(volume));
+    actions.run(() => playback.setVolume(volume));
   }
 </script>
 
@@ -90,7 +90,7 @@
     variant="quiet"
     aria-label={playback.muted ? "Unmute" : "Mute"}
     disabled={!ready}
-    onclick={() => actions.run(() => playback.toggleMute())}
+    onclick={() => actions.run(() => playback.setMuted(!playback.muted))}
   >
     {#if playback.muted}
       <VolumeX aria-hidden="true" />
@@ -117,7 +117,7 @@
         "aria-valuetext": playback.muted ? "Muted" : VolumeStep.formatDb(playback.volume, false),
       }}
       onValueChange={(position) =>
-        actions.run(() => playback.changeVolume(VolumeStep.fromSlider(position)))}
+        actions.run(() => playback.setVolume(VolumeStep.fromSlider(position)))}
     />
   </div>
   <span

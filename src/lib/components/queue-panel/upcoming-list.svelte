@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { createQueries } from "@tanstack/svelte-query";
   import { useApp } from "#lib/app/app.svelte";
+  import { UPCOMING_WINDOW, type QueueItem as UpcomingItem } from "#lib/native/bindings";
   import { SvelteFlip } from "#lib/components/ui/motion/svelte-flip";
   import { TokenTiming } from "#lib/components/ui/motion/token-timing";
   import { VirtualRows } from "#lib/components/ui/virtual-rows.svelte";
@@ -25,7 +27,7 @@
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
 
   const queueDrag = new QueueDrag({
-    onMove: (id, to): void => actions.run(() => playback.playerMoveQueueItem(id, to)),
+    onMove: (id, to): void => actions.run(() => playback.moveQueueItem(id, to)),
     rowHeight: QUEUE_ROW_PX,
     count: (): number => upcomingCount,
   });
@@ -39,13 +41,42 @@
 
   const firstRow = $derived(virtual.items[0]?.index);
   const lastRow = $derived(virtual.items.at(-1)?.index);
-  playback.followUpcoming(() =>
-    firstRow === undefined || lastRow === undefined ? null : { start: firstRow, end: lastRow },
-  );
-  // Beyond what the snapshot carries, a row waits for its chunk to arrive.
+
+  // The first upcoming items come with the queue state. The rest are read a window at a time, for
+  // the windows the visible rows fall in. A window of another queue version is not shown.
+  const windowOffsets = $derived.by(() => {
+    if (firstRow === undefined || lastRow === undefined) return [];
+    const prefix = playback.queue?.upcoming.length ?? 0;
+    const offsets: number[] = [];
+    const end = Math.min(lastRow, upcomingCount - 1);
+    for (
+      let offset = Math.floor(Math.max(firstRow, prefix) / UPCOMING_WINDOW) * UPCOMING_WINDOW;
+      offset <= end;
+      offset += UPCOMING_WINDOW
+    ) {
+      offsets.push(offset);
+    }
+    return offsets;
+  });
+  const windows = createQueries(() => ({
+    queries: windowOffsets.map((offset) => playback.queueWindowOptions(offset)),
+  }));
+  const loadedItems = $derived.by(() => {
+    const items = new Map<number, UpcomingItem>();
+    const version = playback.queue?.version;
+    for (const query of windows) {
+      const outcome = query.data;
+      if (outcome?.ok !== true || outcome.value.version !== version) continue;
+      outcome.value.items.forEach((item, i) => items.set(outcome.value.offset + i, item));
+    }
+    return items;
+  });
+  const upcomingPrefix = $derived(playback.queue?.upcoming ?? []);
+
+  // Beyond what the queue state carries, a row waits for its window to arrive.
   const rows = $derived(
     virtual.items.map(({ index }) => {
-      const item = playback.upcomingAt(index);
+      const item = index < upcomingPrefix.length ? upcomingPrefix[index] : loadedItems.get(index);
       return { index, item, key: item?.queueItemId ?? `waiting-${index}` };
     }),
   );
@@ -96,13 +127,12 @@
           tone="upcoming"
           dragHandlers={queueDrag.handlersFor(item.queueItemId, index)}
           onMoveEarlier={() =>
-            actions.run(() => playback.playerMoveQueueItem(item.queueItemId, index - 1))}
-          onMoveLater={() =>
-            actions.run(() => playback.playerMoveQueueItem(item.queueItemId, index + 1))}
+            actions.run(() => playback.moveQueueItem(item.queueItemId, index - 1))}
+          onMoveLater={() => actions.run(() => playback.moveQueueItem(item.queueItemId, index + 1))}
           canMoveEarlier={index > 0}
           canMoveLater={index < upcomingCount - 1}
-          onPlay={() => actions.run(() => playback.playerPlayQueueItem(item.queueItemId))}
-          onRemove={() => actions.run(() => playback.playerRemoveQueueItem(item.queueItemId))}
+          onPlay={() => actions.run(() => playback.playQueueItem(item.queueItemId))}
+          onRemove={() => actions.run(() => playback.removeQueueItem(item.queueItemId))}
         />
       {/if}
     </li>

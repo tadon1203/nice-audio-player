@@ -7,7 +7,6 @@ These rules cover code and documentation that lint cannot check. Do not write a 
 ## All code and documentation
 
 - Write comments and documentation in English. Follow ASD-STE100 (Simplified Technical English).
-- Use the terms in [CONTEXT.md](../CONTEXT.md). Do not use synonyms.
 - Documentation is the single source of truth. Keep each fact in one file. Link to it. Do not copy it.
 - The lock file of each package manager locks the dependency versions. Use `=` only for a prerelease.
 
@@ -38,9 +37,9 @@ Casing and conversion names follow the standards below. The Rust compiler lints 
 
 ### Plain names
 
-- A name is plain. It states what the thing is, with a noun. A function name states what the function does, with a verb. Do not use a metaphor or a clever word. The terms in [CONTEXT.md](../CONTEXT.md) are the plain names of the project.
+- A name is plain. It states what the thing is, with a noun. A function name states what the function does, with a verb. Do not use a metaphor or a clever word.
 - A name says what it handles. A role word alone (`Manager`, `Handler`, `Data`, `Info`) says nothing. Two vague words together (`DataInfo`) say nothing too. Put a specific noun before the role word: `ScanWorker`, `TrackRow`, `PackageInfo`.
-- One concept has one name in every layer: the Backend module, the Host command file, the Renderer directory, and the type. That name is the term in [CONTEXT.md](../CONTEXT.md). One word has one meaning. Do not make a synonym.
+- One concept has one name in every layer: the Backend module, the Host command file, the Renderer directory, and the type. One word has one meaning. Do not make a synonym.
 - Name a local variable after its type, in lower case. `GlobalState` becomes `global_state`.
 - Abbreviate only a word that everyone knows: `id`, `url`, `db`. Write every other word in full.
 - Do not put the type in a name. Write `tracks`, not `track_list`.

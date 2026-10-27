@@ -2,7 +2,7 @@ import type { Attachment } from "svelte/attachments";
 import { SpringCurve } from "#lib/components/ui/motion/spring-curve";
 import { TokenTiming } from "#lib/components/ui/motion/token-timing";
 import { NumberTween } from "#lib/components/ui/motion/number-tween";
-import { Waveform } from "./waveform";
+import { levelToUnit } from "#lib/utils/level";
 
 /** Height of the flat line the bars grow out of, in px. */
 export const BASELINE_PX = 2;
@@ -110,7 +110,7 @@ export class WaveformPainter {
     const count = bars.length;
     const unit = cssWidth / count;
     for (let index = 0; index < count; index += 1) {
-      const full = Math.max(BASELINE_PX, Waveform.levelToUnit(bars[index]!) * (height - 2));
+      const full = Math.max(BASELINE_PX, levelToUnit(bars[index]!) * (height - 2));
       const delay = sweep ? (index / count) * SWEEP_MS : 0;
       const progress = SpringCurve.easing(
         Math.min(1, Math.max(0, (this.#elapsed - delay) / MOVE_MS)),

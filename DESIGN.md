@@ -32,7 +32,7 @@ The app is a tool for a personal music library. It is not a storefront. It is da
 
 ## Vocabulary
 
-Screens use five elements: Sleeve, Artwork glow, Album strip, Row index, and Signal path. Screens do not use new looks. Their definitions are in [CONTEXT.md](./CONTEXT.md).
+Screens use five elements: Sleeve, Artwork glow, Album strip, Row index, and Signal path. Screens do not use new looks.
 
 ## Space
 

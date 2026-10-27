@@ -5,7 +5,7 @@
   import { DurationFormat } from "#lib/utils/duration-format";
   import { PointerSeek } from "./pointer-seek.svelte";
   import WaveformBars from "./waveform-bars.svelte";
-  import { Waveform } from "./waveform";
+  import { barCountForWidth, resampleBars } from "./waveform";
 
   interface Span {
     startMs: number;
@@ -113,9 +113,7 @@
   );
 
   const hasPeaks = $derived(rms !== null && rms.length > 0);
-  const bars = $derived(
-    rms === null ? [] : Waveform.resampleBars(rms, Waveform.barCountForWidth(width)),
-  );
+  const bars = $derived(rms === null ? [] : resampleBars(rms, barCountForWidth(width)));
 
   const spanStyle = (span: Span): string | undefined =>
     duration > 0

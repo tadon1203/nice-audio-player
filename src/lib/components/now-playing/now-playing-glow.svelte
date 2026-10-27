@@ -1,7 +1,6 @@
 <script lang="ts">
   import { useApp } from "#lib/app/app.svelte";
-  import { GlowBreath } from "#lib/player/glow-breath";
-  import { Loudness } from "#lib/player/loudness";
+  import { attachGlowBreath, loudnessKeyframes } from "#lib/player/glow-breath";
   import ArtworkGlow from "#lib/components/ui/artwork-glow/artwork-glow.svelte";
   import { breathingOpacity, GLOW } from "#lib/components/ui/artwork-glow/glow";
   import { SvelteMotion } from "#lib/components/ui/motion/svelte-motion";
@@ -27,10 +26,10 @@
   // The Artwork glow breathes along the track's smoothed loudness, drawn by the compositor from
   // keyframes computed once per waveform; nothing here runs per frame.
   const breathe = $derived.by(() => {
-    const loudness = Loudness.keyframes(waveform?.rms ?? null, playback.durationMs);
+    const loudness = loudnessKeyframes(waveform?.rms ?? null, playback.durationMs);
     if (!breathing || loudness.length === 0) return undefined;
     const opacityOf = (level: number): number => breathingOpacity("max", level) / GLOW.strength.max;
-    return GlowBreath.attach({
+    return attachGlowBreath({
       clock: playback.clock,
       keyframes: loudness.map(({ atMs, level }) => ({ atMs, opacity: opacityOf(level) })),
       restOpacity: opacityOf(REST_LEVEL),

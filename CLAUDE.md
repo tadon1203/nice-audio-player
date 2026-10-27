@@ -12,16 +12,12 @@ Read a document only when its trigger applies. Do not read them all up front.
 | `ARCHITECTURE.md`          | System map, code map, and rules that must not break | You change structure, add a module, or cross a process or layer boundary |
 | `docs/requirements.md`     | How the product behaves                             | A task changes or depends on user-visible behavior                       |
 | `DESIGN.md`                | UI principles                                       | You change UI                                                            |
-| `CONTEXT.md`               | Domain terms (glossary)                             | You name something or write docs                                         |
 | `docs/coding-standards.md` | Code rules that lint cannot check                   | You write or review code                                                 |
 | `docs/git-workflow.md`     | Commit branch and commit message rules              | You commit or prepare a commit                                           |
-
-- If a term that you need is missing from `CONTEXT.md`, say so.
 
 ## Writing
 
 - Write code comments and documents (`*.md`, doc comments, commit messages) in Simplified Technical English (ASD-STE100): short sentences, one meaning for each word, active voice, and simple verb tenses.
-- Use the terms in `CONTEXT.md` for domain words. Do not use a synonym.
 
 ## Tool usage
 
@@ -49,5 +45,5 @@ Do not print the full output of a check. Write it to a file and show only the ex
 
 ## Workflow
 
-- Feature workflow: `/grill-with-docs` (design) → `/to-spec` → `/to-tickets` → `/implement` → `/commit-ticket`, one ticket at a time. Skip the spec and tickets for a small feature.
-- Run `/clear` after each step. Exception: run `/to-spec` in the same session as `/grill-with-docs`.
+- Feature workflow: `/grilling` (design) → `/to-spec` → `/to-tickets` → `/implement` → `/commit-ticket`, one ticket at a time. Skip the spec and tickets for a small feature.
+- Run `/clear` after each step. Exception: run `/to-spec` in the same session as `/grilling`.

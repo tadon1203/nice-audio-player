@@ -72,7 +72,7 @@ describe("App", () => {
     await app.connection.connect();
 
     await vi.waitFor(() => expect(app.connection.state).toBe("ready"));
-    expect(app.player.snapshot).toEqual(stopped);
+    expect(app.player.state).toEqual(stopped);
     expect(app.appearance.artworkBackdrop).toBe(true);
   });
 });
