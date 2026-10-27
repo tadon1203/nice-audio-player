@@ -1,14 +1,17 @@
+import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it, vi } from "vitest";
-import { player } from "#lib/native/commands";
 import { type PlayerState } from "#lib/native/bindings";
-import { PlaybackClock } from "#lib/player/playback-clock.svelte";
-import { Player } from "#lib/player/player.svelte";
-import { NoticeCenter } from "./notice-center.svelte";
-import { PlaybackShortcuts } from "./playback-shortcuts";
-import { UserActionRunner } from "./user-action-runner.svelte";
+import { App } from "./app.svelte";
+import { handleShortcut } from "./keyboard-shortcuts";
 
 const mocks = vi.hoisted(() => ({ seek: vi.fn() }));
-vi.mock("#lib/native/commands", () => ({ player: { seek: mocks.seek } }));
+vi.mock("#lib/native/commands", () => ({
+  app: {},
+  appearance: {},
+  library: {},
+  lyrics: {},
+  player: { seek: mocks.seek },
+}));
 
 const playing = (positionMs: number): PlayerState => ({
   status: "playing",
@@ -50,33 +53,17 @@ const playing = (positionMs: number): PlayerState => ({
 
 describe("global seek shortcut", () => {
   it("sends whole milliseconds even though the running clock is fractional", async () => {
-    let now = 1_000;
-    const clock = new PlaybackClock({
-      now: (): number => now,
-      requestFrame: (): number => 0,
-      cancelFrame: (): undefined => undefined,
-    });
     mocks.seek.mockResolvedValue({ ok: true, value: null });
-    const playback = new Player(player, clock);
-    playback.acceptPlayback(playing(10_000));
-    now = 1_000 + 250.37;
-    expect(Number.isInteger(clock.estimate())).toBe(false);
+    const app = new App(new QueryClient());
+    app.player.acceptPlayback(playing(10_000));
+    vi.spyOn(app.player.clock, "estimate").mockReturnValue(10_250.37);
 
-    const notices = new NoticeCenter();
-    PlaybackShortcuts.handle(
-      new KeyboardEvent("keydown", { key: "ArrowRight" }),
-      playback,
-      new UserActionRunner(notices),
-      {
-        nowPlaying: { isOpen: false, open: vi.fn(), close: vi.fn(), toggle: vi.fn() },
-        queuePanel: { isOpen: false, toggle: vi.fn() },
-      },
-    );
+    handleShortcut(new KeyboardEvent("keydown", { key: "ArrowRight" }), app);
     await vi.waitFor(() => expect(mocks.seek).toHaveBeenCalledTimes(1));
 
     const [sent] = mocks.seek.mock.calls[0]!;
     expect(Number.isInteger(sent)).toBe(true);
     expect(sent).toBeGreaterThan(10_000);
-    expect(notices.at("dock")).toBeNull();
+    expect(app.notices.at("dock")).toBeNull();
   });
 });

@@ -9,8 +9,8 @@
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
-  import { AppServices } from "#lib/app/app-services.svelte";
-  import { WorkspaceScroll } from "#lib/app/workspace-scroll.svelte";
+  import { useApp } from "#lib/app/app.svelte";
+  import { WorkspaceScroll } from "#lib/app/scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
@@ -38,13 +38,13 @@
     readonly parentArtistId: ArtistId | null;
   } = $props();
 
-  const { actions, albums, player: playback, scrollMemory } = AppServices.current();
+  const { actions, library, player: playback, scroll: scrollOffsets } = useApp();
 
-  const details = new QueryResult(() => albums.detailsOptions(albumId));
-  const tracks = new PagedCollection(() => albums.tracksOptions(albumId));
+  const details = new QueryResult(() => library.albums.detailsOptions(albumId));
+  const tracks = new PagedCollection(() => library.albums.tracksOptions(albumId));
 
   // The list cache usually holds the album already, so the header can show it before the details.
-  const summary = $derived(details.data?.summary ?? albums.cachedSummary(albumId));
+  const summary = $derived(details.data?.summary ?? library.albums.cachedSummary(albumId));
   const title = $derived(summary === null ? "" : albumTitleLabel(summary.title));
   const artist = $derived(summary === null ? "" : artistNameLabel(summary.albumArtist.name));
 
@@ -56,12 +56,12 @@
   const playTrack = (trackId: TrackId): void =>
     actions.run(() => playback.start({ kind: "album", albumId }, trackId));
 
-  const scroll = new WorkspaceScroll(scrollMemory, {
+  const scroll = new WorkspaceScroll(scrollOffsets, {
     ready: (): boolean =>
       details.data !== undefined && !tracks.isPending && tracks.items.length > 0,
   });
 
-  export const snapshot = scrollMemory.detailSnapshot(scroll.capture, scroll.restore);
+  export const snapshot = scrollOffsets.detailSnapshot(scroll.capture, scroll.restore);
 </script>
 
 <WorkspaceScrollRegion viewportAttachment={scroll.attach} contentClass="py-8 pb-16">

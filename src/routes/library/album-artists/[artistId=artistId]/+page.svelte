@@ -6,8 +6,8 @@
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { artistNameLabel } from "#lib/library/unknown-name";
-  import { AppServices } from "#lib/app/app-services.svelte";
-  import { WorkspaceScroll } from "#lib/app/workspace-scroll.svelte";
+  import { useApp } from "#lib/app/app.svelte";
+  import { WorkspaceScroll } from "#lib/app/scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
   import CollectionSortControl from "#lib/ui/collection-sort-control.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
@@ -22,23 +22,23 @@
   import { CountFormat } from "#lib/utils/count-format";
   import AlbumTile from "../../album-tile.svelte";
 
-  const { actions, artists, libraryViews, player: playback, scrollMemory } = AppServices.current();
-  const view = libraryViews.artistAlbums;
+  const { actions, library, player: playback, scroll: scrollOffsets } = useApp();
+  const view = library.views.artistAlbums;
 
   const artistId = $derived(page.params.artistId ?? "");
 
-  const artistQuery = new QueryResult(() => artists.detailsOptions(artistId));
+  const artistQuery = new QueryResult(() => library.artists.detailsOptions(artistId));
   const albums = new PagedCollection(() =>
-    artists.albumsOptions({ artistId, sortKey: view.sortKey, direction: view.direction }),
+    library.artists.albumsOptions({ artistId, sortKey: view.sortKey, direction: view.direction }),
   );
 
-  const scroll = new WorkspaceScroll(scrollMemory, {
+  const scroll = new WorkspaceScroll(scrollOffsets, {
     resetKey: (): string => view.stateKey,
     ready: (): boolean =>
       artistQuery.data !== undefined && !albums.isPending && albums.items.length > 0,
   });
 
-  export const snapshot = scrollMemory.detailSnapshot(scroll.capture, scroll.restore);
+  export const snapshot = scrollOffsets.detailSnapshot(scroll.capture, scroll.restore);
 </script>
 
 <WorkspaceScrollRegion viewportAttachment={scroll.attach} contentClass="py-8 pb-16">

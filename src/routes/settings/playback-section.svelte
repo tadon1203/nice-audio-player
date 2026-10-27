@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type AppearancePatch } from "#lib/native/bindings";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
   import * as Select from "#lib/ui/shadcn/select/index.js";
@@ -9,14 +9,7 @@
 
   const DEFAULT_DEVICE = "default";
 
-  const {
-    player: playback,
-    session,
-    appearance,
-    actions,
-    notices,
-    outputDevices,
-  } = AppServices.current();
+  const { player: playback, connection, appearance, actions, notices, outputDevices } = useApp();
   const signalPath = new SignalPath();
 
   let deviceMenuOpen = $state(false);
@@ -83,7 +76,7 @@
           onOpenChange={listDevices}
         >
           <Select.Trigger
-            disabled={session.connection !== "ready"}
+            disabled={connection.state !== "ready"}
             aria-label={`Output device: ${outputLabel}`}
             appearance="inline-value"
           >

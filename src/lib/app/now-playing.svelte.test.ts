@@ -8,69 +8,75 @@ const mocks = vi.hoisted(() => ({
 vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
 vi.mock("$app/state", () => ({ page: mocks.page }));
 
-import { NowPlayingView } from "./now-playing-view.svelte";
+import { NowPlaying } from "./now-playing.svelte";
 
 beforeEach(() => {
   mocks.goto.mockClear();
   mocks.page.state = {};
 });
 
-describe("NowPlayingView", () => {
+describe("NowPlaying", () => {
   it("reads whether it is open from the page state", () => {
-    const view = new NowPlayingView();
-    expect(view.isOpen).toBe(false);
+    const nowPlaying = new NowPlaying();
+    expect(nowPlaying.isOpen).toBe(false);
     mocks.page.state = { nowPlaying: true };
-    expect(view.isOpen).toBe(true);
+    expect(nowPlaying.isOpen).toBe(true);
   });
 
-  it("opens by pushing a shallow entry at the same location", () => {
-    new NowPlayingView().open();
+  it("opens by pushing an entry at the same location", () => {
+    new NowPlaying().open();
 
     expect(mocks.goto).toHaveBeenCalledWith(mocks.page.url.href, {
       shallow: true,
+      replace: false,
       state: { nowPlaying: true },
-      persistState: true,
     });
   });
 
   it("does not push again when it is already open", () => {
     mocks.page.state = { nowPlaying: true };
-    new NowPlayingView().open();
+    new NowPlaying().open();
 
     expect(mocks.goto).not.toHaveBeenCalled();
   });
 
-  it("closes the entry it pushed with Back", () => {
+  it("closes with Back when there is an entry to go back to", () => {
     const back = vi.spyOn(history, "back").mockImplementation(() => undefined);
-    const view = new NowPlayingView();
-    view.open();
+    const length = vi.spyOn(history, "length", "get").mockReturnValue(2);
     mocks.page.state = { nowPlaying: true };
 
-    view.close();
+    new NowPlaying().close();
 
     expect(back).toHaveBeenCalledTimes(1);
+    expect(mocks.goto).not.toHaveBeenCalled();
     back.mockRestore();
+    length.mockRestore();
   });
 
-  it("closes by replacing the entry when it was reached by a reload", () => {
+  it("closes by replacing the entry when there is no entry to go back to", () => {
     const back = vi.spyOn(history, "back").mockImplementation(() => undefined);
+    const length = vi.spyOn(history, "length", "get").mockReturnValue(1);
     mocks.page.state = { nowPlaying: true };
 
-    new NowPlayingView().close();
+    new NowPlaying().close();
 
     expect(back).not.toHaveBeenCalled();
     expect(mocks.goto).toHaveBeenCalledWith(mocks.page.url.href, {
       shallow: true,
       replace: true,
       state: { nowPlaying: false },
-      persistState: true,
     });
     back.mockRestore();
+    length.mockRestore();
   });
 
   it("does nothing when closing while closed", () => {
-    new NowPlayingView().close();
+    const back = vi.spyOn(history, "back").mockImplementation(() => undefined);
 
+    new NowPlaying().close();
+
+    expect(back).not.toHaveBeenCalled();
     expect(mocks.goto).not.toHaveBeenCalled();
+    back.mockRestore();
   });
 });

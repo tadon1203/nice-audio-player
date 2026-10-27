@@ -1,6 +1,6 @@
 import { untrack } from "svelte";
 import { RetargetableSpring } from "#lib/ui/motion/retargetable-spring.svelte";
-import { AppServices } from "./app-services.svelte";
+import { useApp } from "./app.svelte";
 import { NowPlayingMotion } from "./now-playing-motion";
 
 /** The spring counts as stopped within this share of the distance it travels. */
@@ -15,14 +15,14 @@ export class NowPlayingTween {
   readonly #spring: RetargetableSpring;
 
   public constructor(whenClosed: number, whenOpen: number) {
-    const { nowPlaying, motion: budget } = AppServices.current();
+    const { nowPlaying, motion } = useApp();
     this.#spring = new RetargetableSpring(
       untrack(() => (nowPlaying.isOpen ? whenOpen : whenClosed)),
       { precision: Math.abs(whenOpen - whenClosed) * PRECISION_OF_SPAN },
     );
     $effect(() => {
       const open = nowPlaying.isOpen;
-      const reduced = budget.current === "reduced";
+      const reduced = motion.reduced;
       untrack(() => {
         this.#spring.duration = NowPlayingMotion.duration(open);
         this.#spring.set(open ? whenOpen : whenClosed, { instant: reduced });

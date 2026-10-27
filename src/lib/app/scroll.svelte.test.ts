@@ -1,5 +1,44 @@
-import { describe, expect, it } from "vitest";
-import { MAX_WAIT_FRAMES, WorkspaceScroll, type FrameScheduler } from "./workspace-scroll.svelte";
+import { describe, expect, it, vi } from "vitest";
+import {
+  MAX_WAIT_FRAMES,
+  ScrollOffsets,
+  WorkspaceScroll,
+  type FrameScheduler,
+} from "./scroll.svelte";
+
+describe("ScrollOffsets lists", () => {
+  it("recalls 0 for an unseen path and the last offset otherwise", () => {
+    const offsets = new ScrollOffsets();
+    expect(offsets.recallList("/library/never")).toBe(0);
+    offsets.rememberList("/library/albums", 120);
+    offsets.rememberList("/library/albums", 480);
+    expect(offsets.recallList("/library/albums")).toBe(480);
+    expect(offsets.recallList("/library/tracks")).toBe(0);
+  });
+
+  it("keeps each instance's offsets apart", () => {
+    const first = new ScrollOffsets();
+    const second = new ScrollOffsets();
+    first.rememberList("/library/albums", 300);
+    expect(second.recallList("/library/albums")).toBe(0);
+  });
+});
+
+describe("ScrollOffsets.detailSnapshot", () => {
+  it("reads the offset when the history entry is left and writes it back when restored", () => {
+    const offsets = new ScrollOffsets();
+    let offset = 640;
+    const write = vi.fn((next: number) => {
+      offset = next;
+    });
+    const snapshot = offsets.detailSnapshot(() => offset, write);
+
+    expect(snapshot.capture()).toBe(640);
+    snapshot.restore(90);
+    expect(write).toHaveBeenCalledWith(90);
+    expect(offset).toBe(90);
+  });
+});
 
 /** A scroll region whose scrollTop is clamped to its content, as in a browser. */
 function region(

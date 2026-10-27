@@ -1,13 +1,13 @@
 import type { Player } from "#lib/player/player.svelte";
 import type { Result } from "#lib/native/result";
-import type { NoticeCenter } from "./notice-center.svelte";
+import type { Notices } from "./user-actions.svelte";
 
 /** Clears the upcoming queue and offers to undo it. */
 export class ClearUpcoming {
   readonly #playback: Player;
-  readonly #notices: NoticeCenter;
+  readonly #notices: Notices;
 
-  public constructor(playback: Player, notices: NoticeCenter) {
+  public constructor(playback: Player, notices: Notices) {
     this.#playback = playback;
     this.#notices = notices;
   }

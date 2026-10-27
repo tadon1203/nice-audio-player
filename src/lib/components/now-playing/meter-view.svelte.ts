@@ -7,7 +7,7 @@ import { MeterFeed } from "#lib/meter/meter-feed.svelte";
 import { reduceMeterFrames } from "#lib/meter/meter-frames";
 import { MeterDraw } from "#lib/meter/meter-draw";
 import { Readout } from "#lib/meter/readout";
-import { AppServices } from "#lib/app/app-services.svelte";
+import { useApp } from "#lib/app/app.svelte";
 import { DocumentVisibility } from "#lib/ui/document-visibility.svelte";
 
 const NARROW_BELOW_PX = 512;
@@ -47,7 +47,7 @@ export class MeterView {
     left: ((Number(index) + 0.5) / BAND_COUNT) * 100,
   }));
 
-  readonly #services = AppServices.current();
+  readonly #app = useApp();
   readonly #visibility = new DocumentVisibility();
   readonly #active = $derived(!this.calm && this.#visibility.visible);
   readonly #feed: MeterFeed;
@@ -82,7 +82,7 @@ export class MeterView {
       // The loop sleeps once every Level bar and Peak cap is at the floor and wakes on the next frame.
       const loop = new DrawLoop(
         (elapsed) => {
-          const { player: playback } = this.#services;
+          const { player: playback } = this.#app;
           const input =
             playback.status === "playing"
               ? reduceMeterFrames(this.#feed.drain())
@@ -121,7 +121,7 @@ export class MeterView {
 
   /** Calm motion is on: the meters are stopped and show the floor. */
   public get calm(): boolean {
-    return this.#services.appearance.calmMotion === true;
+    return this.#app.appearance.calmMotion === true;
   }
 
   public get floorText(): string {

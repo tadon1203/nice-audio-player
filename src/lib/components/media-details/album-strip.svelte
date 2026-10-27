@@ -18,7 +18,7 @@
   import { Tracks } from "#lib/library/tracks";
   import { prefersReducedMotion } from "svelte/motion";
   import type { TransitionConfig } from "svelte/transition";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { Tooltip, TooltipContent, TooltipTrigger } from "#lib/ui/shadcn/tooltip";
   import { cn } from "#lib/utils/cn.js";
@@ -38,7 +38,7 @@
     onplaytrack: (id: TrackId) => void;
   } = $props();
 
-  const playback = AppServices.current().player;
+  const playback = useApp().player;
 
   const totalMs = $derived(tracks.reduce((sum, track) => sum + (track.durationMs ?? 0), 0));
   const states = $derived(SegmentStrip.states(tracks, activeTrackId));

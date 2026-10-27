@@ -2,7 +2,7 @@
   import TrackTable from "#lib/components/track-table/track-table.svelte";
   import { LibraryCatalog } from "#lib/library/library-catalog.svelte";
   import { TrackList } from "#lib/library/track-list";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 
   const meta = {
@@ -13,10 +13,9 @@
     searchPlaceholder: "Search tracks…",
   };
 
-  const services = AppServices.current();
-  const { player: playback, actions, libraryViews } = services;
-  const view = libraryViews.tracks;
-  const catalog = new LibraryCatalog(services.catalog, () => view.request, services.libraryState);
+  const { player: playback, actions, library } = useApp();
+  const view = library.views.tracks;
+  const catalog = new LibraryCatalog(library.catalog, () => view.request, library.state);
 </script>
 
 <LibraryWorkspace

@@ -1,6 +1,6 @@
 import { goto } from "$app/navigation";
 import { type TrackId } from "#lib/native/bindings";
-import type { AppServices } from "#lib/app/app-services.svelte";
+import type { App } from "#lib/app/app.svelte";
 import type { TrackTableRow } from "./track-columns";
 import { TrackRowStates } from "./track-row-states";
 
@@ -20,17 +20,17 @@ function isInteractiveTarget(event: Event): boolean {
  * component initialises; `rows` is read live.
  */
 export class TrackTableController {
-  readonly #services: AppServices;
+  readonly #app: App;
   readonly #rows: () => readonly TrackTableRow[];
   readonly #play: (trackId: TrackId) => void;
   #menuRow = $state<TrackTableRow | null>(null);
 
   public constructor(
-    services: AppServices,
+    app: App,
     rows: () => readonly TrackTableRow[],
     play: (trackId: TrackId) => void,
   ) {
-    this.#services = services;
+    this.#app = app;
     this.#rows = rows;
     this.#play = play;
   }
@@ -69,7 +69,7 @@ export class TrackTableController {
 
   /** Runs the row's action button: play, pause or resume. */
   public readonly runAction = (row: TrackTableRow): void => {
-    const { player: playback, actions } = this.#services;
+    const { player: playback, actions } = this.#app;
     const { action } = TrackRowStates.of(row, playback.activeTrackId, playback.status);
     if (action.kind === "play") this.#play(row.id);
     else if (action.kind === "pause") actions.run(() => playback.pause());
@@ -78,13 +78,13 @@ export class TrackTableController {
 
   /** Shows a track's file in Explorer. The Properties sheet uses it too. */
   public readonly revealTrack = (trackId: TrackId): void => {
-    const { actions, libraryTracks } = this.#services;
-    actions.run(() => libraryTracks.reveal(trackId));
+    const { actions, library } = this.#app;
+    actions.run(() => library.tracks.reveal(trackId));
   };
 
   /** Copies a track's file path to the clipboard; a refused copy is reported. */
   public readonly copyPath = (path: string): void => {
-    this.#services.actions.run(() => navigator.clipboard.writeText(path));
+    this.#app.actions.run(() => navigator.clipboard.writeText(path));
   };
 
   /** Shows the menu row's file in Explorer. */
@@ -106,20 +106,20 @@ export class TrackTableController {
 
   /** Opens an album or artist link. The links come from `Tracks.links`, built with resolve(). */
   public readonly navigate = (href: string): void => {
-    this.#services.actions.run(() => goto(href));
+    this.#app.actions.run(() => goto(href));
   };
 
   #enqueue(next: boolean): void {
     const row = this.#menuRow;
     if (row === null) return;
-    const { actions, player: playback } = this.#services;
+    const { actions, player: playback } = this.#app;
     actions.run(() => playback.playerEnqueueTrack(row.id, next));
   }
 
   #activate(trackId: TrackId): void {
     const row = this.#rows().find((candidate) => candidate.id === trackId);
     if (row === undefined) return;
-    const { player: playback, actions } = this.#services;
+    const { player: playback, actions } = this.#app;
     const { clickIntent } = TrackRowStates.of(row, playback.activeTrackId, playback.status);
     if (clickIntent === "play") this.#play(row.id);
     else if (clickIntent === "resume") actions.run(() => playback.resume());

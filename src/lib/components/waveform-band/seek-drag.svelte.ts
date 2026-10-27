@@ -1,5 +1,5 @@
 import { onDestroy } from "svelte";
-import { AppServices } from "#lib/app/app-services.svelte";
+import { useApp } from "#lib/app/app.svelte";
 import type { Result } from "#lib/native/result";
 
 /**
@@ -8,7 +8,7 @@ import type { Result } from "#lib/native/result";
  * reported. Construct during component initialization.
  */
 export class SeekDrag {
-  readonly #playback = AppServices.current().player;
+  readonly #playback = useApp().player;
   #preview = $state<number | null>(null);
   #release: (() => void) | null = null;
 

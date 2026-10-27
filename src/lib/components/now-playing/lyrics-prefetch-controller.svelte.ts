@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryClient } from "@tanstack/svelte-query";
-import { AppServices } from "#lib/app/app-services.svelte";
+import { useApp } from "#lib/app/app.svelte";
 
 /**
  * Fetches the lyrics of the playing track and the next one ahead of time, so Now Playing knows
@@ -8,13 +8,13 @@ import { AppServices } from "#lib/app/app-services.svelte";
  */
 export class LyricsPrefetchController {
   readonly #queryClient: QueryClient = useQueryClient();
-  readonly #services = AppServices.current();
+  readonly #app = useApp();
 
   public constructor() {
     // The playback and the queue are an external store, and each prefetch is a request, not state,
     // so this stays an effect.
     $effect(() => {
-      const { player: playback, lyrics } = this.#services;
+      const { player: playback, lyrics } = this.#app;
       const currentId = playback.item?.id ?? null;
       const nextId = playback.queue?.upcoming[0]?.id ?? null;
       for (const trackId of [currentId, nextId]) {

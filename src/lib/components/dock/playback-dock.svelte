@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { NowPlayingTween } from "#lib/app/now-playing-tween.svelte";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
   import { EDGE_PX, ROW_PX, SLOT_PX } from "./dock-metrics";
@@ -15,7 +15,7 @@
    * volume. The transport grid's side columns are equal, so the transport sits on the dock's true
    * centre whatever the two sides hold.
    */
-  const { player: playback, appearance, nowPlaying } = AppServices.current();
+  const { player: playback, appearance, nowPlaying } = useApp();
   // While Now Playing is open the waveform lives up there, so this slot animates shut.
   const slot = new NowPlayingTween(1, 0);
   const open = $derived(nowPlaying.isOpen);

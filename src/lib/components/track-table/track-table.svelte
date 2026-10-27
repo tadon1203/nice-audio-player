@@ -2,7 +2,7 @@
   import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
   import { Tracks } from "#lib/library/tracks";
   import { type SortDirection, type TrackSortKey, type TrackId } from "#lib/native/bindings";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
   import {
@@ -48,11 +48,11 @@
     onplaytrack: (id: TrackId) => void;
   } = $props();
 
-  const services = AppServices.current();
-  const { player: playback } = services;
+  const app = useApp();
+  const { player: playback } = app;
   const columns = $derived(TrackColumns.of(layout));
   const controller = new TrackTableController(
-    services,
+    app,
     () => rows,
     (id) => onplaytrack(id),
   );

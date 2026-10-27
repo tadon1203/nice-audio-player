@@ -4,10 +4,10 @@
   import Square from "@lucide/svelte/icons/square";
   import X from "@lucide/svelte/icons/x";
   import { windowChrome } from "#lib/native/desktop";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
 
-  const { actions } = AppServices.current();
+  const { actions } = useApp();
   let maximized = $state(false);
 
   $effect(() =>

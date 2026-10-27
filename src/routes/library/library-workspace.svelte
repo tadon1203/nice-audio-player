@@ -8,8 +8,8 @@
   } from "#lib/library/library-workspace";
   import { errorMessage } from "#lib/native/messages";
   import { labelAt, skipTo } from "#lib/library/letter-index";
-  import { AppServices } from "#lib/app/app-services.svelte";
-  import { WorkspaceScroll } from "#lib/app/workspace-scroll.svelte";
+  import { useApp } from "#lib/app/app.svelte";
+  import { WorkspaceScroll } from "#lib/app/scroll.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
   import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";
@@ -49,9 +49,9 @@
 
   let topIndex = $state(0);
 
-  const { actions, scrollMemory } = AppServices.current();
+  const { actions, scroll: scrollOffsets } = useApp();
 
-  const workspaceScroll = new WorkspaceScroll(scrollMemory, {
+  const workspaceScroll = new WorkspaceScroll(scrollOffsets, {
     key: (): string => scrollKey,
     resetKey: (): string => stateKey,
     ready: (): boolean => catalog.items.length > 0,

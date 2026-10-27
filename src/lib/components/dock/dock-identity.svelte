@@ -4,7 +4,7 @@
   import { goto } from "$app/navigation";
   import { Tracks } from "#lib/library/tracks";
   import { PlaybackFailure } from "#lib/player/playback-failure";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { errorMessage } from "#lib/native/messages";
   import Artwork from "#lib/ui/artwork.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
@@ -18,16 +18,9 @@
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
 
-  const {
-    player: playback,
-    session,
-    motion: budget,
-    notices,
-    actions,
-    nowPlaying,
-  } = AppServices.current();
+  const { player: playback, connection, motion, notices, actions, nowPlaying } = useApp();
   // A failed startup shows its reason here, since there is no playback state to report on.
-  const startupError = $derived(session.connection === "failed" ? session.startupError : null);
+  const startupError = $derived(connection.state === "failed" ? connection.startupError : null);
   const notice = $derived(
     startupError !== null
       ? { kind: "error" as const, message: errorMessage(startupError) }
@@ -46,7 +39,7 @@
    */
   function slide(_node: Element, { entering }: { entering: boolean }): TransitionConfig {
     const direction = playback.transitionDirection === "backward" ? -1 : 1;
-    return SvelteSlide.transition("move", budget.current === "reduced", {
+    return SvelteSlide.transition("move", motion.reduced, {
       x: (entering ? direction : -direction) * SLIDE_PX,
     });
   }
@@ -170,7 +163,7 @@
               </Tooltip.Root>
               <Button
                 type="button"
-                onclick={() => notices.dismiss("dock", "error")}
+                onclick={() => notices.dismissError("dock")}
                 variant="text"
                 size="inline"
                 class="font-normal"
@@ -217,7 +210,7 @@
               </span>
               <Button
                 type="button"
-                onclick={() => notices.dismiss("dock", "skipped")}
+                onclick={() => notices.dismissSkipped()}
                 variant="text"
                 size="inline"
                 class="font-normal"

@@ -3,7 +3,7 @@
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { TrackLyrics } from "#lib/lyrics/track-lyrics.svelte";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import { cn } from "#lib/utils/cn.js";
   import { AnchorColumn } from "./anchor-column";
@@ -22,7 +22,7 @@
    */
   let { trackId, class: className }: { trackId: TrackId | null; class?: string } = $props();
 
-  const { player: playback, lyrics: lyricsRepository, lyricsWaveformLink } = AppServices.current();
+  const { player: playback, lyrics: lyricsRepository, nowPlaying } = useApp();
   const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
   const found = $derived(lyrics.current?.status === "found" ? lyrics.current : null);
   const content = $derived(found?.content ?? null);
@@ -37,9 +37,9 @@
   const anchor = new AnchorPadding();
 
   const hoveredIndex = $derived(
-    lyricsWaveformLink.hoveredWaveformMs === null || timedLines === null
+    nowPlaying.waveformHoveredMs === null || timedLines === null
       ? -1
-      : LyricsLines.findCurrentLineIndex(timedLines, lyricsWaveformLink.hoveredWaveformMs),
+      : LyricsLines.findCurrentLineIndex(timedLines, nowPlaying.waveformHoveredMs),
   );
 
   // The spacers change size when the panel is measured or resized: keep the present on the anchor.
@@ -52,10 +52,11 @@
     const lines = timedLines;
     const index = sync.index;
     const durationMs = playback.durationMs;
-    lyricsWaveformLink.setActiveSpan(
-      lines !== null && index >= 0 ? LyricsLines.lineSpan(lines, index, durationMs) : null,
-    );
-    return (): void => lyricsWaveformLink.setActiveSpan(null);
+    nowPlaying.lyricsActiveSpan =
+      lines !== null && index >= 0 ? LyricsLines.lineSpan(lines, index, durationMs) : null;
+    return (): void => {
+      nowPlaying.lyricsActiveSpan = null;
+    };
   });
 </script>
 

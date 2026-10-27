@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { UpcomingItems } from "#lib/player/upcoming-items.svelte";
   import { SvelteFlip } from "#lib/ui/motion/svelte-flip";
   import { TokenTiming } from "#lib/ui/motion/token-timing";
@@ -21,7 +21,7 @@
     cascading: boolean;
   } = $props();
 
-  const { player: playback, actions } = AppServices.current();
+  const { player: playback, actions } = useApp();
 
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
 
@@ -51,8 +51,8 @@
     }),
   );
 
-  const budget = AppServices.current().motion;
-  const reduced = $derived(budget.current === "reduced");
+  const motion = useApp().motion;
+  const reduced = $derived(motion.reduced);
 
   /** Which edge of row `index` shows the drop line for insertion `slot`, if any. */
   function dropMarker(slot: number | null, index: number): "before" | "after" | undefined {

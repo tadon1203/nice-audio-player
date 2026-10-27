@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { NowPlayingMotion } from "#lib/app/now-playing-motion";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { NowPlayingTransitions } from "./now-playing-transitions";
@@ -16,11 +16,11 @@
    */
   let { children }: { children?: Snippet } = $props();
 
-  const { motion: budget, nowPlaying } = AppServices.current();
+  const { motion, nowPlaying } = useApp();
 
   function lift(opening: boolean) {
     return (_node: Element): TransitionConfig => {
-      const reduced = budget.current === "reduced";
+      const reduced = motion.reduced;
       const { duration, easing } = SvelteMotion.of("large");
       return {
         duration: opening || reduced ? duration : duration * NowPlayingMotion.EXIT_SPEED,

@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type BackendMessage, type LibraryState, type PlayerState } from "#lib/native/bindings";
-import { AppServices } from "./app-services.svelte";
+import { App } from "./app.svelte";
 
 const mocks = vi.hoisted(() => ({ connect: vi.fn() }));
 vi.mock("#lib/native/commands", () => ({
@@ -52,24 +52,25 @@ beforeEach(() => {
   });
 });
 
-describe("AppServices", () => {
-  it("builds the session, playback, appearance, and motion services from the area objects", () => {
-    const services = new AppServices(new QueryClient());
+describe("App", () => {
+  it("builds the areas from the native area objects", () => {
+    const app = new App(new QueryClient());
 
-    expect(services.session.connection).toBe("connecting");
-    expect(services.player).toBeDefined();
-    expect(services.appearance.artworkBackdrop).toBeNull();
-    expect(services.motion.current).toBeDefined();
-    expect(services.queryClient).toBeInstanceOf(QueryClient);
+    expect(app.connection.state).toBe("connecting");
+    expect(app.player).toBeDefined();
+    expect(app.appearance.artworkBackdrop).toBeNull();
+    expect(app.library.state.snapshot).toBeNull();
+    expect(app.queuePanelOpen).toBe(false);
+    expect(app.queryClient).toBeInstanceOf(QueryClient);
   });
 
-  it("connects the session, and the initial state reaches the services", async () => {
-    const services = new AppServices(new QueryClient());
+  it("connects, and the initial state reaches the areas", async () => {
+    const app = new App(new QueryClient());
 
-    services.session.connect();
+    app.connection.connect();
 
-    await vi.waitFor(() => expect(services.session.connection).toBe("ready"));
-    expect(services.player.snapshot).toEqual(stopped);
-    expect(services.appearance.artworkBackdrop).toBe(true);
+    await vi.waitFor(() => expect(app.connection.state).toBe("ready"));
+    expect(app.player.snapshot).toEqual(stopped);
+    expect(app.appearance.artworkBackdrop).toBe(true);
   });
 });

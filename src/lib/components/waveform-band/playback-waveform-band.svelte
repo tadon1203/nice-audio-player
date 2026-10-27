@@ -5,7 +5,7 @@
 
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import WaveformSeek from "#lib/ui/waveform/waveform-seek.svelte";
   import { cn } from "#lib/utils/cn.js";
@@ -33,7 +33,7 @@
     timeClass?: string;
   } = $props();
 
-  const { player: playback, motion: budget, actions, lyricsWaveformLink } = AppServices.current();
+  const { player: playback, motion, actions, nowPlaying } = useApp();
   const trackKey = $derived(playback.item?.id ?? "none");
   const canSeek = $derived(playback.isActive && playback.durationMs !== null);
   const waveform = $derived(showWaveform ? playback.waveform : null);
@@ -88,15 +88,15 @@
       durationMs={playback.durationMs}
       drive={playback.clock.drive}
       sweepBars={showWaveform}
-      stillBars={budget.current !== "full"}
+      stillBars={!motion.breathing}
       lineOnly={!showWaveform}
       disabled={!canSeek}
       onInput={seekDrag.input}
       onCancel={seekDrag.cancel}
       onCommit={(value) => actions.run(() => seekDrag.commit(value))}
-      activeSpan={lyricsWaveformLink.activeSpan}
-      hoveredLineSpan={lyricsWaveformLink.hoveredLineSpan}
-      onHoverPositionChange={(ms) => lyricsWaveformLink.setHoveredWaveformMs(ms)}
+      activeSpan={nowPlaying.lyricsActiveSpan}
+      hoveredLineSpan={nowPlaying.lyricsHoveredLineSpan}
+      onHoverPositionChange={(ms) => (nowPlaying.waveformHoveredMs = ms)}
       class="flex-1"
     />
   {/key}

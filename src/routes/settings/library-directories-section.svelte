@@ -2,7 +2,7 @@
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
   import { app } from "#lib/native/commands";
   import { type LibraryDirectory } from "#lib/native/bindings";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import LoadingStatus from "#lib/ui/loading-status.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
@@ -25,16 +25,16 @@
   import ScanResult from "./scan-result.svelte";
   import ScanRunning from "./scan-running.svelte";
 
-  const { actions, libraryDirectories, notices, libraryState } = AppServices.current();
+  const { actions, library, notices } = useApp();
   const scanTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
   let removeTarget = $state<LibraryDirectory | null>(null);
   let resetOpen = $state(false);
   let deleteMissingOpen = $state(false);
 
-  const directories = $derived(libraryState.snapshot?.directories ?? []);
+  const directories = $derived(library.state.snapshot?.directories ?? []);
   const missingTotal = $derived(directories.reduce((n, r) => n + r.missingCount, 0));
-  const scan = $derived(libraryState.snapshot?.scan ?? null);
+  const scan = $derived(library.state.snapshot?.scan ?? null);
   const scanRunning = $derived(scan?.status === "running");
   /** A Library command is in flight: its controls wait for it, so one request is sent at a time. */
   const busy = $derived(actions.isRunning("library"));
@@ -51,7 +51,7 @@
     <div class="flex max-w-sm flex-col items-end gap-2">
       <Button
         type="button"
-        onclick={() => actions.run(() => libraryDirectories.add(), "library")}
+        onclick={() => actions.run(() => library.directories.add(), "library")}
         disabled={scanRunning || busy}
       >
         <FolderPlus data-icon="inline-start" aria-hidden="true" />
@@ -80,7 +80,7 @@
     <ScanRunning {scan} />
   {/if}
 
-  {#if libraryState.snapshot === null}
+  {#if library.state.snapshot === null}
     <LoadingStatus>Loading library directories…</LoadingStatus>
   {:else if directories.length === 0}
     <EmptyStatus
@@ -125,7 +125,7 @@
                   () => directory.enabled,
                   (checked) =>
                     actions.run(
-                      () => libraryDirectories.setEnabled(directory.id, checked),
+                      () => library.directories.setEnabled(directory.id, checked),
                       "library",
                     )
                 }
@@ -206,14 +206,14 @@
   <ResetLibraryDialog
     open={resetOpen}
     onOpenChange={(open) => (resetOpen = open)}
-    onConfirm={() => actions.run(() => libraryDirectories.resetAndRescan(), "library")}
+    onConfirm={() => actions.run(() => library.directories.resetAndRescan(), "library")}
   />
 
   <DeleteMissingDialog
     open={deleteMissingOpen}
     count={missingTotal}
     onOpenChange={(open) => (deleteMissingOpen = open)}
-    onConfirm={() => actions.run(() => libraryDirectories.deleteMissing(), "library")}
+    onConfirm={() => actions.run(() => library.directories.deleteMissing(), "library")}
   />
 
   <RemoveLibraryDirectoryDialog
@@ -221,6 +221,7 @@
     onOpenChange={(open) => {
       if (!open) removeTarget = null;
     }}
-    onConfirm={(directory) => actions.run(() => libraryDirectories.remove(directory.id), "library")}
+    onConfirm={(directory) =>
+      actions.run(() => library.directories.remove(directory.id), "library")}
   />
 </section>

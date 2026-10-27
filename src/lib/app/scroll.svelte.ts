@@ -1,6 +1,6 @@
 import type { Attachment } from "svelte/attachments";
 import { untrack } from "svelte";
-import type { ScrollMemory } from "./scroll-memory";
+import type { Snapshot } from "@sveltejs/kit";
 
 /** How long the letter index stays after the last scroll. */
 const INDEX_HOLD_MS = 800;
@@ -20,6 +20,29 @@ const browserFrames: FrameScheduler = {
 
 type ScrollMetrics = Pick<HTMLElement, "scrollHeight" | "clientHeight" | "scrollTop">;
 
+/**
+ * Scroll positions for the workspace. Library lists are keyed by path: leaving Albums for Tracks
+ * and coming back lands where the user was. Detail pages are keyed by history entry instead
+ * (SvelteKit's `snapshot`), because the same album opened twice is two different visits.
+ */
+export class ScrollOffsets {
+  readonly #lists = new Map<string, number>();
+
+  public rememberList(path: string, offset: number): void {
+    this.#lists.set(path, offset);
+  }
+
+  /** 0 (the top) for a view that has never been scrolled. */
+  public recallList(path: string): number {
+    return this.#lists.get(path) ?? 0;
+  }
+
+  /** For SvelteKit `snapshot` on a detail page: `read` leaves the entry, `write` returns to it. */
+  public detailSnapshot(read: () => number, write: (offset: number) => void): Snapshot<number> {
+    return { capture: read, restore: write };
+  }
+}
+
 export interface WorkspaceScrollOptions {
   /** Whether the content is laid out enough to restore into. */
   ready?: () => boolean;
@@ -35,25 +58,23 @@ export interface WorkspaceScrollOptions {
  * is scrolling. Attach `attach` to the region's viewport. Construct during component initialization.
  */
 export class WorkspaceScroll {
-  readonly #memory: ScrollMemory;
+  readonly #offsets: ScrollOffsets;
   readonly #options: WorkspaceScrollOptions;
   #viewport = $state.raw<HTMLElement | null>(null);
   #scrolling = $state(false);
-  // Bumped by `restore` so the apply effect runs again.
-  #requests = $state(0);
-  #pending: number | null;
+  // The offset to apply once the region can reach it. A `pending` change reruns the apply effect.
+  #pending = $state<number | null>(null);
   #cancel: (() => void) | null = null;
   #previousReset: string | null = null;
 
-  public constructor(memory: ScrollMemory, options: WorkspaceScrollOptions) {
-    this.#memory = memory;
+  public constructor(offsets: ScrollOffsets, options: WorkspaceScrollOptions) {
+    this.#offsets = offsets;
     this.#options = options;
-    this.#pending = options.key ? memory.recallList(untrack(options.key)) : null;
+    this.#pending = options.key ? offsets.recallList(untrack(options.key)) : null;
 
     // Apply the pending offset once, when the region exists and its content is ready. The cancel
     // handle is not released by this effect re-running, only by a new restore, a reset or teardown.
     $effect(() => {
-      void this.#requests;
       const element = this.#viewport;
       const isReady = (options.ready ?? ((): true => true))();
       if (this.#pending === null || element === null || !isReady) return;
@@ -75,7 +96,7 @@ export class WorkspaceScroll {
         this.#pending = null;
         this.#viewport?.scrollTo({ top: 0 });
         const key = options.key?.();
-        if (key !== undefined) memory.rememberList(key, 0);
+        if (key !== undefined) offsets.rememberList(key, 0);
       });
     });
 
@@ -88,7 +109,7 @@ export class WorkspaceScroll {
     let hold: ReturnType<typeof setTimeout> | undefined;
     const onScroll = (): void => {
       const key = this.#options.key?.();
-      if (key !== undefined) this.#memory.rememberList(key, element.scrollTop);
+      if (key !== undefined) this.#offsets.rememberList(key, element.scrollTop);
       this.#scrolling = true;
       clearTimeout(hold);
       hold = setTimeout(() => (this.#scrolling = false), INDEX_HOLD_MS);
@@ -114,7 +135,6 @@ export class WorkspaceScroll {
     this.#cancel?.();
     this.#cancel = null;
     this.#pending = offset;
-    this.#requests++;
   };
 
   /**

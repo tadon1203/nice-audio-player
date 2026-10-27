@@ -8,7 +8,7 @@
   import { timeStateClass } from "#lib/ui/time-state";
   import { Button } from "#lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { SvelteFlip } from "#lib/ui/motion/svelte-flip";
   /** The `animate:` of a row: a directive takes a name, not a member. */
   const flipRow = SvelteFlip.motion;
@@ -31,7 +31,8 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const { player: playback, queuePanel } = AppServices.current();
+  const app = useApp();
+  const { player: playback } = app;
   const actions = new NowPlayingActions();
   const history = $derived(playback.queue?.history ?? []);
   const current = $derived(playback.queue?.current ?? null);
@@ -122,7 +123,7 @@
         <div role="listitem" class="pl-20">
           <Button
             type="button"
-            onclick={() => queuePanel.open()}
+            onclick={() => (app.queuePanelOpen = true)}
             variant="text"
             size="compact"
             class="font-normal"

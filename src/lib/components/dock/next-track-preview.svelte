@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
   import { cn } from "#lib/utils/cn.js";
@@ -20,8 +20,8 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const playback = AppServices.current().player;
-  const budget = AppServices.current().motion;
+  const playback = useApp().player;
+  const motion = useApp().motion;
   let inLastSeconds = $state(false);
 
   // `$effect` stays: the clock boundary is torn down when the track or status changes, and the
@@ -54,7 +54,7 @@
   );
 
   const slideIn = (_node: Element): TransitionConfig =>
-    SvelteSlide.transition("move", budget.current !== "full", {
+    SvelteSlide.transition("move", !motion.breathing, {
       x: SLIDE_PX,
       opacity: SHOWN_OPACITY,
     });

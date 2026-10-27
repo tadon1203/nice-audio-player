@@ -1,6 +1,6 @@
 <script lang="ts">
   import { QueryResult } from "#lib/library/query-result.svelte";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { GlowContrast } from "#lib/ui/artwork-glow/glow-contrast";
 
   /**
@@ -10,9 +10,9 @@
    * decides when the artwork's color shows up. The color is lightened to stay readable over the brightest Artwork glow.
    * Follows the `Artwork backdrop` preference: with the backdrop off there is no artwork color.
    */
-  const { player: playback, appearance, catalog } = AppServices.current();
+  const { player: playback, appearance, library } = useApp();
   const artworkColor = new QueryResult(() =>
-    catalog.accentOptions(playback.item?.artwork?.path ?? null),
+    library.catalog.accentOptions(playback.item?.artwork?.path ?? null),
   );
   const accent = $derived(
     appearance.artworkBackdrop ? GlowContrast.readableAccent(artworkColor.data ?? null) : null,

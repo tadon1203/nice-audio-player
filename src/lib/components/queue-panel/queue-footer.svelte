@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { ClearUpcoming } from "#lib/app/clear-upcoming.svelte";
   import { Button } from "#lib/ui/shadcn/button";
 
-  const { player: playback, actions, notices } = AppServices.current();
+  const { player: playback, actions, notices } = useApp();
   const clearUpcoming = new ClearUpcoming(playback, notices);
 
   const queue = $derived(playback.queue);

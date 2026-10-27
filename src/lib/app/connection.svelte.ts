@@ -1,52 +1,31 @@
-import {
-  type Appearance as AppearanceValue,
-  type BackendMessage,
-  type CommandError,
-  type LibraryState,
-  type PlaybackPosition,
-  type PlaybackWaveform,
-  type PlayerState,
-  type QueueState,
-} from "#lib/native/bindings";
-import type { app } from "#lib/native/commands";
+import { type BackendMessage, type CommandError } from "#lib/native/bindings";
+import type { app as appCommands } from "#lib/native/commands";
 import { countE2e } from "./e2e-counts";
+import type { App } from "./app.svelte";
 
 export type ConnectionState = "connecting" | "ready" | "failed";
 
 /** The state kinds the Backend sends on connect: the connection is ready once each has arrived. */
 const STATE_KINDS = ["player", "queue", "library", "waveform", "appearance"] as const;
 
-/** Where `NativeSession` sends each message. Method types only, so tests pass small fakes. */
-export interface SessionTargets {
-  readonly playback: {
-    acceptPlayback(state: PlayerState): void;
-    acceptQueue(state: QueueState): void;
-    acceptWaveform(waveform: PlaybackWaveform | null): void;
-    acceptPosition(position: PlaybackPosition): void;
-  };
-  readonly appearance: { accept(state: AppearanceValue): void };
-  readonly library: { accept(state: LibraryState): void };
-  readonly notices: { noteSkipped(title: string | null): void };
-}
-
-/** The one place that runs the connect procedure. */
-export class NativeSession {
-  readonly #app: typeof app;
-  readonly #targets: SessionTargets;
+/** The one place that runs the connect procedure and routes every pushed message to its area. */
+export class Connection {
+  readonly #commands: typeof appCommands;
+  readonly #app: App;
   readonly #arrived = new Set<string>();
-  #connection = $state.raw<ConnectionState>("connecting");
+  #state = $state.raw<ConnectionState>("connecting");
   #startupError = $state.raw<CommandError | null>(null);
 
-  public constructor(appCommands: typeof app, targets: SessionTargets) {
-    this.#app = appCommands;
-    this.#targets = targets;
+  public constructor(commands: typeof appCommands, app: App) {
+    this.#commands = commands;
+    this.#app = app;
   }
 
-  public get connection(): ConnectionState {
-    return this.#connection;
+  public get state(): ConnectionState {
+    return this.#state;
   }
 
-  /** Why the connection failed, while `connection` is `failed`; the Renderer shows it. */
+  /** Why the connection failed, while `state` is `failed`; the Renderer shows it. */
   public get startupError(): CommandError | null {
     return this.#startupError;
   }
@@ -62,11 +41,11 @@ export class NativeSession {
     const fail = (error: CommandError): void => {
       if (!active) return;
       this.#startupError = error;
-      this.#connection = "failed";
+      this.#state = "failed";
     };
 
-    this.#connection = "connecting";
-    void this.#app
+    this.#state = "connecting";
+    void this.#commands
       .connect((message) => {
         if (active) this.#route(message);
       })
@@ -84,25 +63,25 @@ export class NativeSession {
   #route(message: BackendMessage): void {
     switch (message.kind) {
       case "player":
-        this.#targets.playback.acceptPlayback(message.value);
+        this.#app.player.acceptPlayback(message.value);
         break;
       case "queue":
-        this.#targets.playback.acceptQueue(message.value);
+        this.#app.player.acceptQueue(message.value);
         break;
       case "library":
-        this.#targets.library.accept(message.value);
+        this.#app.library.state.accept(message.value);
         break;
       case "waveform":
-        this.#targets.playback.acceptWaveform(message.value);
+        this.#app.player.acceptWaveform(message.value);
         break;
       case "appearance":
-        this.#targets.appearance.accept(message.value);
+        this.#app.appearance.accept(message.value);
         break;
       case "position":
-        this.#targets.playback.acceptPosition(message.value);
+        this.#app.player.acceptPosition(message.value);
         return;
       case "trackSkipped":
-        this.#targets.notices.noteSkipped(message.value.title);
+        this.#app.notices.noteSkipped(message.value.title);
         return;
     }
     this.#noteArrived(message.kind);
@@ -111,10 +90,10 @@ export class NativeSession {
   /** Counts a state message, and marks the connection ready once every state kind has arrived. */
   #noteArrived(kind: (typeof STATE_KINDS)[number]): void {
     countE2e("stateMessages");
-    if (this.#connection === "ready") return;
+    if (this.#state === "ready") return;
     this.#arrived.add(kind);
     if (STATE_KINDS.every((stateKind) => this.#arrived.has(stateKind))) {
-      this.#connection = "ready";
+      this.#state = "ready";
       // Counted once every state has arrived, so a count says the backend answered.
       countE2e("connects");
     }

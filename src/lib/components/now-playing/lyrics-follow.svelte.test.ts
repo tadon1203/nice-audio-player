@@ -26,10 +26,10 @@ vi.mock("#lib/ui/motion/retargetable-spring.svelte", () => ({
     public stop(): void {}
   },
 }));
-vi.mock("#lib/app/app-services.svelte", () => ({
-  AppServices: {
-    current: (): { motion: { current: string } } => ({ motion: { current: "full" } }),
-  },
+vi.mock("#lib/app/app.svelte", () => ({
+  useApp: (): { motion: { reduced: boolean; breathing: boolean } } => ({
+    motion: { reduced: false, breathing: true },
+  }),
 }));
 
 const LINE_COUNT = 40;

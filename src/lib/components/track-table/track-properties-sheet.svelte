@@ -2,7 +2,7 @@
   import { type TrackId } from "#lib/native/bindings";
   import { errorMessage } from "#lib/native/messages";
   import { QueryResult } from "#lib/library/query-result.svelte";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
   import {
     Sheet,
@@ -31,8 +31,8 @@
     oncopy: (path: string) => void;
   } = $props();
 
-  const { catalog } = AppServices.current();
-  const query = new QueryResult(() => catalog.trackPropertiesOptions(trackId));
+  const { library } = useApp();
+  const query = new QueryResult(() => library.catalog.trackPropertiesOptions(trackId));
   const properties = $derived(query.data);
 
   const orNull = <T,>(value: T | null, format: (value: T) => string): string | null =>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { type Lyrics, type QueueItem } from "#lib/native/bindings";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import KineticText from "#lib/ui/kinetic-text/kinetic-text.svelte";
   import { SLEEVE_RADIUS, SharedElement, sharedKey } from "#lib/ui/motion/shared-element";
@@ -24,7 +24,7 @@
     lyrics: Lyrics | null;
   } = $props();
 
-  const { player: playback, nowPlaying } = AppServices.current();
+  const { player: playback, nowPlaying } = useApp();
   // The title wipes in on track changes, but not when Now Playing first opens.
   const openedOn = untrack(() => item?.queueItemId);
   const changedSinceOpen = $derived(item?.queueItemId !== openedOn);

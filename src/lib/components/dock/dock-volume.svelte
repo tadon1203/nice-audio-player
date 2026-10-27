@@ -3,7 +3,7 @@
   import Music2 from "@lucide/svelte/icons/music-2";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { VolumeStep } from "#lib/player/volume-step";
   import { SpringCurve } from "#lib/ui/motion/spring-curve";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
@@ -18,15 +18,9 @@
    * readout. The signal path hangs below this row, out of flow, so it never pulls the row off the
    * transport's centre line.
    */
-  const {
-    player: playback,
-    session,
-    motion: budget,
-    actions,
-    nowPlaying,
-    queuePanel,
-  } = AppServices.current();
-  const ready = $derived(session.connection === "ready");
+  const app = useApp();
+  const { player: playback, connection, motion, actions, nowPlaying } = app;
+  const ready = $derived(connection.state === "ready");
   const readout = $derived(VolumeStep.formatDb(playback.volume, playback.muted));
 
   // Dragging the slider tracks the pointer 1:1; only the wheel and mute roll the readout.
@@ -40,7 +34,7 @@
     const atFloor = event.deltaY > 0 && (playback.volume <= 0 || playback.muted);
     if (atCeiling || atFloor) {
       // Under reduced motion there is nothing to nudge; the readout already says it is at its end.
-      if (budget.current === "reduced") return;
+      if (motion.reduced) return;
       const dx = atCeiling ? 2 : -2;
       readoutNode?.animate(
         [
@@ -84,8 +78,8 @@
       variant="quiet"
       aria-label="Queue"
       title="Queue"
-      aria-pressed={queuePanel.isOpen}
-      onclick={() => queuePanel.toggle()}
+      aria-pressed={app.queuePanelOpen}
+      onclick={() => (app.queuePanelOpen = !app.queuePanelOpen)}
     >
       <List aria-hidden="true" />
     </Button>

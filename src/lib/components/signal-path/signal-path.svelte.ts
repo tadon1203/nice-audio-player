@@ -1,5 +1,5 @@
 import { AudioFormatText } from "#lib/utils/audio-format-text";
-import { AppServices } from "#lib/app/app-services.svelte";
+import { useApp } from "#lib/app/app.svelte";
 import {
   PlaybackTechnicalStatus,
   type PlaybackSignalPath,
@@ -11,7 +11,7 @@ import { PlaybackSnapshots } from "#lib/player/playback-snapshots";
  * component initialization; read `current` where it is shown.
  */
 export class SignalPath {
-  readonly #playback = AppServices.current().player;
+  readonly #playback = useApp().player;
   readonly #session = $derived(PlaybackSnapshots.session(this.#playback.snapshot));
 
   readonly #current = $derived.by<PlaybackSignalPath | null>(() => {

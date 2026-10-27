@@ -14,7 +14,7 @@
   import Play from "@lucide/svelte/icons/play";
   import type { Attachment } from "svelte/attachments";
   import { type LyricsTimedLine } from "#lib/native/bindings";
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import TimePresentation from "#lib/ui/time-presentation.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
@@ -43,7 +43,7 @@
     attach: Attachment<HTMLElement>;
   } = $props();
 
-  const { lyricsWaveformLink } = AppServices.current();
+  const { nowPlaying } = useApp();
   const actions = new NowPlayingActions();
 
   const line = $derived(lines[index]!);
@@ -65,8 +65,8 @@
     aria-label={`Seek to ${startLabel}`}
     onclick={() => actions.seek(line.startMs)}
     onpointerenter={() =>
-      lyricsWaveformLink.setHoveredLineSpan(LyricsLines.lineSpan(lines, index, durationMs))}
-    onpointerleave={() => lyricsWaveformLink.setHoveredLineSpan(null)}
+      (nowPlaying.lyricsHoveredLineSpan = LyricsLines.lineSpan(lines, index, durationMs))}
+    onpointerleave={() => (nowPlaying.lyricsHoveredLineSpan = null)}
     variant="bare"
     size="inline"
     class="relative w-16 shrink-0 justify-end text-right tabular-nums font-normal"

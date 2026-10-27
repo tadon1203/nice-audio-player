@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppServices } from "#lib/app/app-services.svelte";
+  import { useApp } from "#lib/app/app.svelte";
   import { GlowBreath } from "#lib/player/glow-breath";
   import { Loudness } from "#lib/player/loudness";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
@@ -12,16 +12,16 @@
    * strength). It follows the playback clock through compositor keyframes, so nothing re-renders with time. The
    * breathing is off under calm or reduced motion, and then nothing here runs per frame.
    */
-  const playback = AppServices.current().player;
-  const appearance = AppServices.current().appearance;
-  const budget = AppServices.current().motion;
+  const playback = useApp().player;
+  const appearance = useApp().appearance;
+  const appMotion = useApp().motion;
 
   /** The level a paused Artwork glow rests at: neither dimmed nor at full. */
   const REST_LEVEL = 0.5;
 
   const item = $derived(playback.item);
-  // The Artwork glow breathes by itself, so only the full budget allows it.
-  const breathing = $derived(budget.current === "full");
+  // The Artwork glow breathes by itself, so only full motion allows it.
+  const breathing = $derived(appMotion.breathing);
   const waveform = $derived(playback.waveform);
 
   const motion = $derived(SvelteMotion.of("large"));
