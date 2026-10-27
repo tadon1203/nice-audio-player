@@ -9,13 +9,7 @@
 
   const DEFAULT_DEVICE = "default";
 
-  const {
-    player: playback,
-    connection,
-    appearance,
-    outputDevices,
-    ui: { actions, notices },
-  } = useApp();
+  const { player: playback, connection, appearance, outputDevices, actions, notices } = useApp();
 
   const signalPath = new SignalPath();
 

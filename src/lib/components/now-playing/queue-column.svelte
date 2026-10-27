@@ -123,7 +123,7 @@
         <div role="listitem" class="pl-20">
           <Button
             type="button"
-            onclick={() => (app.ui.queuePanelOpen = true)}
+            onclick={() => (app.queuePanelOpen = true)}
             variant="text"
             size="compact"
             class="font-normal"

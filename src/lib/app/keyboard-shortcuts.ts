@@ -20,7 +20,7 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 /**
  * Handles one window `keydown` as a global playback shortcut (requirements.md, Keyboard). It skips
  * editable targets and anything the focused element (or the seek bar's own local arrow-key seek)
- * already handled via `defaultPrevented`. Each playback command runs through `app.ui.actions`, so its
+ * already handled via `defaultPrevented`. Each playback command runs through `app.actions`, so its
  * failure is reported like a click's.
  *
  * Player state is read when a key is pressed, never subscribed to.
@@ -28,9 +28,7 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 export function handleShortcut(event: KeyboardEvent, app: App): void {
   if (event.defaultPrevented || isEditableTarget(event.target)) return;
   const playback = app.player;
-  const {
-    ui: { actions, nowPlaying },
-  } = app;
+  const { actions, nowPlaying } = app;
 
   if (event.key === "l" && event.ctrlKey) {
     event.preventDefault();
@@ -41,7 +39,7 @@ export function handleShortcut(event: KeyboardEvent, app: App): void {
 
   if (event.key === "Escape" && !event.ctrlKey && !event.altKey && nowPlaying.isOpen) {
     // The queue panel and menus are above Now Playing and close first (they handle Escape).
-    if (app.ui.queuePanelOpen) return;
+    if (app.queuePanelOpen) return;
     event.preventDefault();
     nowPlaying.close();
     return;
@@ -58,7 +56,7 @@ export function handleShortcut(event: KeyboardEvent, app: App): void {
 
   if (event.key === "q" && event.ctrlKey) {
     event.preventDefault();
-    app.ui.queuePanelOpen = !app.ui.queuePanelOpen;
+    app.queuePanelOpen = !app.queuePanelOpen;
     return;
   }
 

@@ -4,9 +4,7 @@
   import { WorkspaceScroll } from "#lib/app/scroll.svelte";
   import WorkspaceScrollRegion from "#lib/components/ui/workspace-scroll.svelte";
 
-  const {
-    ui: { scroll: scrollOffsets },
-  } = useApp();
+  const { scroll: scrollOffsets } = useApp();
 
   const scroll = new WorkspaceScroll(scrollOffsets, {});
 

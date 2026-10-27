@@ -33,11 +33,8 @@
     timeClass?: string;
   } = $props();
 
-  const {
-    player: playback,
-    motion,
-    ui: { actions, nowPlaying },
-  } = useApp();
+  const { player: playback, motion, actions } = useApp();
+  const app = useApp();
 
   const trackKey = $derived(playback.item?.id ?? "none");
   const canSeek = $derived(playback.isActive && playback.durationMs !== null);
@@ -99,9 +96,9 @@
       onInput={seekDrag.input}
       onCancel={seekDrag.cancel}
       onCommit={(value) => actions.run(() => seekDrag.commit(value))}
-      activeSpan={nowPlaying.lyricsActiveSpan}
-      hoveredLineSpan={nowPlaying.lyricsHoveredLineSpan}
-      onHoverPositionChange={(ms) => (nowPlaying.waveformHoveredMs = ms)}
+      activeSpan={app.lyricsActiveSpan}
+      hoveredLineSpan={app.lyricsHoveredLineSpan}
+      onHoverPositionChange={(ms) => (app.waveformHoveredMs = ms)}
       class="flex-1"
     />
   {/key}

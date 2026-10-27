@@ -21,11 +21,7 @@
   import { CountFormat } from "#lib/utils/count-format";
   import AlbumTile from "../../album-tile.svelte";
 
-  const {
-    ui: { actions, scroll: scrollOffsets },
-    library,
-    player: playback,
-  } = useApp();
+  const { actions, scroll: scrollOffsets, library, player: playback } = useApp();
   const view = library.artistAlbums;
 
   const artistId = $derived(page.params.artistId ?? "");

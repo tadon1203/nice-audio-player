@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type BackendMessage, type PlayerState, type QueueState } from "#lib/native/bindings";
 import type { Result } from "#lib/native/result";
 import { App } from "./app.svelte";
+import * as native from "#lib/native/commands";
+import { Notices } from "./user-actions.svelte";
 
 const mocks = vi.hoisted(() => ({ connect: vi.fn() }));
 vi.mock("#lib/native/commands", () => ({
@@ -63,8 +65,8 @@ const latestStates = (): BackendMessage[] => [
 
 describe("Connection", () => {
   it("is connecting until each state kind has arrived, then ready", () => {
-    const app = new App(new QueryClient());
-    app.connection.connect();
+    const app = new App(native, new QueryClient(), new Notices());
+    app.connection.connect().catch(() => undefined);
     expect(app.connection.state).toBe("connecting");
 
     const [player, ...rest] = latestStates();
@@ -79,8 +81,8 @@ describe("Connection", () => {
   });
 
   it("routes each state message to its area", () => {
-    const app = new App(new QueryClient());
-    app.connection.connect();
+    const app = new App(native, new QueryClient(), new Notices());
+    app.connection.connect().catch(() => undefined);
 
     for (const message of latestStates()) attempts[0].onMessage(message);
 
@@ -90,20 +92,20 @@ describe("Connection", () => {
   });
 
   it("routes a skipped track to the Notices", () => {
-    const app = new App(new QueryClient());
-    app.connection.connect();
+    const app = new App(native, new QueryClient(), new Notices());
+    app.connection.connect().catch(() => undefined);
 
     attempts[0].onMessage({ kind: "trackSkipped", value: { title: "Song" } });
 
-    expect(app.ui.notices.at("dock")).toEqual({
+    expect(app.notices.at("dock")).toEqual({
       kind: "skipped",
       message: "Couldn't play Song, skipped",
     });
   });
 
   it("applies the pushed states in the order they arrive", () => {
-    const app = new App(new QueryClient());
-    app.connection.connect();
+    const app = new App(native, new QueryClient(), new Notices());
+    app.connection.connect().catch(() => undefined);
     const second: PlayerState = { ...stopped, base: { ...base, volume: 0.5 } };
 
     attempts[0].onMessage({ kind: "player", value: stopped });
@@ -112,34 +114,9 @@ describe("Connection", () => {
     expect(app.player.snapshot).toEqual(second);
   });
 
-  it("drops messages from a connection that was cleaned up", () => {
-    const app = new App(new QueryClient());
-    const cleanup = app.connection.connect();
-
-    cleanup();
-    attempts[0].onMessage({ kind: "player", value: stopped });
-
-    expect(app.player.snapshot).toBeNull();
-  });
-
-  it("reconnects: a second connect replaces the first, which no longer delivers anything", () => {
-    const app = new App(new QueryClient());
-
-    const cleanup = app.connection.connect();
-    cleanup();
-    app.connection.connect();
-    expect(app.connection.state).toBe("connecting");
-
-    attempts[0].onMessage({ kind: "trackSkipped", value: { title: "Stale" } });
-    for (const message of latestStates()) attempts[1].onMessage(message);
-
-    expect(app.connection.state).toBe("ready");
-    expect(app.ui.notices.at("dock")).toBeNull();
-  });
-
   it("is failed, and applies nothing, when the connect command fails", async () => {
-    const app = new App(new QueryClient());
-    app.connection.connect();
+    const app = new App(native, new QueryClient(), new Notices());
+    app.connection.connect().catch(() => undefined);
 
     attempts[0].resolve({ ok: false, error: { code: "internal" } });
 

@@ -10,24 +10,18 @@ export class NowPlayingActions {
 
   /** Seeks the playback to a lyric line's start. */
   public readonly seek = (startMs: number): void => {
-    const {
-      ui: { actions },
-      player: playback,
-    } = this.#app;
+    const { actions, player: playback } = this.#app;
     actions.run(() => playback.seek(startMs));
   };
 
   /** Plays a queue item; the queue keeps every other item in place. */
   public readonly playerPlayQueueItem = (queueItemId: QueueItemId): void => {
-    const {
-      ui: { actions },
-      player: playback,
-    } = this.#app;
+    const { actions, player: playback } = this.#app;
     actions.run(() => playback.playerPlayQueueItem(queueItemId));
   };
 
   /** Copies text to the clipboard; a refused copy is reported. */
   public readonly copy = (text: string): void => {
-    this.#app.ui.actions.run(() => navigator.clipboard.writeText(text));
+    this.#app.actions.run(() => navigator.clipboard.writeText(text));
   };
 }

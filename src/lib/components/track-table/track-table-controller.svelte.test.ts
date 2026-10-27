@@ -29,7 +29,7 @@ function fakeApp(
     reveal: vi.fn(async (_id: TrackId) => {}),
   };
   const app = {
-    ui: { actions: { run: (action: () => Promise<unknown>): void => void action() } },
+    actions: { run: (action: () => Promise<unknown>): void => void action() },
     player: {
       activeTrackId,
       status,

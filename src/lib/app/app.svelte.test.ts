@@ -2,6 +2,8 @@ import { QueryClient } from "@tanstack/svelte-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type BackendMessage, type LibraryState, type PlayerState } from "#lib/native/bindings";
 import { App } from "./app.svelte";
+import * as native from "#lib/native/commands";
+import { Notices } from "./user-actions.svelte";
 
 const mocks = vi.hoisted(() => ({ connect: vi.fn() }));
 vi.mock("#lib/native/commands", () => ({
@@ -54,20 +56,20 @@ beforeEach(() => {
 
 describe("App", () => {
   it("builds the areas from the native area objects", () => {
-    const app = new App(new QueryClient());
+    const app = new App(native, new QueryClient(), new Notices());
 
     expect(app.connection.state).toBe("connecting");
     expect(app.player).toBeDefined();
     expect(app.appearance.artworkBackdrop).toBeNull();
     expect(app.library.state).toBeNull();
-    expect(app.ui.queuePanelOpen).toBe(false);
+    expect(app.queuePanelOpen).toBe(false);
     expect(app.queryClient).toBeInstanceOf(QueryClient);
   });
 
   it("connects, and the initial state reaches the areas", async () => {
-    const app = new App(new QueryClient());
+    const app = new App(native, new QueryClient(), new Notices());
 
-    app.connection.connect();
+    await app.connection.connect();
 
     await vi.waitFor(() => expect(app.connection.state).toBe("ready"));
     expect(app.player.snapshot).toEqual(stopped);

@@ -7,6 +7,7 @@ import { MeterFeed } from "#lib/meter/meter-feed.svelte";
 import { reduceMeterFrames } from "#lib/meter/meter-frames";
 import { MeterDraw } from "#lib/meter/meter-draw";
 import { useApp } from "#lib/app/app.svelte";
+import { countE2e } from "#lib/app/e2e-counts";
 import { DocumentVisibility } from "#lib/components/ui/document-visibility.svelte";
 
 const NARROW_BELOW_PX = 512;
@@ -67,7 +68,10 @@ export class MeterView {
     this.#feed = new MeterFeed(
       meter,
       () => this.#active,
-      () => this.#wake(),
+      () => {
+        countE2e("meterFrames");
+        this.#wake();
+      },
     );
 
     // The draw loop and the readout timer run only while the view is active. Timers and

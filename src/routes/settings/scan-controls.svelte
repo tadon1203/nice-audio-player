@@ -8,10 +8,7 @@
   /** The scan's state in words, and the button that starts or cancels it. */
   let { directoryCount }: { directoryCount: number } = $props();
 
-  const {
-    library,
-    ui: { actions },
-  } = useApp();
+  const { library, actions } = useApp();
 
   const scan = $derived(library.state?.scan ?? null);
 </script>

@@ -3,10 +3,7 @@
   import { DOCK_HEIGHT_NOW_PLAYING_PX, DOCK_HEIGHT_PX } from "./dock-metrics";
   import PlaybackDock from "./playback-dock.svelte";
 
-  const {
-    motion,
-    ui: { nowPlaying },
-  } = useApp();
+  const { motion, nowPlaying } = useApp();
   const height = nowPlaying.follow(
     DOCK_HEIGHT_PX,
     DOCK_HEIGHT_NOW_PLAYING_PX,

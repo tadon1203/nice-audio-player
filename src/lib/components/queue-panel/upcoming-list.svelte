@@ -20,10 +20,7 @@
     cascading: boolean;
   } = $props();
 
-  const {
-    player: playback,
-    ui: { actions },
-  } = useApp();
+  const { player: playback, actions } = useApp();
 
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
 

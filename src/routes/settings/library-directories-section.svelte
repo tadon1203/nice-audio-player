@@ -24,10 +24,7 @@
   import ScanResult from "./scan-result.svelte";
   import ScanRunning from "./scan-running.svelte";
 
-  const {
-    library,
-    ui: { actions, notices },
-  } = useApp();
+  const { library, actions, notices } = useApp();
 
   const scanTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 

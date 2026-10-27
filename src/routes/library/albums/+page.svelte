@@ -12,11 +12,7 @@
     searchPlaceholder: "Search albums…",
   };
 
-  const {
-    player: playback,
-    ui: { actions },
-    library,
-  } = useApp();
+  const { player: playback, actions, library } = useApp();
   const view = library.albums;
   const catalog = library.catalog(() => view.request);
 </script>

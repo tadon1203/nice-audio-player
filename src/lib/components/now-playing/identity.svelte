@@ -28,10 +28,7 @@
     lyrics: Lyrics | null;
   } = $props();
 
-  const {
-    player: playback,
-    ui: { nowPlaying },
-  } = useApp();
+  const { player: playback, nowPlaying } = useApp();
 
   // The title wipes in on track changes, but not when Now Playing first opens.
   const openedOn = untrack(() => item?.queueItemId);

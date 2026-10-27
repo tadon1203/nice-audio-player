@@ -48,9 +48,7 @@
 
   let topIndex = $state(0);
 
-  const {
-    ui: { actions, scroll: scrollOffsets },
-  } = useApp();
+  const { actions, scroll: scrollOffsets } = useApp();
 
   const workspaceScroll = new WorkspaceScroll(scrollOffsets, {
     key: (): string => scrollKey,

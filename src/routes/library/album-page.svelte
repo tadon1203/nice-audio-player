@@ -37,11 +37,7 @@
     readonly parentArtistId: ArtistId | null;
   } = $props();
 
-  const {
-    ui: { actions, scroll: scrollOffsets },
-    library,
-    player: playback,
-  } = useApp();
+  const { actions, scroll: scrollOffsets, library, player: playback } = useApp();
 
   const detailsQuery = createQuery(() => library.getAlbum(albumId));
   const details = $derived(resultValue(detailsQuery.data));

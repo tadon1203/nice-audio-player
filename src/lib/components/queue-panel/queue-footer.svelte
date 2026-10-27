@@ -3,10 +3,7 @@
   import { Button } from "#lib/components/ui/shadcn/button";
   import type { Result } from "#lib/native/result";
 
-  const {
-    player: playback,
-    ui: { actions, notices },
-  } = useApp();
+  const { player: playback, actions, notices } = useApp();
 
   /** Clears the upcoming queue, and offers to undo it when there was anything to clear. */
   const clearUpcoming = async (): Promise<Result<boolean>> => {

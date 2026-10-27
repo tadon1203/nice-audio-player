@@ -12,11 +12,7 @@
     searchPlaceholder: "Search tracks…",
   };
 
-  const {
-    player: playback,
-    ui: { actions },
-    library,
-  } = useApp();
+  const { player: playback, actions, library } = useApp();
   const view = library.tracks;
   const catalog = library.catalog(() => view.request);
 </script>

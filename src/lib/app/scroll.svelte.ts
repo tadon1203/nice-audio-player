@@ -8,16 +8,6 @@ const INDEX_HOLD_MS = 800;
 /** How many frames to wait for the content to grow tall enough before settling for the maximum. */
 export const MAX_WAIT_FRAMES = 30;
 
-export interface FrameScheduler {
-  request: (callback: () => void) => number;
-  cancel: (handle: number) => void;
-}
-
-const browserFrames: FrameScheduler = {
-  request: (callback) => requestAnimationFrame(callback),
-  cancel: (handle) => cancelAnimationFrame(handle),
-};
-
 type ScrollMetrics = Pick<HTMLElement, "scrollHeight" | "clientHeight" | "scrollTop">;
 
 /**
@@ -143,22 +133,18 @@ export class WorkspaceScroll {
    * layout; setting the offset earlier would be clamped to wherever the content ends so far.
    * Returns a function that gives up.
    */
-  public static scrollWhenReachable(
-    region: ScrollMetrics,
-    offset: number,
-    frames: FrameScheduler = browserFrames,
-  ): () => void {
+  public static scrollWhenReachable(region: ScrollMetrics, offset: number): () => void {
     let waited = 0;
     let handle: number | null = null;
     const step = (): void => {
       handle = null;
       const reachable = region.scrollHeight - region.clientHeight >= offset;
       if (reachable || waited++ >= MAX_WAIT_FRAMES) region.scrollTop = offset;
-      else handle = frames.request(step);
+      else handle = requestAnimationFrame(step);
     };
     step();
     return () => {
-      if (handle !== null) frames.cancel(handle);
+      if (handle !== null) cancelAnimationFrame(handle);
       handle = null;
     };
   }

@@ -69,10 +69,7 @@ export class TrackTableController {
 
   /** Runs the row's action button: play, pause or resume. */
   public readonly runAction = (row: TrackTableRow): void => {
-    const {
-      player: playback,
-      ui: { actions },
-    } = this.#app;
+    const { player: playback, actions } = this.#app;
     const { action } = TrackRowStates.of(row, playback.activeTrackId, playback.status);
     if (action.kind === "play") this.#play(row.id);
     else if (action.kind === "pause") actions.run(() => playback.pause());
@@ -81,16 +78,13 @@ export class TrackTableController {
 
   /** Shows a track's file in Explorer. The Properties sheet uses it too. */
   public readonly revealTrack = (trackId: TrackId): void => {
-    const {
-      ui: { actions },
-      library,
-    } = this.#app;
+    const { actions, library } = this.#app;
     actions.run(() => library.reveal(trackId));
   };
 
   /** Copies a track's file path to the clipboard; a refused copy is reported. */
   public readonly copyPath = (path: string): void => {
-    this.#app.ui.actions.run(() => navigator.clipboard.writeText(path));
+    this.#app.actions.run(() => navigator.clipboard.writeText(path));
   };
 
   /** Shows the menu row's file in Explorer. */
@@ -112,26 +106,20 @@ export class TrackTableController {
 
   /** Opens an album or artist link. The links come from `Tracks.links`, built with resolve(). */
   public readonly navigate = (href: string): void => {
-    this.#app.ui.actions.run(() => goto(href));
+    this.#app.actions.run(() => goto(href));
   };
 
   #enqueue(next: boolean): void {
     const row = this.#menuRow;
     if (row === null) return;
-    const {
-      ui: { actions },
-      player: playback,
-    } = this.#app;
+    const { actions, player: playback } = this.#app;
     actions.run(() => playback.playerEnqueueTrack(row.id, next));
   }
 
   #activate(trackId: TrackId): void {
     const row = this.#rows().find((candidate) => candidate.id === trackId);
     if (row === undefined) return;
-    const {
-      player: playback,
-      ui: { actions },
-    } = this.#app;
+    const { player: playback, actions } = this.#app;
     const { clickIntent } = TrackRowStates.of(row, playback.activeTrackId, playback.status);
     if (clickIntent === "play") this.#play(row.id);
     else if (clickIntent === "resume") actions.run(() => playback.resume());

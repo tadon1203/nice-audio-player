@@ -20,12 +20,7 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const {
-    player: playback,
-    connection,
-    outputDevices,
-    ui: { actions },
-  } = useApp();
+  const { player: playback, connection, outputDevices, actions } = useApp();
 
   const path = new SignalPath();
   let open = $state(false);

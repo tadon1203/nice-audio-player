@@ -4,15 +4,14 @@ import { prefersReducedMotion } from "svelte/motion";
 import { Appearance } from "#lib/appearance/appearance.svelte";
 import { Library } from "#lib/library/library.svelte";
 import { Lyrics } from "#lib/lyrics/lyrics.svelte";
-import * as native from "#lib/native/commands";
+import type * as native from "#lib/native/commands";
 import { AudioOutputDevices } from "#lib/player/audio-output-devices.svelte";
 import { PlaybackClock } from "#lib/player/playback-clock.svelte";
 import { Player } from "#lib/player/player.svelte";
 import { Connection } from "./connection.svelte";
-import { Notices } from "./notices.svelte";
-import { NowPlaying } from "./now-playing.svelte";
+import { type LyricsSpan, NowPlaying } from "./now-playing.svelte";
 import { ScrollOffsets } from "./scroll.svelte";
-import { UserActions } from "./user-actions.svelte";
+import { Notices, UserActions } from "./user-actions.svelte";
 
 const [getApp, setAppContext] = createContext<App>();
 
@@ -34,25 +33,19 @@ export interface Motion {
   readonly breathing: boolean;
 }
 
-/**
- * The window's UI state. It is not Backend state: it lives only in the Renderer, and it spans
- * several Areas, so the App holds it.
- */
-class AppUi {
-  /** What the user sees as notices, errors, and offers. */
-  public readonly notices = new Notices();
-  /** Runs user actions and tells which places are busy. */
-  public readonly actions = new UserActions(this.notices);
-  /** The scroll positions of the workspace, by list path. */
-  public readonly scroll = new ScrollOffsets();
-  public readonly nowPlaying = new NowPlaying();
-  /** Whether the Queue panel is open. */
-  public queuePanelOpen = $state(false);
+/** The native area objects that the App composes. */
+export interface NativeAreas {
+  readonly app: typeof native.app;
+  readonly appearance: typeof native.appearance;
+  readonly library: typeof native.library;
+  readonly lyrics: typeof native.lyrics;
+  readonly player: typeof native.player;
 }
 
 /**
  * The Renderer's root. It composes the Areas and holds the UI state of the whole window. A component
- * reads it with `useApp`.
+ * reads it with `useApp`. The UI state is not Backend state: it lives only in the Renderer, and it
+ * spans several Areas, so the App holds it.
  */
 export class App {
   public readonly queryClient: QueryClient;
@@ -62,17 +55,33 @@ export class App {
   public readonly appearance: Appearance;
   public readonly outputDevices: AudioOutputDevices;
   public readonly motion: Motion;
-  public readonly ui: AppUi;
   public readonly connection: Connection;
+  public readonly notices: Notices;
+  /** Runs user actions and tells which places are busy. */
+  public readonly actions: UserActions;
+  /** The scroll positions of the workspace, by list path. */
+  public readonly scroll = new ScrollOffsets();
+  public readonly nowPlaying = new NowPlaying();
+  /** Whether the Queue panel is open. */
+  public queuePanelOpen = $state(false);
+  // Each span and position is its own signal: the pointer moves often, and a reader of one of them
+  // must not rerun with the others.
+  /** The current lyric line's span, lit on the dock waveform. */
+  public lyricsActiveSpan = $state.raw<LyricsSpan | null>(null);
+  /** The span of the lyric line under the pointer, faintly marked on the waveform. */
+  public lyricsHoveredLineSpan = $state.raw<LyricsSpan | null>(null);
+  /** The position under the pointer while hovering the waveform, marking its lyric line. */
+  public waveformHoveredMs = $state.raw<number | null>(null);
 
-  public constructor(queryClient: QueryClient) {
+  public constructor(areas: NativeAreas, queryClient: QueryClient, notices: Notices) {
     this.queryClient = queryClient;
-    this.player = new Player(native.player, new PlaybackClock());
-    this.appearance = new Appearance(native.appearance);
-    this.outputDevices = new AudioOutputDevices(native.player);
-    this.library = new Library(native.library, queryClient);
-    this.lyrics = new Lyrics(native.lyrics, queryClient);
-    this.ui = new AppUi();
+    this.notices = notices;
+    this.actions = new UserActions(notices);
+    this.player = new Player(areas.player, new PlaybackClock());
+    this.appearance = new Appearance(areas.appearance);
+    this.outputDevices = new AudioOutputDevices(areas.player);
+    this.library = new Library(areas.library, queryClient);
+    this.lyrics = new Lyrics(areas.lyrics, queryClient);
 
     const appearance = this.appearance;
     this.motion = {
@@ -84,12 +93,12 @@ export class App {
       },
     };
 
-    this.connection = new Connection(native.app, {
+    this.connection = new Connection(areas.app, {
       player: this.player,
       library: this.library,
       lyrics: this.lyrics,
       appearance: this.appearance,
-      notices: this.ui.notices,
+      notices: this.notices,
     });
   }
 }

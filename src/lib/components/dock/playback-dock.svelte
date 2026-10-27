@@ -14,12 +14,7 @@
    * volume. The transport grid's side columns are equal, so the transport sits on the dock's true
    * centre whatever the two sides hold.
    */
-  const {
-    player: playback,
-    appearance,
-    motion,
-    ui: { nowPlaying },
-  } = useApp();
+  const { player: playback, appearance, motion, nowPlaying } = useApp();
 
   // While Now Playing is open the waveform lives up there, so this slot animates shut.
   const slot = nowPlaying.follow(1, 0, () => motion.reduced);

@@ -9,16 +9,13 @@
   import UpcomingList from "./upcoming-list.svelte";
 
   const app = useApp();
-  const {
-    player: playback,
-    ui: { actions },
-  } = app;
+  const { player: playback, actions } = app;
 
   const queue = $derived(playback.queue);
   const history = $derived(queue?.history ?? []);
   const cascade = new ShuffleCascade(
     () => playback.shuffleEnabled,
-    () => app.ui.queuePanelOpen,
+    () => app.queuePanelOpen,
   );
 
   const scrollView = ScrollView.provide();
@@ -31,7 +28,7 @@
 
 <!-- Not modal: the library stays visible and usable beside the queue, so there is no backdrop and
      a click elsewhere does not close it (Escape and the queue button do). -->
-<Sheet open={app.ui.queuePanelOpen} onOpenChange={(open) => (app.ui.queuePanelOpen = open)}>
+<Sheet open={app.queuePanelOpen} onOpenChange={(open) => (app.queuePanelOpen = open)}>
   <SheetContent
     side="right"
     class="w-80 gap-0 p-0"

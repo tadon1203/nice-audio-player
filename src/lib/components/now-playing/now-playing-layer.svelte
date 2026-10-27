@@ -16,10 +16,7 @@
    */
   let { children }: { children?: Snippet } = $props();
 
-  const {
-    motion,
-    ui: { nowPlaying },
-  } = useApp();
+  const { motion, nowPlaying } = useApp();
 
   function lift(opening: boolean) {
     return (_node: Element): TransitionConfig => {

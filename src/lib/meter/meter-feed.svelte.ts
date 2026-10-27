@@ -24,14 +24,6 @@ export class MeterFeed {
       meterCommands
         .start((frame) => {
           if (ended) return;
-          // The app-level E2E build (`VITE_E2E=1`) counts the frames the app consumes, for
-          // `tests-app/` to read; a normal build drops this.
-          if (import.meta.env.VITE_E2E) {
-            const e2e = ((window as { __e2e?: { meterFrames: number } }).__e2e ??= {
-              meterFrames: 0,
-            });
-            e2e.meterFrames += 1;
-          }
           this.#pending.push(frame);
           if (this.#pending.length > MAX_PENDING) this.#pending.shift();
           onFrame?.();

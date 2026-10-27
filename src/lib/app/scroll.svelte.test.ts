@@ -1,10 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import {
-  MAX_WAIT_FRAMES,
-  ScrollOffsets,
-  WorkspaceScroll,
-  type FrameScheduler,
-} from "./scroll.svelte";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_WAIT_FRAMES, ScrollOffsets, WorkspaceScroll } from "./scroll.svelte";
 
 describe("ScrollOffsets lists", () => {
   it("recalls 0 for an unseen path and the last offset otherwise", () => {
@@ -66,30 +61,34 @@ function region(
   };
 }
 
-function manualFrames(): { scheduler: FrameScheduler; readonly waiting: number; tick(): void } {
-  const pending = new Map<number, () => void>();
+/** Replaces the global animation frames with a queue that the test runs by hand. */
+function manualFrames(): { readonly waiting: number; tick(): void } {
+  const pending = new Map<number, FrameRequestCallback>();
   let next = 1;
-  const scheduler: FrameScheduler = {
-    request: (callback) => {
-      pending.set(next, callback);
-      return next++;
-    },
-    cancel: (handle) => void pending.delete(handle),
-  };
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    pending.set(next, callback);
+    return next++;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (handle: number) => {
+    pending.delete(handle);
+  });
   return {
-    scheduler,
     get waiting(): number {
       return pending.size;
     },
     tick(): void {
       const callbacks = [...pending.values()];
       pending.clear();
-      callbacks.forEach((callback) => callback());
+      callbacks.forEach((callback) => callback(0));
     },
   };
 }
 
 describe("WorkspaceScroll.scrollWhenReachable", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("is clamped when set before the content has grown (the Album Artist restore)", () => {
     const short = region(600);
     short.scrollTop = 2000;
@@ -99,7 +98,7 @@ describe("WorkspaceScroll.scrollWhenReachable", () => {
   it("waits for the content to grow, then lands on the offset", () => {
     const content = region(600);
     const frames = manualFrames();
-    WorkspaceScroll.scrollWhenReachable(content, 2000, frames.scheduler);
+    WorkspaceScroll.scrollWhenReachable(content, 2000);
     expect(content.scrollTop).toBe(0);
     frames.tick();
     content.state.contentHeight = 4000;
@@ -109,15 +108,16 @@ describe("WorkspaceScroll.scrollWhenReachable", () => {
   });
 
   it("applies at once when the offset is already reachable", () => {
+    manualFrames();
     const content = region(4000);
-    WorkspaceScroll.scrollWhenReachable(content, 1500, manualFrames().scheduler);
+    WorkspaceScroll.scrollWhenReachable(content, 1500);
     expect(content.scrollTop).toBe(1500);
   });
 
   it("settles for the end of the content after waiting long enough", () => {
     const content = region(600);
     const frames = manualFrames();
-    WorkspaceScroll.scrollWhenReachable(content, 2000, frames.scheduler);
+    WorkspaceScroll.scrollWhenReachable(content, 2000);
     for (let i = 0; i <= MAX_WAIT_FRAMES; i++) frames.tick();
     expect(content.scrollTop).toBe(100);
     expect(frames.waiting).toBe(0);
@@ -126,7 +126,7 @@ describe("WorkspaceScroll.scrollWhenReachable", () => {
   it("stops waiting when cancelled", () => {
     const content = region(600);
     const frames = manualFrames();
-    const cancel = WorkspaceScroll.scrollWhenReachable(content, 2000, frames.scheduler);
+    const cancel = WorkspaceScroll.scrollWhenReachable(content, 2000);
     cancel();
     content.state.contentHeight = 4000;
     frames.tick();

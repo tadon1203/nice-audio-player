@@ -19,12 +19,7 @@
    * transport's centre line.
    */
   const app = useApp();
-  const {
-    player: playback,
-    connection,
-    motion,
-    ui: { actions, nowPlaying },
-  } = app;
+  const { player: playback, connection, motion, actions, nowPlaying } = app;
 
   const ready = $derived(connection.state === "ready");
   const readout = $derived(VolumeStep.formatDb(playback.volume, playback.muted));
@@ -84,8 +79,8 @@
       variant="quiet"
       aria-label="Queue"
       title="Queue"
-      aria-pressed={app.ui.queuePanelOpen}
-      onclick={() => (app.ui.queuePanelOpen = !app.ui.queuePanelOpen)}
+      aria-pressed={app.queuePanelOpen}
+      onclick={() => (app.queuePanelOpen = !app.queuePanelOpen)}
     >
       <List aria-hidden="true" />
     </Button>

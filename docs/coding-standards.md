@@ -121,7 +121,6 @@ Casing and conversion names follow the standards below. The Rust compiler lints 
 - Presentational components do not import application logic. Pass a value, such as reduced motion, as an argument.
 - Do not write `create…` factories.
 - Do not use the `private` keyword. Use `#` for private members.
-- Put one public class in each file. The file name is the class name in kebab-case.
 - Pass members to the template directly only as arrow-function fields.
 - Construct a class that uses `$effect` during component initialization. Do not use `$effect.root`.
 - Share state with a class that has `$state` fields. Provide it with `createContext`. Do not use a store or a module-level singleton. Context limits the state to the part of the app that needs it. `createContext` is type-safe. `setContext` and `getContext` are not.

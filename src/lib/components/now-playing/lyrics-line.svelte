@@ -43,9 +43,7 @@
     attach: Attachment<HTMLElement>;
   } = $props();
 
-  const {
-    ui: { nowPlaying },
-  } = useApp();
+  const app = useApp();
 
   const actions = new NowPlayingActions();
 
@@ -68,8 +66,8 @@
     aria-label={`Seek to ${startLabel}`}
     onclick={() => actions.seek(line.startMs)}
     onpointerenter={() =>
-      (nowPlaying.lyricsHoveredLineSpan = LyricsLines.lineSpan(lines, index, durationMs))}
-    onpointerleave={() => (nowPlaying.lyricsHoveredLineSpan = null)}
+      (app.lyricsHoveredLineSpan = LyricsLines.lineSpan(lines, index, durationMs))}
+    onpointerleave={() => (app.lyricsHoveredLineSpan = null)}
     variant="bare"
     size="inline"
     class="relative w-16 shrink-0 justify-end text-right tabular-nums font-normal"

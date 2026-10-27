@@ -25,12 +25,7 @@
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
 
-  const {
-    player: playback,
-    connection,
-    motion,
-    ui: { notices, actions, nowPlaying },
-  } = useApp();
+  const { player: playback, connection, motion, notices, actions, nowPlaying } = useApp();
 
   // A failed startup shows its reason here, since there is no playback state to report on.
   const startupError = $derived(connection.state === "failed" ? connection.startupError : null);

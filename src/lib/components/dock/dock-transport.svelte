@@ -10,11 +10,7 @@
   import RepeatIcon from "./repeat-icon.svelte";
 
   /** Shuffle, previous, play/pause, next, repeat. */
-  const {
-    player: playback,
-    connection,
-    ui: { actions },
-  } = useApp();
+  const { player: playback, connection, actions } = useApp();
 
   const playing = $derived(playback.isPlaying);
   const ready = $derived(connection.state === "ready");

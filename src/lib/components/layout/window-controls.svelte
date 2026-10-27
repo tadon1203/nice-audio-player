@@ -7,9 +7,7 @@
   import { useApp } from "#lib/app/app.svelte";
   import { Button } from "#lib/components/ui/shadcn/button/index.js";
 
-  const {
-    ui: { actions },
-  } = useApp();
+  const { actions } = useApp();
 
   let maximized = $state(false);
 

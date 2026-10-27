@@ -8,6 +8,8 @@
   import QueuePanel from "#lib/components/queue-panel/queue-panel.svelte";
   import { App, setApp } from "#lib/app/app.svelte";
   import { handleShortcut } from "#lib/app/keyboard-shortcuts";
+  import { Notices } from "#lib/app/user-actions.svelte";
+  import * as native from "#lib/native/commands";
   import { TooltipProvider } from "#lib/components/ui/shadcn/tooltip";
   import Navigation from "./navigation.svelte";
   import TitleBar from "./title-bar.svelte";
@@ -17,6 +19,13 @@
   // Made once. The layout checked the native bridge first. Components read the App with `useApp`.
   const app = setApp(
     new App(
+      {
+        app: native.app,
+        appearance: native.appearance,
+        library: native.library,
+        lyrics: native.lyrics,
+        player: native.player,
+      },
       new QueryClient({
         defaultOptions: {
           queries: {
@@ -26,6 +35,7 @@
           },
         },
       }),
+      new Notices(),
     ),
   );
 
@@ -44,7 +54,9 @@
   });
 
   // The UI does not wait for the connection: the Dock shows its state, the rest fills in as it arrives.
-  onMount(() => app.connection.connect());
+  onMount(() => {
+    void app.connection.connect();
+  });
 </script>
 
 <svelte:window onkeydown={(event) => handleShortcut(event, app)} />
@@ -56,13 +68,13 @@
     >
       <TitleBar />
       <aside
-        inert={app.ui.nowPlaying.isOpen}
+        inert={app.nowPlaying.isOpen}
         class="col-start-1 row-start-2 hidden min-h-0 min-w-0 flex-col bg-sidebar text-sidebar-foreground md:flex"
       >
         <Navigation />
       </aside>
       <main
-        inert={app.ui.nowPlaying.isOpen}
+        inert={app.nowPlaying.isOpen}
         class="col-start-1 row-start-2 min-h-0 min-w-0 md:col-start-2"
         data-slot="app-main"
       >

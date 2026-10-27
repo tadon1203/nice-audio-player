@@ -5,7 +5,7 @@ import type { Library } from "#lib/library/library.svelte";
 import type { Lyrics } from "#lib/lyrics/lyrics.svelte";
 import type { Player } from "#lib/player/player.svelte";
 import { countE2e } from "./e2e-counts";
-import type { Notices } from "./notices.svelte";
+import type { Notices } from "./user-actions.svelte";
 
 export type ConnectionState = "connecting" | "ready" | "failed";
 
@@ -45,32 +45,23 @@ export class Connection {
 
   /**
    * Registers the channel and routes every message it carries. The Backend sends the latest value of
-   * each state first, so the connection is ready once each state kind has arrived. Returns the
-   * cleanup (for HMR and tests): a message that arrives after it is dropped.
+   * each state first, so the connection is ready once each state kind has arrived.
    */
-  public connect(): () => void {
-    let active = true;
-
+  public async connect(): Promise<void> {
     const fail = (error: CommandError): void => {
-      if (!active) return;
       this.#startupError = error;
       this.#state = "failed";
     };
 
     this.#state = "connecting";
-    void this.#commands
-      .connect((message) => {
-        if (active) this.#route(message);
-      })
-      .then((outcome) => {
-        if (!outcome.ok) fail(outcome.error);
-      })
+    this.#arrived.clear();
+    try {
+      const outcome = await this.#commands.connect((message) => this.#route(message));
+      if (!outcome.ok) fail(outcome.error);
+    } catch {
       // The adapter never rejects. A rejection is still a failed connect, so it shows as one.
-      .catch(() => fail({ code: "internal" }));
-
-    return () => {
-      active = false;
-    };
+      fail({ code: "internal" });
+    }
   }
 
   #route(message: BackendMessage): void {

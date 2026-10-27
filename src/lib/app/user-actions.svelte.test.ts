@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Notices } from "./notices.svelte";
-import { UserActions } from "./user-actions.svelte";
+import { Notices, UserActions } from "./user-actions.svelte";
 
 describe("Notices", () => {
   beforeEach(() => {

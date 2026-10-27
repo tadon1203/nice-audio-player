@@ -23,11 +23,8 @@
    */
   let { trackId, class: className }: { trackId: TrackId | null; class?: string } = $props();
 
-  const {
-    player: playback,
-    lyrics: lyricsSource,
-    ui: { nowPlaying },
-  } = useApp();
+  const { player: playback, lyrics: lyricsSource } = useApp();
+  const app = useApp();
 
   const lyricsQuery = createQuery(() => lyricsSource.getTrack(trackId));
   const current = $derived(resultValue(lyricsQuery.data) ?? null);
@@ -44,9 +41,9 @@
   const anchor = new AnchorPadding();
 
   const hoveredIndex = $derived(
-    nowPlaying.waveformHoveredMs === null || timedLines === null
+    app.waveformHoveredMs === null || timedLines === null
       ? -1
-      : LyricsLines.findCurrentLineIndex(timedLines, nowPlaying.waveformHoveredMs),
+      : LyricsLines.findCurrentLineIndex(timedLines, app.waveformHoveredMs),
   );
 
   // The spacers change size when the panel is measured or resized: keep the present on the anchor.
@@ -59,10 +56,10 @@
     const lines = timedLines;
     const index = sync.index;
     const durationMs = playback.durationMs;
-    nowPlaying.lyricsActiveSpan =
+    app.lyricsActiveSpan =
       lines !== null && index >= 0 ? LyricsLines.lineSpan(lines, index, durationMs) : null;
     return (): void => {
-      nowPlaying.lyricsActiveSpan = null;
+      app.lyricsActiveSpan = null;
     };
   });
 </script>
