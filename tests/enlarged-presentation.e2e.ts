@@ -35,7 +35,7 @@ for (const width of [640, 1360]) {
     await expect(remove).toBeFocused();
     const select = page
       .getByRole("region", { name: "Playback", exact: true })
-      .getByRole("button", { name: /Output device:/ });
+      .getByRole("combobox", { name: /Output device:/ });
     await select.click();
     await page.getByRole("option", { name: "Headphones", exact: true }).click();
     await select.click();

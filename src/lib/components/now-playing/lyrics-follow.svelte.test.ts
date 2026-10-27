@@ -57,7 +57,9 @@ function mount(start: number): void {
   Object.defineProperty(container, "scrollTop", {
     configurable: true,
     get: () => scrollTops.at(-1) ?? 0,
-    set: (value: number) => scrollTops.push(value),
+    set: (value: number) => {
+      scrollTops.push(value);
+    },
   });
   document.body.append(container);
   cleanup = $effect.root(() => {
