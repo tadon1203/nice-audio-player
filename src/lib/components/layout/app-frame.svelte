@@ -3,7 +3,6 @@
   import { QueryClient, QueryClientProvider } from "@tanstack/svelte-query";
   import ArtworkAccent from "#lib/components/artwork-accent.svelte";
   import PlaybackRegion from "#lib/components/dock/playback-region.svelte";
-  import { LyricsPrefetchController } from "#lib/components/now-playing/lyrics-prefetch-controller.svelte";
   import NowPlayingContent from "#lib/components/now-playing/now-playing-content.svelte";
   import NowPlayingLayer from "#lib/components/now-playing/now-playing-layer.svelte";
   import QueuePanel from "#lib/components/queue-panel/queue-panel.svelte";
@@ -30,8 +29,19 @@
     ),
   );
 
-  // Keeps the lyrics of the playing track and the next one fetched.
-  new LyricsPrefetchController();
+  // Fetches the lyrics of the playing track and the next one ahead of time. Now Playing then knows
+  // whether there are any before it opens (its layout depends on it), and a track change does not
+  // wait on the file. Each prefetch is a request, not state, so this stays an effect.
+  $effect(() => {
+    const { player, lyrics, queryClient } = app;
+    const currentId = player.item?.id ?? null;
+    const nextId = player.queue?.upcoming[0]?.id ?? null;
+    for (const trackId of [currentId, nextId]) {
+      if (trackId !== null) {
+        void queryClient.query(lyrics.getTrack(trackId)).catch(() => undefined);
+      }
+    }
+  });
 
   // The UI does not wait for the connection: the Dock shows its state, the rest fills in as it arrives.
   onMount(() => app.connection.connect());
