@@ -2,7 +2,7 @@
 
 use super::*;
 
-use crate::player::volume::NormalizedVolume;
+use crate::player::playback::volume::NormalizedVolume;
 
 #[test]
 fn volume_and_mute_are_reported_in_the_transport() {

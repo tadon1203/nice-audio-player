@@ -16,6 +16,7 @@
 mod commands;
 mod lifecycle;
 mod prefetch;
+pub(super) mod published;
 mod seek;
 mod state;
 mod types;
@@ -25,22 +26,23 @@ use crate::library::Library;
 use crate::library::read::playback::PlayableTrack;
 use crate::messages;
 use crate::messages::BackendMessage;
-use crate::meter::Meter;
 use crate::player::PlayerPreferences;
-use crate::player::errors::Result;
-use crate::player::output::{
+use crate::player::audio::output::{
     AudioOutputSelection, OutputEvent, OutputStreamFactory, OutputStreamId, PipelineId,
     StreamCallbacks,
 };
-use crate::player::pipeline::{LoadEvent, SourceLoadId};
-use crate::player::queue::{Queue, QueueEntry, RepeatMode};
-use crate::player::state::{
+use crate::player::audio::pipeline::{LoadEvent, LoadEventSink, SourceLoadId};
+use crate::player::audio::waveform::Waveforms;
+use crate::player::errors::Result;
+use crate::player::meter::Meter;
+use crate::player::playback::queue::{Queue, QueueEntry, RepeatMode};
+use crate::player::playback::transport::{Output, Track};
+use crate::player::playback::volume::{NormalizedVolume, VolumeState};
+use crate::player::types::AtomicEffectiveGain;
+use crate::player::worker::published::{
     CurrentPlayback, PlaybackPosition, PlaybackProcessingInfo, PlayerControls, PlayerState,
     QueueItem, QueueState, QueueWindow, StartedBy,
 };
-use crate::player::transport::{Output, Track};
-use crate::player::volume::{AtomicEffectiveGain, NormalizedVolume, VolumeState};
-use crate::player::waveform::Waveforms;
 use crate::settings::SettingsStore;
 use log::error;
 use rand::{SeedableRng, rngs::StdRng};
@@ -266,6 +268,12 @@ impl PlayerWorker {
     fn next_stream_id(&mut self) -> OutputStreamId {
         self.stream_id = self.stream_id.wrapping_add(1);
         OutputStreamId(self.stream_id)
+    }
+
+    /// The sink that the loads and the decode threads report to. Their events arrive as inputs.
+    fn load_events(&self) -> LoadEventSink {
+        let inbox = self.inbox.clone();
+        Arc::new(move |event| send(&inbox, WorkerInput::Load(event)))
     }
 
     /// What the output stream of `stream` reports to the worker: its events arrive as inputs.

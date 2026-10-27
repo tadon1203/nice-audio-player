@@ -2,7 +2,7 @@ use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
-use crate::player::fake_output::FakeOutput;
+use crate::player::audio::fake_output::FakeOutput;
 use crate::test_support::CommandCode;
 
 use crate::library::LibraryStatus;

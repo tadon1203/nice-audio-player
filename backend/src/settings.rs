@@ -224,7 +224,7 @@ fn flush(path: &Path, pending: &mut Option<SettingsFile>) {
 mod tests {
     use super::*;
     use crate::player::RepeatMode;
-    use crate::player::output::AudioOutputSelection;
+    use crate::player::audio::output::AudioOutputSelection;
     use crate::test_support::{MessageLog, TestDirectory, null_messages};
     use std::sync::mpsc::Sender;
 

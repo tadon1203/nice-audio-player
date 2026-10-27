@@ -40,3 +40,14 @@ macro_rules! internal_from {
 }
 
 internal_from!(std::io::Error, cpal::Error);
+
+/// Why a playback failed. The Renderer shows it, and the output or the decode caused it.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaybackFailureCode {
+    NoOutputDevice,
+    OutputDeviceUnavailable,
+    UnsupportedOutput,
+    OutputFailed,
+    DecodeFailed,
+}

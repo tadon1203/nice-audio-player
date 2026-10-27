@@ -4,11 +4,11 @@ use super::PlayerWorker;
 use super::types::StartRequest;
 use crate::ids::QueueItemId;
 use crate::library::read::playback::PlayableTrack;
-use crate::player::output::PcmConsumer;
-use crate::player::pipeline::{Pipeline, SourceLoad};
-use crate::player::queue::QueueEntry;
-use crate::player::state::PlaybackFailureCode;
-use crate::player::transport::{Output, Track};
+use crate::player::audio::output::PcmConsumer;
+use crate::player::audio::pipeline::{Pipeline, SourceLoad};
+use crate::player::errors::PlaybackFailureCode;
+use crate::player::playback::queue::QueueEntry;
+use crate::player::playback::transport::{Output, Track};
 
 /// A start whose file is being read.
 pub(super) struct StartLoad {

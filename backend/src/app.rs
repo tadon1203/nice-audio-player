@@ -1,11 +1,30 @@
 //! The Backend's composition root and its cross-domain use cases. The Host calls `BackendApp` and
 //! nothing else: each method is one use case, and its services stay behind it.
 
-pub(crate) mod playback_context;
 #[cfg(test)]
 mod tests;
 
-pub use playback_context::PlaybackContext;
+/// "Play from here": the contexts a playback queue can be built from.
+///
+/// Every way of starting library playback is a variant of `PlaybackContext`, so a new one
+/// (artist, playlist, smart playlist) adds a variant, not a new command.
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum PlaybackContext {
+    /// An album in disc and track order, by its ID.
+    Album { album_id: AlbumId },
+    /// The tracks list as currently filtered and sorted.
+    Tracks {
+        search: Option<String>,
+        sort: TrackSortKey,
+        direction: SortDirection,
+    },
+}
+
 // The types the Host names in commands and state. Each one is defined in the module that owns it.
 pub use crate::library::LibraryStatus;
 pub use crate::library::read::albums::{
@@ -16,11 +35,11 @@ pub use crate::library::read::artwork::{ArtworkRef, ServedArtwork};
 pub use crate::library::read::lists::{LetterIndexEntry, ListRequest, Page, SortDirection};
 pub use crate::library::read::tracks::{TrackListItem, TrackProperties, TrackSortKey};
 pub use crate::library::sync::state::LibraryDirectory;
-pub use crate::lyrics::Lyrics;
-pub use crate::meter::{Meter, MeterFrame};
-pub use crate::player::output::{AudioOutputDevice, AudioOutputSelection};
-pub use crate::player::output::{CpalOutput, OutputStreamFactory};
-pub use crate::player::volume::NormalizedVolume;
+pub use crate::player::audio::output::{AudioOutputDevice, AudioOutputSelection};
+pub use crate::player::audio::output::{CpalOutput, OutputStreamFactory};
+pub use crate::player::lyrics::Lyrics;
+pub use crate::player::meter::{Meter, MeterFrame};
+pub use crate::player::playback::volume::NormalizedVolume;
 pub use crate::player::{
     PlaybackPosition, PlayerState, QueueState, QueueWindow, RepeatMode, UPCOMING_WINDOW,
 };
@@ -30,9 +49,10 @@ use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
 use crate::library::Library;
 use crate::library::errors::LibraryError;
 use crate::library::read::artwork;
-use crate::lyrics;
 use crate::messages::BackendMessage;
-use crate::player::{Player, waveform::Waveforms};
+use crate::player::Player;
+use crate::player::audio::waveform::Waveforms;
+use crate::player::lyrics;
 use crate::settings::{self, SettingsStore};
 use anyhow::Result;
 use std::{
@@ -293,7 +313,7 @@ impl BackendApp {
 
     /// The output devices the system has. Blocking: the device query waits on the audio host.
     pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>> {
-        Ok(crate::player::output::list_output_devices()?)
+        Ok(crate::player::audio::output::list_output_devices()?)
     }
 
     pub fn set_repeat_mode(&self, mode: RepeatMode) -> Result<()> {

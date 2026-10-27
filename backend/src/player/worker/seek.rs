@@ -3,13 +3,13 @@
 
 use super::PlayerWorker;
 use super::state::{Next, PendingSeek, Seek, SeekLoad, WorkerState};
-use crate::player::errors::Result;
-use crate::player::output::make_queue;
-use crate::player::pcm::millis_to_frame;
-use crate::player::pipeline::{
+use crate::player::audio::output::make_queue;
+use crate::player::audio::pcm::millis_to_frame;
+use crate::player::audio::pipeline::{
     LoadPosition, PipelineError, PreparedSource, SourceLoad, start_decoding,
 };
-use crate::player::processing::PcmConverter;
+use crate::player::audio::processing::PcmConverter;
+use crate::player::errors::Result;
 use log::error;
 use std::time::Instant;
 
@@ -40,7 +40,7 @@ impl PlayerWorker {
             file,
             id,
             LoadPosition::Seek { target_ms, plan },
-            self.inbox.clone(),
+            self.load_events(),
         );
         self.set_seek(Seek::Loading(SeekLoad { load, duration_ms }));
         Ok(())
@@ -86,7 +86,7 @@ impl PlayerWorker {
         let base_frame = prepared.start_output_frame.min(total_frames);
         let remaining_frames = total_frames.saturating_sub(prepared.start_output_frame);
         let pipeline = start_decoding(
-            &self.inbox,
+            self.load_events(),
             pipeline_id,
             prepared,
             producer,

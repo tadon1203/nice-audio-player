@@ -1,6 +1,6 @@
 use super::fixture;
 use crate::messages::BackendMessage;
-use crate::player::volume::NormalizedVolume;
+use crate::player::playback::volume::NormalizedVolume;
 use crate::settings::AppearancePatch;
 
 fn artwork_backdrop(enabled: bool) -> AppearancePatch {

@@ -10,7 +10,7 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
-use crate::player::pcm::{ChannelCount, PcmSpec, SampleRate};
+use crate::player::audio::pcm::{ChannelCount, PcmSpec, SampleRate};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum DecodeError {
@@ -379,7 +379,7 @@ fn map_decode_error(error: &SymphoniaError) -> DecodeError {
 mod tests {
     use super::{DamagedPackets, DecodeStep, MAX_CONSECUTIVE_DAMAGED_PACKETS};
     use crate::library::sync::media::ValidatedAudioFile;
-    use crate::player::decode::CompressedAudioSource;
+    use crate::player::audio::decode::CompressedAudioSource;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use crate::threads::Cancellation;
 

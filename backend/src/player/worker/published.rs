@@ -1,13 +1,16 @@
 //! What the worker publishes: the transport state, the queue state, and the rows that show a
 //! queue entry.
 
-use super::queue::{Queue, QueueEntry, RepeatMode};
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
 use crate::library::read::playback::TrackSummary;
-use crate::player::output::AudioOutputSelection;
-use crate::player::processing::{ChannelConversion, OutputProcessingPlan};
-use crate::player::volume::VolumeState;
+use crate::player::audio::output::AudioOutputSelection;
+use crate::player::audio::processing::{ChannelConversion, OutputProcessingPlan};
+use crate::player::errors::PlaybackFailureCode;
+use crate::player::playback::queue::{Queue, QueueEntry, RepeatMode};
+use crate::player::playback::volume::VolumeState;
+
+pub use crate::player::playback::transport::StartedBy;
 
 /// Fields every transport state carries.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
@@ -21,7 +24,10 @@ pub struct PlayerControls {
 }
 
 impl PlayerControls {
-    pub(super) fn new(volume: VolumeState, output_selection: AudioOutputSelection) -> Self {
+    pub(in crate::player) fn new(
+        volume: VolumeState,
+        output_selection: AudioOutputSelection,
+    ) -> Self {
         Self {
             volume: volume.volume(),
             muted: volume.muted(),
@@ -30,18 +36,6 @@ impl PlayerControls {
             can_go_next: false,
         }
     }
-}
-
-/// Why the loaded session started.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum StartedBy {
-    Next,
-    Previous,
-    /// The player moved on by itself: the track ended, or it skipped a track.
-    Auto,
-    /// Any other start: play a context, play a queue item, restore the queue.
-    Jump,
 }
 
 /// One queue entry as the renderer shows it: the queue's id for the entry and the track's
@@ -146,16 +140,6 @@ impl PlayerState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum PlaybackFailureCode {
-    NoOutputDevice,
-    OutputDeviceUnavailable,
-    UnsupportedOutput,
-    OutputFailed,
-    DecodeFailed,
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackChannelConversion {
@@ -177,14 +161,14 @@ impl From<ChannelConversion> for PlaybackChannelConversion {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(super) struct PlaybackProcessingInfo {
+pub(in crate::player) struct PlaybackProcessingInfo {
     pub channel_conversion: PlaybackChannelConversion,
     pub source_sample_rate: u32,
     pub output_sample_rate: u32,
 }
 
 impl PlaybackProcessingInfo {
-    pub(super) fn from_plan(plan: OutputProcessingPlan) -> Self {
+    pub(in crate::player) fn from_plan(plan: OutputProcessingPlan) -> Self {
         Self {
             channel_conversion: plan.channel_conversion().into(),
             source_sample_rate: plan.source().sample_rate().get(),
@@ -192,7 +176,7 @@ impl PlaybackProcessingInfo {
         }
     }
 
-    pub(super) fn resampling_active(self) -> bool {
+    pub(in crate::player) fn resampling_active(self) -> bool {
         self.source_sample_rate != self.output_sample_rate
     }
 }
@@ -200,7 +184,7 @@ impl PlaybackProcessingInfo {
 /// The most upcoming items a window returns, and how many the queue state carries.
 pub const UPCOMING_WINDOW: u32 = 100;
 /// How many already played items the queue state carries (the most recent ones).
-pub(super) const HISTORY_IN_STATE: usize = 50;
+pub(in crate::player) const HISTORY_IN_STATE: usize = 50;
 
 /// The rows for `entries`, read from the library in one query: `None` where the library no longer
 /// has the track, or where the library cannot be read (the rows are left out of the state only).
@@ -263,7 +247,7 @@ impl QueueState {
 
     /// Reads the rows of the current item, the last few played and the first upcoming ones. The
     /// version is left at 0 for the worker to set.
-    pub(super) fn of(queue: &Queue, library: &Library) -> Self {
+    pub(in crate::player) fn of(queue: &Queue, library: &Library) -> Self {
         let history = queue.history();
         let shown_history = &history[history.len().saturating_sub(HISTORY_IN_STATE)..];
         let upcoming = queue.upcoming();
@@ -290,7 +274,7 @@ impl QueueWindow {
     /// Upcoming rows from `offset`, at most `limit` (and never more than `UPCOMING_WINDOW`), read
     /// from the library now. Tracks the library no longer has are left out. `version` is the queue
     /// version the queue is at.
-    pub(super) fn of(
+    pub(in crate::player) fn of(
         queue: &Queue,
         version: u64,
         offset: usize,

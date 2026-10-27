@@ -5,7 +5,7 @@
 use std::sync::mpsc::Sender;
 
 use crate::library::sync::state::LibraryState;
-use crate::player::waveform::PlaybackWaveform;
+use crate::player::audio::waveform::PlaybackWaveform;
 use crate::player::{PlaybackPosition, PlayerState, QueueState};
 use crate::settings::Appearance;
 

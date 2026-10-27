@@ -4,14 +4,14 @@ use super::state::{Next, NextLoad, Seek, WorkerState};
 use super::{PlayerWorker, queue_item};
 use crate::ids::QueueItemId;
 use crate::library::read::playback::PlayableTrack;
-use crate::player::output::make_queue;
-use crate::player::pipeline::{
+use crate::player::audio::output::make_queue;
+use crate::player::audio::pipeline::{
     LoadPosition, PipelineError, PreparedSource, SourceLoad, start_decoding,
 };
-use crate::player::processing::PcmConverter;
-use crate::player::queue::{AdvanceReason, QueueEntry};
-use crate::player::state::StartedBy;
-use crate::player::transport::{Position, Track};
+use crate::player::audio::processing::PcmConverter;
+use crate::player::playback::queue::{AdvanceReason, QueueEntry};
+use crate::player::playback::transport::{Position, Track};
+use crate::player::worker::published::StartedBy;
 
 /// How long before the end of a track the next one is opened. A shorter track opens it right after
 /// it has loaded.
@@ -60,7 +60,7 @@ impl PlayerWorker {
             file,
             id,
             LoadPosition::Prefetch { plan },
-            self.inbox.clone(),
+            self.load_events(),
         );
         self.set_next(Next::Loading(NextLoad {
             load,
@@ -102,7 +102,7 @@ impl PlayerWorker {
         let failed = entry.id;
         let pipeline_id = self.next_pipeline_id();
         let id = self.next_playback_id();
-        let inbox = self.inbox.clone();
+        let events = self.load_events();
         let Ok(prepared) = result else {
             return Err(failed);
         };
@@ -121,7 +121,7 @@ impl PlayerWorker {
             return Err(failed);
         };
         let duration_ms = prepared.duration_ms;
-        let pipeline = start_decoding(&inbox, pipeline_id, prepared, producer, converter, plan);
+        let pipeline = start_decoding(events, pipeline_id, prepared, producer, converter, plan);
         output.stream.queue_next(after, consumer, pipeline_id);
         let position = Position::from_start(output.sample_rate(), duration_ms);
         Ok(Track {

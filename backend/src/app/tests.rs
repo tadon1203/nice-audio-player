@@ -3,8 +3,8 @@
 
 use crate::app::BackendApp;
 use crate::messages::BackendMessage;
-use crate::player::fake_output::FakeOutput;
-use crate::player::waveform::PlaybackWaveform;
+use crate::player::audio::fake_output::FakeOutput;
+use crate::player::audio::waveform::PlaybackWaveform;
 use crate::test_support::{MessageLog, TestDirectory};
 use std::sync::Arc;
 

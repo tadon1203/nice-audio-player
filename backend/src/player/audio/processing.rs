@@ -392,7 +392,7 @@ fn ceil_div(numerator: u128, denominator: u128) -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::player::pcm::{ChannelCount, SampleRate};
+    use crate::player::audio::pcm::{ChannelCount, SampleRate};
 
     fn plan(
         source_rate: u32,

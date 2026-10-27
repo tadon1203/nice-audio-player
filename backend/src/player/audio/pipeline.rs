@@ -2,25 +2,26 @@
 //! decode thread that fills a PCM queue from them.
 
 use std::panic::AssertUnwindSafe;
-use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::thread;
 
-use super::state::PlaybackFailureCode;
-use super::worker::{WorkerInput, send};
 use crate::errors::contain;
 use crate::library::sync::media::ValidatedAudioFile;
-use crate::player::decode::{CompressedAudioSource, DecodeError, DecodeStep, StreamingDecoder};
-use crate::player::output::{OutputError, PcmProducer, PcmWaker, PipelineId, WaitCancelled};
-use crate::player::pcm::{millis_to_frame, rescale_frame};
-use crate::player::processing::{OutputProcessingError, OutputProcessingPlan, PcmConverter};
+use crate::player::audio::decode::{
+    CompressedAudioSource, DecodeError, DecodeStep, StreamingDecoder,
+};
+use crate::player::audio::output::{OutputError, PcmProducer, PcmWaker, PipelineId, WaitCancelled};
+use crate::player::audio::pcm::{millis_to_frame, rescale_frame};
+use crate::player::audio::processing::{OutputProcessingError, OutputProcessingPlan, PcmConverter};
+use crate::player::errors::PlaybackFailureCode;
 use crate::threads::Cancellation;
 
 /// Identifies one source load, so a late result from a load that was replaced is told apart.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(super) struct SourceLoadId(pub(super) u64);
+pub(in crate::player) struct SourceLoadId(pub(in crate::player) u64);
 
 #[derive(Debug, Copy, Clone)]
-pub(super) enum PipelineError {
+pub(in crate::player) enum PipelineError {
     SourceOpen,
     DecoderOpen,
     /// The file no longer has the format the output was prepared for.
@@ -37,7 +38,7 @@ pub(super) enum PipelineError {
 }
 
 impl PipelineError {
-    pub(super) fn code(self) -> PlaybackFailureCode {
+    pub(in crate::player) fn code(self) -> PlaybackFailureCode {
         match self {
             Self::Output(error) => error.code(),
             Self::SourceOpen
@@ -54,7 +55,7 @@ impl PipelineError {
 
 /// Where a load starts reading, and the processing it is checked against.
 #[derive(Debug, Copy, Clone)]
-pub(super) enum LoadPosition {
+pub(in crate::player) enum LoadPosition {
     /// From the beginning of the file, for a start.
     Start,
     /// From the beginning, for the track that follows the playing one. The file must have the
@@ -69,7 +70,7 @@ pub(super) enum LoadPosition {
 
 /// A file opened and positioned, with its first samples decoded. Everything the worker needs
 /// to start a decode thread for it.
-pub(super) struct PreparedSource {
+pub(in crate::player) struct PreparedSource {
     pub decoder: StreamingDecoder,
     pub first_packet: Vec<f32>,
     pub duration_ms: Option<u64>,
@@ -81,7 +82,7 @@ pub(super) struct PreparedSource {
 
 /// Dropping a load cancels it. A load that is cancelled, or replaced, still reports; the worker
 /// ignores the result by id.
-pub(super) struct SourceLoad {
+pub(in crate::player) struct SourceLoad {
     pub id: SourceLoadId,
     cancellation: Cancellation,
 }
@@ -89,11 +90,11 @@ pub(super) struct SourceLoad {
 impl SourceLoad {
     /// Starts loading `file` at `position`. The thread is detached: the worker never waits for it.
     /// Panics if the OS cannot start the thread.
-    pub(super) fn spawn(
+    pub(in crate::player) fn spawn(
         file: ValidatedAudioFile,
         id: SourceLoadId,
         position: LoadPosition,
-        inbox: Sender<WorkerInput>,
+        events: LoadEventSink,
     ) -> Self {
         // A stalled network read must not block the worker, so the thread is never joined.
         // Cancellation is the only way to stop it early, and a stopped load reports nothing.
@@ -106,7 +107,7 @@ impl SourceLoad {
                     prepare(&file, position, &worker_cancellation)
                 })
                 .unwrap_or(Err(PipelineError::SourceOpen));
-                let _ = inbox.send(WorkerInput::Load(LoadEvent::SourceReady { id, result }));
+                events(LoadEvent::SourceReady { id, result });
             })
             .expect("the OS starts a thread unless it is out of resources");
         Self { id, cancellation }
@@ -120,7 +121,7 @@ impl Drop for SourceLoad {
 }
 
 /// What the threads that read and decode a file report to the worker.
-pub(super) enum LoadEvent {
+pub(in crate::player) enum LoadEvent {
     /// A file's load is done, or failed.
     SourceReady {
         id: SourceLoadId,
@@ -134,6 +135,10 @@ pub(super) enum LoadEvent {
         error: PipelineError,
     },
 }
+
+/// Sends a `LoadEvent` to the worker. The worker builds the sink, so this module does not name
+/// the worker. A sink that drops its event (the worker has stopped) is not an error.
+pub(in crate::player) type LoadEventSink = Arc<dyn Fn(LoadEvent) + Send + Sync>;
 
 /// Opens `file` and does the work of `position` on it.
 fn prepare(
@@ -215,15 +220,15 @@ fn from_the_beginning(mut decoder: StreamingDecoder) -> Result<PreparedSource, P
 }
 
 /// A decode thread and how to stop it. Dropping it stops the thread: see `DecodeHandle`.
-pub(super) struct Pipeline {
+pub(in crate::player) struct Pipeline {
     pub id: PipelineId,
     /// Dropped with the pipeline, which stops the decode thread.
     _decode: DecodeHandle,
 }
 
 /// Starts the decode thread that fills `producer` from `prepared`, through `converter`.
-pub(super) fn start_decoding(
-    inbox: &Sender<WorkerInput>,
+pub(in crate::player) fn start_decoding(
+    events: LoadEventSink,
     id: PipelineId,
     prepared: PreparedSource,
     producer: PcmProducer,
@@ -241,7 +246,7 @@ pub(super) fn start_decoding(
         converted: Vec::new(),
         discard_output_samples,
         cancellation: Cancellation::default(),
-        inbox: inbox.clone(),
+        events,
         pipeline: id,
         prebuffer_frames: prebuffer_frames(plan.output().sample_rate().get()),
         prebuffer_sent: false,
@@ -282,7 +287,7 @@ struct DecodeTask {
     converted: Vec<f32>,
     discard_output_samples: usize,
     cancellation: Cancellation,
-    inbox: Sender<WorkerInput>,
+    events: LoadEventSink,
     pipeline: PipelineId,
     prebuffer_frames: usize,
     prebuffer_sent: bool,
@@ -320,15 +325,12 @@ impl DecodeTask {
 
     /// A decoder that panics on a bad file fails that playback, not the app.
     fn run_contained(self) {
-        let (inbox, pipeline) = (self.inbox.clone(), self.pipeline);
+        let (events, pipeline) = (self.events.clone(), self.pipeline);
         if contain("decode", AssertUnwindSafe(move || self.run())).is_err() {
-            send(
-                &inbox,
-                WorkerInput::Load(LoadEvent::DecodeFailed {
-                    pipeline,
-                    error: PipelineError::Decode,
-                }),
-            );
+            events(LoadEvent::DecodeFailed {
+                pipeline,
+                error: PipelineError::Decode,
+            });
         }
     }
 
@@ -342,13 +344,10 @@ impl DecodeTask {
     }
 
     fn fail(&self, error: PipelineError) {
-        send(
-            &self.inbox,
-            WorkerInput::Load(LoadEvent::DecodeFailed {
-                pipeline: self.pipeline,
-                error,
-            }),
-        );
+        (self.events)(LoadEvent::DecodeFailed {
+            pipeline: self.pipeline,
+            error,
+        });
     }
 
     fn decode_to_end(&mut self) -> Result<(), Stop> {
@@ -366,7 +365,7 @@ impl DecodeTask {
                     self.converter.flush(&mut self.converted)?;
                     self.write_converted()?;
                     // A file shorter than the prebuffer is as ready as it will get.
-                    notify_prebuffer(&self.inbox, self.pipeline, &mut self.prebuffer_sent, true);
+                    notify_prebuffer(&self.events, self.pipeline, &mut self.prebuffer_sent, true);
                     return Ok(());
                 }
                 Err(_) => return Err(Stop::Decode),
@@ -382,21 +381,21 @@ impl DecodeTask {
     fn write_converted(&mut self) -> Result<(), Stop> {
         discard_output_prefix(&mut self.converted, &mut self.discard_output_samples);
         let cancellation = &self.cancellation;
-        let inbox = &self.inbox;
+        let events = &self.events;
         let (pipeline, frames) = (self.pipeline, self.prebuffer_frames);
         let sent = &mut self.prebuffer_sent;
         self.producer
             .write_all(
                 &self.converted,
                 || cancellation.is_cancelled(),
-                |queued| notify_prebuffer(inbox, pipeline, sent, queued >= frames),
+                |queued| notify_prebuffer(events, pipeline, sent, queued >= frames),
             )
             // A cancelled wait is a normal stop, not a failure, so its cause is not logged.
             .map_err(|WaitCancelled| Stop::Cancelled)
     }
 }
 
-pub(super) fn prebuffer_frames(sample_rate: u32) -> usize {
+pub(in crate::player) fn prebuffer_frames(sample_rate: u32) -> usize {
     usize::try_from(sample_rate)
         .unwrap_or(usize::MAX)
         .saturating_mul(250)
@@ -405,18 +404,10 @@ pub(super) fn prebuffer_frames(sample_rate: u32) -> usize {
         .max(1)
 }
 
-fn notify_prebuffer(
-    inbox: &Sender<WorkerInput>,
-    pipeline: PipelineId,
-    sent: &mut bool,
-    ready: bool,
-) {
+fn notify_prebuffer(events: &LoadEventSink, pipeline: PipelineId, sent: &mut bool, ready: bool) {
     if ready && !*sent {
         *sent = true;
-        send(
-            inbox,
-            WorkerInput::Load(LoadEvent::PrebufferReady { pipeline }),
-        );
+        events(LoadEvent::PrebufferReady { pipeline });
     }
 }
 
@@ -433,7 +424,7 @@ fn discard_output_prefix(samples: &mut Vec<f32>, remaining_samples: &mut usize) 
 /// Test-only gate: a file whose name starts with `gated` waits here until a test releases it, so a
 /// test can run commands while a load is in flight. Nothing else reads it.
 #[cfg(test)]
-pub(super) mod gate {
+pub(in crate::player) mod gate {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::{Duration, Instant};
 
@@ -441,7 +432,7 @@ pub(super) mod gate {
 
     pub(in crate::player) static RELEASED: AtomicBool = AtomicBool::new(false);
 
-    pub(super) fn wait_if_gated(file: &ValidatedAudioFile) {
+    pub(in crate::player) fn wait_if_gated(file: &ValidatedAudioFile) {
         if !file.file_name.starts_with("gated") {
             return;
         }
@@ -454,18 +445,21 @@ pub(super) mod gate {
 
 #[cfg(test)]
 mod tests {
+    use super::LoadEventSink;
     use super::{
         DecodeHandle, DecodeTask, LoadEvent, LoadPosition, SourceLoad, SourceLoadId, Stop,
         prebuffer_frames,
     };
     use crate::library::sync::media::ValidatedAudioFile;
-    use crate::player::decode::{CompressedAudioSource, DecodeStep};
-    use crate::player::output::PipelineId;
-    use crate::player::output::{PcmConsumer, bounded_pcm_queue};
-    use crate::player::processing::{OutputProcessingError, OutputProcessingPlan, PcmConverter};
-    use crate::player::worker::WorkerInput;
+    use crate::player::audio::decode::{CompressedAudioSource, DecodeStep};
+    use crate::player::audio::output::PipelineId;
+    use crate::player::audio::output::{PcmConsumer, bounded_pcm_queue};
+    use crate::player::audio::processing::{
+        OutputProcessingError, OutputProcessingPlan, PcmConverter,
+    };
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use crate::threads::Cancellation;
+    use std::sync::Arc;
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
     use std::time::{Duration, Instant};
 
@@ -482,7 +476,7 @@ mod tests {
     fn start_pipeline(
         file: &ValidatedAudioFile,
         capacity_frames: usize,
-    ) -> (DecodeHandle, PcmConsumer, Receiver<WorkerInput>) {
+    ) -> (DecodeHandle, PcmConsumer, Receiver<LoadEvent>) {
         let mut decoder = CompressedAudioSource::open(file, &Cancellation::default())
             .unwrap()
             .decoder()
@@ -496,7 +490,10 @@ mod tests {
         let plan = OutputProcessingPlan::new(spec, spec).unwrap();
         let (producer, consumer) =
             bounded_pcm_queue(capacity_frames, spec.channel_count()).unwrap();
-        let (inbox, events) = mpsc::channel();
+        let (sender, events) = mpsc::channel();
+        let sink: LoadEventSink = Arc::new(move |event| {
+            let _ = sender.send(event);
+        });
         let worker = DecodeTask {
             decoder,
             first_packet,
@@ -505,7 +502,7 @@ mod tests {
             converted: Vec::new(),
             discard_output_samples: 0,
             cancellation: Cancellation::default(),
-            inbox,
+            events: sink,
             pipeline: PipelineId(7),
             prebuffer_frames: prebuffer_frames(spec.sample_rate().get()),
             prebuffer_sent: false,
@@ -514,9 +511,9 @@ mod tests {
         (worker, consumer, events)
     }
 
-    fn next_event(events: &Receiver<WorkerInput>) -> LoadEvent {
+    fn next_event(events: &Receiver<LoadEvent>) -> LoadEvent {
         match events.recv_timeout(Duration::from_secs(2)) {
-            Ok(WorkerInput::Load(event)) => event,
+            Ok(event) => event,
             _ => panic!("the decode worker sent no event"),
         }
     }
@@ -581,7 +578,7 @@ mod tests {
         assert_eq!(consumer.available_frames(1), 8);
         drop(worker);
 
-        // The thread ends by itself and drops its inbox: a cancelled worker reports nothing.
+        // The thread ends by itself and drops its sink: a cancelled worker reports nothing.
         assert!(
             matches!(
                 events.recv_timeout(Duration::from_secs(2)),
@@ -607,8 +604,8 @@ mod tests {
     fn dropping_a_source_load_cancels_it() {
         let directory = TestDirectory::new();
         let file = wav_file(&directory, 1_000);
-        let (inbox, _events) = mpsc::channel();
-        let load = SourceLoad::spawn(file, SourceLoadId(1), LoadPosition::Start, inbox);
+        let events: LoadEventSink = Arc::new(|_| {});
+        let load = SourceLoad::spawn(file, SourceLoadId(1), LoadPosition::Start, events);
         let cancellation = load.cancellation.clone();
 
         drop(load);

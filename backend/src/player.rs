@@ -2,9 +2,16 @@
 //! stream. A command is answered once the worker has applied it; the worker reports what it does
 //! next through the Backend's messages.
 //!
-//! This file is all the rest of the application sees of playback. Its modules are private, except
-//! the audio stages (`decode`, `output`, `pcm`, `processing`, `volume`, `waveform`) and the
-//! `fake_output` double, which the rest of the crate names.
+//! This file is all the rest of the application sees of playback. The submodules are:
+//!
+//! - `audio`: the audio stages (decode, output, pcm, processing, waveform) and the `fake_output`
+//!   double. They never import `worker`.
+//! - `playback`: the queue, the transport and the volume.
+//! - `worker`: the thread that owns the queue and the transport, and the state it publishes.
+//! - `meter` and `lyrics`: what the Host reads from a playing track.
+//! - `errors`: the errors of a Player function.
+//!
+//! Only the audio stages and the `fake_output` double are named outside this module tree.
 
 use serde::{Deserialize, Serialize};
 use std::sync::{
@@ -15,38 +22,32 @@ use std::sync::{
 use crate::ids::{QueueItemId, TrackId};
 use crate::library::Library;
 use crate::messages::BackendMessage;
-use crate::meter::Meter;
+use crate::player::audio::output::{AudioOutputSelection, OutputStreamFactory};
+use crate::player::audio::waveform::Waveforms;
 use crate::player::errors::{PlayerError, Result};
-use crate::player::output::{AudioOutputSelection, OutputStreamFactory};
-use crate::player::volume::{DEFAULT_PLAYBACK_VOLUME, NormalizedVolume};
-use crate::player::waveform::Waveforms;
+use crate::player::meter::Meter;
+use crate::player::playback::volume::{DEFAULT_PLAYBACK_VOLUME, NormalizedVolume};
 use crate::settings::SettingsStore;
 use crate::threads::{WorkerThread, request};
 
-pub(crate) mod decode;
+pub(crate) mod audio;
 pub(crate) mod errors;
-#[cfg(test)]
-pub(crate) mod fake_output;
-pub(crate) mod output;
-pub(crate) mod pcm;
-pub(crate) mod processing;
-pub(crate) mod volume;
-pub(crate) mod waveform;
-
-mod pipeline;
-mod queue;
-mod state;
+pub(crate) mod lyrics;
+pub(crate) mod meter;
+pub(crate) mod playback;
 #[cfg(test)]
 mod tests;
-mod transport;
+mod types;
 mod worker;
 
 use worker::{PlayerCommand, PlayerWorker, WorkerInput};
 
 type Reply<T> = crate::threads::Reply<T, PlayerError>;
 
-pub use queue::RepeatMode;
-pub use state::{PlaybackPosition, PlayerState, QueueState, QueueWindow, UPCOMING_WINDOW};
+pub use playback::queue::RepeatMode;
+pub use worker::published::{
+    PlaybackPosition, PlayerState, QueueState, QueueWindow, UPCOMING_WINDOW,
+};
 
 /// The playback choices that outlive a session: what the listener set, restored at startup.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]

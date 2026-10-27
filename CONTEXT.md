@@ -43,6 +43,7 @@ This is the language of Nice Audio Player. Use these terms in code, docs, and ti
 - **Gapless**: consecutive tracks of the same audio format play with no silence between them.
 - **Playback clock**: the only source of the playing position. The Backend reports it while a track plays.
 - **Waveform**: the RMS level of each bucket of the loaded Playback. It is keyed by its playback id.
+- **Lyrics**: the text of a track, read from the tags of the audio file or from an `.lrc` file next to it.
 
 ## Meters
 

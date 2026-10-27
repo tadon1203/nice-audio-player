@@ -323,12 +323,19 @@ export type Page<T> = {
 
 export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
 
+/**
+ *  "Play from here": the contexts a playback queue can be built from.
+ * 
+ *  Every way of starting library playback is a variant of `PlaybackContext`, so a new one
+ *  (artist, playlist, smart playlist) adds a variant, not a new command.
+ */
 export type PlaybackContext = 
 /**  An album in disc and track order, by its ID. */
 { kind: "album"; albumId: AlbumId } | 
 /**  The tracks list as currently filtered and sorted. */
 { kind: "tracks"; search: string | null; sort: TrackSortKey; direction: SortDirection };
 
+/**  Why a playback failed. The Renderer shows it, and the output or the decode caused it. */
 export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutput" | "outputFailed" | "decodeFailed";
 
 /**

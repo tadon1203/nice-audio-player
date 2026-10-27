@@ -4,13 +4,15 @@ use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
 use crate::library::read::playback::PlayableTrack;
 use crate::messages::BackendMessage;
+use crate::player::audio::output::{AudioOutputSelection, OutputEvent, OutputStreamFactory};
+use crate::player::audio::pipeline::LoadEvent;
+use crate::player::audio::waveform::Waveforms;
 use crate::player::errors::PlayerError;
-use crate::player::output::{AudioOutputSelection, OutputEvent, OutputStreamFactory};
-use crate::player::pipeline::LoadEvent;
-use crate::player::queue::{QueueEntry, RepeatMode};
-use crate::player::state::{PlaybackPosition, PlayerState, QueueState, QueueWindow, StartedBy};
-use crate::player::volume::NormalizedVolume;
-use crate::player::waveform::Waveforms;
+use crate::player::playback::queue::{QueueEntry, RepeatMode};
+use crate::player::playback::volume::NormalizedVolume;
+use crate::player::worker::published::{
+    PlaybackPosition, PlayerState, QueueState, QueueWindow, StartedBy,
+};
 use crate::settings::SettingsStore;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;

@@ -14,8 +14,6 @@ pub mod messages;
 pub mod threads;
 
 pub(crate) mod library;
-pub(crate) mod lyrics;
-pub(crate) mod meter;
 pub(crate) mod player;
 pub(crate) mod settings;
 

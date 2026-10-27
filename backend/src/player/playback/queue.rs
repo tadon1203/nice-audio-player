@@ -35,7 +35,7 @@ pub enum AdvanceReason {
 /// One place in the queue: its own id, and the library track it plays.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueueEntry {
-    pub(super) id: QueueItemId,
+    pub(in crate::player) id: QueueItemId,
     pub track_id: TrackId,
 }
 

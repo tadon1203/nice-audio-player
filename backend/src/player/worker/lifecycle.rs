@@ -7,17 +7,18 @@ use crate::ids::TrackId;
 use crate::library::errors::LibraryError;
 use crate::messages;
 use crate::messages::BackendMessage;
-use crate::player::errors::Result;
-use crate::player::output::{
+use crate::player::audio::output::{
     AudioOutputSelection, OutputError, OutputStreamId, PipelineId, StreamFailureKind,
 };
-use crate::player::pipeline::{
+use crate::player::audio::pipeline::{
     LoadPosition, PipelineError, PreparedSource, SourceLoad, SourceLoadId, start_decoding,
 };
-use crate::player::processing::PcmConverter;
-use crate::player::queue::{AdvanceReason, QueueEntry};
-use crate::player::state::{PlaybackFailureCode, StartedBy};
-use crate::player::transport::{Output, Position, Track};
+use crate::player::audio::processing::PcmConverter;
+use crate::player::errors::PlaybackFailureCode;
+use crate::player::errors::Result;
+use crate::player::playback::queue::{AdvanceReason, QueueEntry};
+use crate::player::playback::transport::{Output, Position, Track};
+use crate::player::worker::published::StartedBy;
 use cpal::StreamInstant;
 use log::{error, info};
 use std::time::Instant;
@@ -260,7 +261,7 @@ impl PlayerWorker {
         self.discard_state();
         let file = request.playable.file.clone();
         let id = self.next_source_load_id();
-        let load = SourceLoad::spawn(file, id, LoadPosition::Start, self.inbox.clone());
+        let load = SourceLoad::spawn(file, id, LoadPosition::Start, self.load_events());
         self.state = WorkerState::Loading(StartLoad { load, request });
         self.send_state();
     }
@@ -299,7 +300,7 @@ impl PlayerWorker {
         };
         let duration_ms = prepared.duration_ms;
         let pipeline = start_decoding(
-            &self.inbox,
+            self.load_events(),
             pipeline_id,
             prepared,
             prepared_output.producer,

@@ -3,7 +3,7 @@
 
 use super::*;
 
-use crate::player::pipeline::gate::RELEASED;
+use crate::player::audio::pipeline::gate::RELEASED;
 use std::sync::atomic::Ordering;
 
 fn is_loading(state: &PlayerState, title: &str) -> bool {

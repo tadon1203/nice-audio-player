@@ -17,16 +17,19 @@ pub(crate) use crate::library::Library;
 pub(crate) use crate::library::read::lists::{ListRequest, SortDirection};
 pub(crate) use crate::library::read::tracks::TrackSortKey;
 pub(crate) use crate::messages::BackendMessage;
-pub(crate) use crate::meter::Meter;
 pub(crate) use crate::player::Player;
 pub(crate) use crate::player::RepeatMode;
-pub(crate) use crate::player::fake_output::FakeOutput;
-pub(crate) use crate::player::output::{AudioOutputSelection, OutputError, StreamFailureKind};
-pub(crate) use crate::player::state::{
-    CurrentPlayback, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition, PlayerState,
-    QueueState, StartedBy,
+pub(crate) use crate::player::audio::fake_output::FakeOutput;
+pub(crate) use crate::player::audio::output::{
+    AudioOutputSelection, OutputError, StreamFailureKind,
 };
-pub(crate) use crate::player::waveform::Waveforms;
+pub(crate) use crate::player::audio::waveform::Waveforms;
+pub(crate) use crate::player::errors::PlaybackFailureCode;
+pub(crate) use crate::player::meter::Meter;
+pub(crate) use crate::player::worker::published::{
+    CurrentPlayback, PlaybackChannelConversion, PlaybackPosition, PlayerState, QueueState,
+    StartedBy,
+};
 pub(crate) use crate::settings::{self, SettingsStore};
 pub(crate) use crate::test_support::{MessageLog, TestDirectory, wait_until, write_pcm_i16_wav};
 

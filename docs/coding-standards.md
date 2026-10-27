@@ -69,6 +69,13 @@ Casing and conversion names follow the standards below. The Rust compiler lints 
 - TypeScript and Svelte files use kebab-case. Import a component with a PascalCase name. A module that uses runes ends in `.svelte.ts`.
 - Rust files use `snake_case.rs`. A module uses `foo.rs` next to `foo/`. Do not use `mod.rs`.
 
+### Backend file layout
+
+- The `backend/src` root holds only `app`, `library`, and `player`. It also holds the shared base modules: `ids`, `messages`, `settings`, `threads`, `errors`, and `test_support`.
+- A domain module is `<name>.rs` with a `<name>/` directory beside it.
+- Tests sit beside the lowest module whose public surface they call. They go in `tests.rs` with a `tests/` directory.
+- A dependency never points from a lower module to the module above it. For example, `player/audio` does not import `player/worker` or `player/playback`. A type that two sibling modules share goes in the `types.rs` of their parent, such as `player/types.rs`.
+
 ## Errors and panics
 
 - A failure that can happen is a `Result`. Examples: a missing file, a lost device, a corrupt database, bad input.

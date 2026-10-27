@@ -27,10 +27,10 @@ use serde::{Deserialize, Serialize};
 
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::processing::OutputProcessingPlan;
-use super::state::PlaybackFailureCode;
-use super::volume::{AtomicEffectiveGain, process_sample};
-use crate::meter::{Meter, MeterTap};
+use crate::player::errors::PlaybackFailureCode;
 use crate::player::errors::PlayerError;
+use crate::player::meter::{Meter, MeterTap};
+use crate::player::types::{AtomicEffectiveGain, process_sample};
 
 /// Identifies one output stream, which lives as long as a session.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -1207,7 +1207,7 @@ mod device_tests {
 #[cfg(test)]
 mod pcm_queue_tests {
     use super::{WaitCancelled, bounded_pcm_queue};
-    use crate::player::pcm::ChannelCount;
+    use crate::player::audio::pcm::ChannelCount;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
@@ -1355,10 +1355,10 @@ mod tests {
         classify_stream_error_kind, played_frame_position, sample_format_rank,
         select_output_config,
     };
-    use crate::meter::Meter;
-    use crate::player::output::{PcmProducer, bounded_pcm_queue};
-    use crate::player::pcm::ChannelCount;
-    use crate::player::volume::AtomicEffectiveGain;
+    use crate::player::audio::output::{PcmProducer, bounded_pcm_queue};
+    use crate::player::audio::pcm::ChannelCount;
+    use crate::player::meter::Meter;
+    use crate::player::types::AtomicEffectiveGain;
     use cpal::{
         Sample, SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange,
     };

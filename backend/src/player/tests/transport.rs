@@ -2,7 +2,7 @@
 
 use super::*;
 
-use crate::player::volume::NormalizedVolume;
+use crate::player::playback::volume::NormalizedVolume;
 use crate::test_support::CommandCode;
 
 #[test]
