@@ -84,7 +84,6 @@
           <Button
             type="button"
             disabled={isCurrent}
-            aria-label="Play {item.title}"
             onclick={() => actions.playerPlayQueueItem(item.queueItemId)}
             variant="bare"
             size="inline"

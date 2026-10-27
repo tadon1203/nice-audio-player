@@ -111,7 +111,7 @@ test("a real popup remains above the Sleeve during flight", async ({ page }) => 
     });
     observer.observe(document.body, { childList: true });
   });
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
   const flight = page.locator('[data-shared-element="flying"]');
   await expect(flight).toBeVisible();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });

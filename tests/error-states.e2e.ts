@@ -24,7 +24,7 @@ test("does not present an album track query failure as an empty album", async ({
 }) => {
   native.fail("libraryListAlbumTracks", internalFailure);
   await page.goto("/library/albums");
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
 
   await expect(page.getByRole("alert")).toContainText("Something went wrong. Try again.");
   await expect(page.getByText("No tracks were indexed for this album.")).toHaveCount(0);

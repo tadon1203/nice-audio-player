@@ -74,7 +74,7 @@ test("two albums with one title and Album Artist in two directories each open th
   ]);
 
   await page.goto("/library/albums");
-  const tiles = page.getByRole("link", { name: "Open album Test album by Test artist" });
+  const tiles = page.getByRole("link", { name: "Open album Test album, Test artist" });
   await expect(tiles).toHaveCount(2);
 
   for (const [index, { track, artwork }] of printings.entries()) {

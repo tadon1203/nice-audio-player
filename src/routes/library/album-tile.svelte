@@ -25,6 +25,9 @@
   const title = $derived(albumTitleLabel(album.title));
   const artist = $derived(artistNameLabel(album.albumArtist.name));
   // Opened from an Album Artist's page, the album is reached through that artist, so Back returns.
+  // The name holds every visible word of the tile, so a screen reader hears the year too.
+  const openLabel = $derived(showArtist ? `Open album ${title}, ${artist}` : `Open album ${title}`);
+  const name = $derived(album.year === null ? openLabel : `${openLabel}, ${album.year}`);
   const href = $derived(
     parentArtistId === null
       ? resolve("/library/albums/[albumId=albumId]", { albumId: album.id })
@@ -39,7 +42,7 @@
 <div class="group/tile relative min-w-0">
   <a
     {href}
-    aria-label={showArtist ? `Open album ${title} by ${artist}` : `Open album ${title}`}
+    aria-label={name}
     class="group block min-w-0 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
   >
     <Artwork

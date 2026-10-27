@@ -26,7 +26,7 @@ test("lists load thumbnails; the album header and Now Playing load the original"
   await expect.poll(thumbs).not.toHaveLength(0);
   expect(originals()).toEqual([]);
 
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
   await expect.poll(originals).not.toHaveLength(0);
 
   await page.goto("/library/tracks");

@@ -21,7 +21,7 @@ test("keeps workspace views on one shared left edge and fills media grids from t
 
   const albumsHeading = page.getByRole("heading", { name: "Albums", exact: true });
   const workspaceLeft = await leftOf(albumsHeading);
-  const albums = page.getByRole("link", { name: /Open album .* by Test artist/ });
+  const albums = page.getByRole("link", { name: /Open album .*, Test artist/ });
   const firstAlbum = await boxOf(albums.nth(0));
   const secondAlbum = await boxOf(albums.nth(1));
 
@@ -90,7 +90,7 @@ test("keeps transport centered between track identity and volume", async ({ page
 test("keeps album track number compact while title owns the flexible column", async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.goto("/library/albums");
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
 
   const table = page.getByRole("table", { name: "Album tracks" });
   const number = await boxOf(table.getByRole("columnheader", { name: "#", exact: true }));
@@ -140,7 +140,7 @@ test("shares one scroll region edge across views and aligns toolbar with content
   await page.getByRole("link", { name: "Albums", exact: true }).click();
   await expectViewportEdge();
   await page
-    .getByRole("link", { name: /Open album .* by Test artist/ })
+    .getByRole("link", { name: /Open album .*, Test artist/ })
     .first()
     .click();
   await expectViewportEdge();

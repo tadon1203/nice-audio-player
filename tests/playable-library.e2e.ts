@@ -144,7 +144,7 @@ test("uses the album as the queue context when Play album starts playback", asyn
 }) => {
   player.setSequence(albumSequence(library));
   await page.goto("/library/albums");
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
   await page.getByRole("button", { name: "Play album" }).click();
   await expect
     .poll(() => native.callsTo("playerPlay").map((call) => call.context))

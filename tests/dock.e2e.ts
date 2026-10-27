@@ -310,7 +310,7 @@ test("toggles play/pause and changes tracks with the keyboard", async ({
   player.setSequence(albumSequence(library));
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await page.goto("/library/albums");
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
   await page.getByRole("button", { name: "Play album" }).click();
   await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
 

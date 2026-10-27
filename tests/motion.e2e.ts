@@ -15,7 +15,7 @@ test.beforeEach(async ({ page, player, library }) => {
 
 async function playAlbum(page: Page): Promise<Locator> {
   await page.goto("/library/albums");
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
   await page.getByRole("button", { name: "Play album" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
@@ -142,7 +142,7 @@ test("the progress fill advances smoothly between position reports", async ({ pa
 
 test("an album's artwork moves from its tile to the details header", async ({ page }) => {
   await page.goto("/library/albums");
-  const tile = page.getByRole("link", { name: "Open album Test album by Test artist" });
+  const tile = page.getByRole("link", { name: "Open album Test album, Test artist" });
   const tileBox = (await tile.locator('[data-slot="artwork"]').boundingBox())!;
   const measure = (): { x: number; y: number } | null => {
     // The Sleeve in flight is a clone drawn over the page; once it lands, the header's own.

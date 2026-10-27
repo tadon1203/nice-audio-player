@@ -114,7 +114,7 @@ test("returns from an album to its ID artist page after the album page reloads",
 
 test("keeps an album's ID route after a reload", async ({ page }) => {
   await page.goto("/library/albums");
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
   await expect(page.getByRole("heading", { name: "Test album" })).toBeVisible();
   const url = page.url();
   await page.reload();
@@ -144,7 +144,7 @@ test("shows an album's title before its details arrive, opened from a tile", asy
     return library.albumDetails;
   });
   await page.goto("/library/albums");
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
   await expect(page.getByRole("heading", { name: "Test album" })).toBeVisible();
   await expect(page.getByText("Reading album…")).toBeVisible();
   release();
@@ -153,7 +153,7 @@ test("shows an album's title before its details arrive, opened from a tile", asy
 
 test("returns from an album opened from Albums to the Albums presentation", async ({ page }) => {
   await page.goto("/library/albums");
-  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album, Test artist" }).click();
   await expect(page.getByRole("heading", { name: "Test album" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tracks", level: 2 })).toBeVisible();
   await page
